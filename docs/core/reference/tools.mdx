@@ -269,6 +269,16 @@ reads the same on both.
 2. Let any other error raise. The model reads that the tool failed, and the log keeps the details.
 3. Use `show_result=False` for a result the caller must not hear. See [A result the model does not read](#a-result-the-model-does-not-read).
 
+## The schema the model reads
+
+The model reads a plainer copy of each tool's parameters. The tool still checks what the model sent against the full schema.
+
+1. An optional value whose default is `null` loses its `null` branch and that default. Leaving it out means the same thing. A value without that default keeps `null`, because there `null` means something, like "clear this value".
+2. `format` and `pattern` become words in the description. Some providers refuse them, and a format only this library knows, like `spelled`, tells a model nothing.
+3. Local `$ref`s are inlined.
+
+**Why it works this way.** Small models, like Gemini 3.5 Flash-Lite, answered the full schemas with an empty reply (`MALFORMED_FUNCTION_CALL`) about three times as often. A model that still sends `null` for an optional value is accepted.
+
 ## A required argument left out or empty
 
 ```python
@@ -278,7 +288,7 @@ reads the same on both.
 
 Small models often call a tool before they ask, with `""` for what they do not know.
 
-1. A required argument that is absent, or text that is blank, is missing. The tool does not run.
+1. A required argument that is absent, or text that is blank, is missing. The tool does not run. It raises `ArgumentsMissing`, a `ToolRefused`.
 2. The model reads this refusal, not a format error like "expected a day written year-month-day".
 3. When the reply that made the call already said something, no model reply follows. That reply asked the caller, so the caller answers next. `replies_to(result, spoke=...)` from `unmute_core.tools` holds this rule.
 4. When the reply said nothing, the model replies to the refusal and asks.
