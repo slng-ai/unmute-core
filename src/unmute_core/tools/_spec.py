@@ -698,23 +698,6 @@ class ToolSpec:
         """The validator for the model's arguments."""
         return Draft202012Validator(self.shown_parameters)
 
-    @cached_property
-    def _unset_by_null(self) -> frozenset[str]:
-        """The arguments whose default is null: a null for one means the model left it out."""
-        return frozenset(
-            name
-            for name, node in self.parameters.get("properties", {}).items()
-            if isinstance(node, dict) and "default" in node and node["default"] is None
-        )
-
-    def _set(self, arguments: Mapping[str, Any]) -> dict[str, Any]:
-        """Return the arguments to check: without a null that only means "left out"."""
-        return {
-            name: value
-            for name, value in arguments.items()
-            if value is not None or name not in self._unset_by_null
-        }
-
     def check_arguments(self, arguments: dict[str, Any]) -> None:
         """Check the model's own arguments against the schema it was shown.
 
@@ -730,7 +713,7 @@ class ToolSpec:
                 f"arguments: {', '.join(stray)} {'are not arguments' if many else 'is not an argument'}"
                 f" of {self.name}. Call {self.name} again without {'them' if many else 'it'}."
             )
-        if error := best_match(self._validator.iter_errors(self._set(arguments))):
+        if error := best_match(self._validator.iter_errors(arguments)):
             where = ".".join(str(part) for part in error.absolute_path) or "arguments"
             raise ToolError(f"{where}: {error.message}. Call {self.name} again with a fix.")
 
@@ -764,7 +747,7 @@ class ToolSpec:
             except ToolError as error:
                 raise ToolError(f"arguments.{name}: {error.message}") from None
         filled = own | locked
-        if error := best_match(self._full_validator.iter_errors(self._set(filled))):
+        if error := best_match(self._full_validator.iter_errors(filled)):
             where = ".".join(("arguments", *(str(part) for part in error.absolute_path)))
             raise ToolError(f"{where}: {error.message}")
         return filled
