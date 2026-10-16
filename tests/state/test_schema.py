@@ -116,7 +116,7 @@ def test_a_finish_describes_the_formats_inside_a_shape():
         ],
     )
     parameters = finish_parameters(result_model(task, schema.model), record=True)
-    day = parameters["properties"]["booking"]["anyOf"][0]["properties"]["day"]
+    day = parameters["properties"]["booking"]["properties"]["day"]
     assert day["description"] == "The day booked. Expected a date written YYYY-MM-DD."
     assert "$ref" not in json.dumps(parameters)
 
