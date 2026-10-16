@@ -57,10 +57,7 @@ def test_finish_schema_is_typed_per_value_and_ends_on_the_hand_back() -> None:
     task_plan = plan()
     schema = finish_parameters(task_plan.result_model("find_order"), record=True)
     assert list(schema["properties"]) == ["order_id", "status", "unserved_request"]
-    assert schema["properties"]["status"]["anyOf"][0] == {
-        "enum": ["open", "closed"],
-        "type": "string",
-    }
+    assert schema["properties"]["status"] == {"enum": ["open", "closed"], "type": "string"}
     assert schema["properties"]["unserved_request"] == {
         "type": "string",
         "description": (
@@ -103,11 +100,11 @@ def test_finish_schema_inlines_refs_and_words_formats_for_the_provider() -> None
     schema = finish_parameters(result_model(task, Booking), record=False)
     check_parameters(schema)
     visit = schema["properties"]["visit"]
-    assert "$ref" not in str(schema) and "$defs" not in schema
-    assert visit["description"] == "The visit booked."
-    day = visit["anyOf"][0]["properties"]["day"]
+    assert "$ref" not in str(schema) and "$defs" not in schema and "null" not in str(schema)
+    assert visit["description"] == "The visit booked. One visit."
+    day = visit["properties"]["day"]
     assert day == {"type": "string", "description": "Expected a date written YYYY-MM-DD."}
-    caller = schema["properties"]["caller"]["anyOf"][0]
+    caller = schema["properties"]["caller"]
     assert (
         caller["description"]
         == "Expected a phone number with its country code: a plus, the country code, then the "
@@ -277,7 +274,7 @@ def test_an_append_adds_one_entry_and_never_the_same_object_twice() -> None:
     assert _save(task_plan, call_state, "take_note").saved == ()
     assert call_state.plain("tags") == ["vip", "vip"]
     schema = finish_parameters(task_plan.result_model("take_note"), record=True)
-    assert schema["properties"]["tag"]["anyOf"][0] == {"type": "string"}
+    assert schema["properties"]["tag"] == {"type": "string"}
 
 
 def test_success_rules_read_words_as_the_author_wrote_them() -> None:

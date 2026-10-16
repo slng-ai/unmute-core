@@ -53,6 +53,7 @@ from unmute_core.state._paths import (
     value_base,
 )
 from unmute_core.tools._announce import checked_lines
+from unmute_core.tools._errors import ArgumentsMissing as ArgumentsMissing
 from unmute_core.tools._errors import ToolError as ToolError
 from unmute_core.tools._errors import ToolRefused as ToolRefused
 from unmute_core.tools._fill import TRANSCRIPT_MAX_BYTES as TRANSCRIPT_MAX_BYTES
@@ -70,7 +71,7 @@ from unmute_core.tools._lines import (
     result_paths,
     success_word,
 )
-from unmute_core.tools._schema import check_parameters, model_schema
+from unmute_core.tools._schema import check_parameters, model_schema, model_shape
 from unmute_core.tools._spoken import form_at
 
 logger = logging.getLogger(__name__)
@@ -143,6 +144,19 @@ def tool_succeeded(result: object) -> bool:
             not result.get("error") and not result.get("refused") and result.get("ok") is not False
         )
     return True
+
+
+def replies_to(result: object, *, spoke: bool) -> bool:
+    """Return whether the model replies to a tool's result.
+
+    Not to a refusal for a missing argument when the reply that made the call spoke: it
+    asked the caller already, so the caller answers next. A second reply would ask twice.
+
+    Args:
+        result: What the tool call returned.
+        spoke: The reply that made the call said something.
+    """
+    return not (spoke and isinstance(result, Mapping) and bool(result.get("missing")))
 
 
 @original_errors
@@ -667,9 +681,14 @@ class ToolSpec:
         return "context" in inspect.signature(self.executor.run).parameters
 
     @cached_property
-    def model_parameters(self) -> dict[str, Any]:
-        """The parameters without the locked arguments, as the model sees them."""
+    def shown_parameters(self) -> dict[str, Any]:
+        """The parameters without the locked arguments: what the model's arguments are checked against."""
         return model_schema(self.parameters, self.locked.keys())
+
+    @cached_property
+    def model_parameters(self) -> dict[str, Any]:
+        """The parameters as the model sees them: ``shown_parameters``, shaped by ``model_shape``."""
+        return model_shape(self.shown_parameters)
 
     @cached_property
     def _named_arguments(self) -> frozenset[str] | None:
@@ -677,7 +696,7 @@ class ToolSpec:
 
         None too when the executor names stray arguments itself, in its own words.
         """
-        schema = self.model_parameters
+        schema = self.shown_parameters
         additional = schema.get("additionalProperties")
         if (
             getattr(self.executor, "checks_extra_arguments", False)
@@ -691,12 +710,16 @@ class ToolSpec:
     @cached_property
     def _validator(self) -> Validator:
         """The validator for the model's arguments."""
-        return Draft202012Validator(self.model_parameters)
+        return Draft202012Validator(self.shown_parameters)
 
     def check_arguments(self, arguments: dict[str, Any]) -> None:
         """Check the model's own arguments against the schema it was shown.
 
+        A required argument left out, or sent as blank text, is missing: the model asks the
+        caller for it, rather than reading a format error.
+
         Raises:
+            ArgumentsMissing: Naming the required arguments left out or blank.
             ToolError: Naming the arguments the schema does not have, or the first one that
                 does not fit.
         """
@@ -708,6 +731,13 @@ class ToolSpec:
                 f"arguments: {', '.join(stray)} {'are not arguments' if many else 'is not an argument'}"
                 f" of {self.name}. Call {self.name} again without {'them' if many else 'it'}."
             )
+        if missing := [
+            name
+            for name in self.model_parameters.get("required", ())
+            if name not in arguments
+            or (isinstance(value := arguments[name], str) and not value.strip())
+        ]:
+            raise ArgumentsMissing(self.name, missing)
         if error := best_match(self._validator.iter_errors(arguments)):
             where = ".".join(str(part) for part in error.absolute_path) or "arguments"
             raise ToolError(f"{where}: {error.message}. Call {self.name} again with a fix.")
@@ -1217,14 +1247,20 @@ class ToolRegistry:
             The tool's result, as JSON data, as the ``after_tool`` hooks leave it. A
             result that succeeded is the output model's dump. A call that reads a value
             not set yet, or that a hook refuses, returns ``{"refused": message}`` and does
-            not run.
+            not run. A call that leaves a required argument out or blank adds
+            ``"missing": [names]`` to that.
 
         Raises:
             ToolError: If the call is invalid or fails, or its result does not fit the
                 output model. Any other error of the tool or a hook is logged and becomes a
                 ToolError that tells the model not to claim success.
         """
-        tool, own = self._own(name, arguments)
+        try:
+            tool, own = self._own(name, arguments)
+        except ToolRefused as refused:
+            refusal = _ToolEvent(name=name, source=source, error=refused.message)
+            self._emit("tool.refused", refusal, hooks)
+            return refused.result
         if context is None and tool.reads_transcript and isinstance(hooks, TranscriptSource):
             context = {"transcript": hooks.transcript()}
         run = ToolRun(name, own, source)
@@ -1239,7 +1275,7 @@ class ToolRegistry:
         except ToolRefused as refused:
             refusal = _ToolEvent(name=name, source=source, error=refused.message)
             self._emit("tool.refused", refusal, hooks)
-            return {"refused": refused.message}
+            return refused.result
         self._emit("tool.started", _ToolEvent(name=name, source=source), hooks)
 
         async def execute(current: ToolRun) -> object:

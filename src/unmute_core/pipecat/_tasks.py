@@ -140,6 +140,7 @@ from unmute_core.tools import (
     check_tool_names,
     free_values,
     is_values,
+    replies_to,
     values_block,
     values_tool,
 )
@@ -1174,6 +1175,7 @@ class UnmuteFlows:
                 )
                 if self._runs.current is None and tasks is self._tasks
                 else None,
+                reply=replies_to(result, spoke=bool(self._replies.text)),
             )
 
         return mark_ender(handler) if registry.get(name).effect == "ends_conversation" else handler
@@ -1289,6 +1291,8 @@ class UnmuteFlows:
             if result is None and step.step.done:
                 self._runs.carry(run, step)
                 return await self._runs.advance(run, step)
+            if not replies_to(result, spoke=bool(self._replies.text)):
+                return result, NO_RESPONSE
             if result is not None and (line := step.step.reply) is not None:
                 self._replies.play(step.step, line)
                 joins_context(self._llm)
