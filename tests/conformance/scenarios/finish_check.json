@@ -1,0 +1,43 @@
+{
+  "name": "finish_check",
+  "about": "The step's reply says it noted the caller's words but calls nothing. The runtime asks the model one narrow question, finish or not_yet, and sends the finish it chose as that reply's own call. The step ends and the main agent replies.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants to leave a note.",
+        "instructions": "Take the caller's note.",
+        "assign": [{"variable": "note", "path": ["note"]}]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "I want to leave a note.",
+      "model": [
+        {"site": "", "calls": [{"name": "take_note"}]},
+        {"site": "task:take_note", "text": "What is your note?"}
+      ],
+      "spoken": ["What is your note?"]
+    },
+    {
+      "caller": "Please call me back.",
+      "model": [
+        {"site": "task:take_note", "text": "Noted: please call me back."},
+        {"site": "task:take_note", "tool_choice": "required", "tools": ["finish", "not_yet"], "calls": [{"name": "finish", "arguments": {"note": "please call me back"}}]},
+        {"site": "", "text": "Anything else?"}
+      ],
+      "spoken": ["Noted: please call me back.", "Anything else?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": "please call me back", "tags": []},
+    "tool_calls": [],
+    "events": [
+      "task.started task=take_note",
+      "task.completed task=take_note saved=note"
+    ]
+  }
+}

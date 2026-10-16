@@ -1,0 +1,111 @@
+{
+  "name": "usage_reaches_the_span",
+  "about": "The model reports its token counts at the end of each answer: the main agent's, the step's and the finish check's. Each request's llm span shows them.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants to leave a note.",
+        "instructions": "Take the caller's note.",
+        "assign": [
+          {
+            "variable": "note",
+            "path": [
+              "note"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "I want to leave a note.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "take_note"
+            }
+          ],
+          "usage": [
+            310,
+            4
+          ]
+        },
+        {
+          "site": "task:take_note",
+          "text": "What is your note?",
+          "usage": [
+            205,
+            6
+          ]
+        }
+      ],
+      "spoken": [
+        "What is your note?"
+      ]
+    },
+    {
+      "caller": "Please call me back.",
+      "model": [
+        {
+          "site": "task:take_note",
+          "text": "Noted: please call me back.",
+          "usage": [
+            240,
+            9
+          ]
+        },
+        {
+          "site": "task:take_note",
+          "tool_choice": "required",
+          "tools": [
+            "finish",
+            "not_yet"
+          ],
+          "calls": [
+            {
+              "name": "finish",
+              "arguments": {
+                "note": "please call me back"
+              }
+            }
+          ],
+          "usage": [
+            260,
+            12
+          ]
+        },
+        {
+          "site": "",
+          "text": "Anything else?",
+          "usage": [
+            330,
+            3
+          ]
+        }
+      ],
+      "spoken": [
+        "Noted: please call me back.",
+        "Anything else?"
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": "please call me back",
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [
+      "task.started task=take_note",
+      "task.completed task=take_note saved=note"
+    ]
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "name": "tool_extra_argument",
+  "about": "The model calls a tool with an argument its schema does not name. The tool does not run: the model reads a refusal that names the argument, calls again without it, and the tool runs once.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_options": {
+    "search_web": {
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ]
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours",
+                "bogus": 1
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result_holds": "bogus is not an argument of search_web",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "We are open 9 to 5."
+        }
+      ],
+      "spoken": [
+        "We are open 9 to 5."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      }
+    ],
+    "events": []
+  }
+}

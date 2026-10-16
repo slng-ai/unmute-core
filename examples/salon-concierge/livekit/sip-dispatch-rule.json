@@ -1,0 +1,21 @@
+{
+  "dispatch_rule": {
+    "name": "salon-concierge inbound",
+    "roomConfig": {
+      "agents": [
+        {
+          "agentName": "salon-concierge-livekit",
+          "metadata": "{\"direction\":\"inbound\"}"
+        }
+      ]
+    },
+    "rule": {
+      "dispatchRuleIndividual": {
+        "roomPrefix": "call-"
+      }
+    },
+    "trunk_ids": [
+      "${UNMUTE_SIP_TRUNK_ID}"
+    ]
+  }
+}

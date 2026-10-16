@@ -1,0 +1,394 @@
+{
+  "agents": [
+    "concierge"
+  ],
+  "bindings": [
+    {
+      "binding": {
+        "language": "en",
+        "model": "soniox/speech-ai:rt-v5",
+        "params": {
+          "world_part": "eu-north"
+        },
+        "placement": "api",
+        "provider": "slng"
+      },
+      "role": "listen",
+      "target": "livekit"
+    },
+    {
+      "binding": {
+        "endpointing_delay": "300ms",
+        "model": "turn-detector-mini",
+        "pace": "snappy",
+        "placement": "api",
+        "provider": "livekit"
+      },
+      "role": "turn",
+      "target": "livekit"
+    },
+    {
+      "binding": {
+        "language": "en",
+        "model": "cartesia/sonic:3.5",
+        "params": {
+          "warm_standby_enabled": true,
+          "world_part": "eu-north"
+        },
+        "placement": "api",
+        "provider": "slng",
+        "voice": "62ae83ad-4f6a-430b-af41-a9bede9286ca"
+      },
+      "profile": "voice",
+      "role": "speak",
+      "target": "livekit"
+    },
+    {
+      "binding": {
+        "model": "gemini-3.1-flash-lite",
+        "params": {
+          "location": "eu",
+          "thinking_config": {
+            "thinking_level": "MINIMAL"
+          },
+          "vertexai": true
+        },
+        "placement": "api",
+        "provider": "google"
+      },
+      "profile": "reasoning",
+      "role": "reason",
+      "target": "livekit"
+    }
+  ],
+  "deployment_regions": [
+    "eu-central"
+  ],
+  "entry_agent": "Concierge",
+  "generated_files": [
+    ".dockerignore",
+    ".env.example",
+    "Dockerfile",
+    "README.md",
+    "agent.py",
+    "agents.py",
+    "call.py",
+    "call_state.py",
+    "compile-report.json",
+    "compose.dev.yaml",
+    "prompts/__init__.py",
+    "prompts/concierge.md",
+    "pyproject.toml",
+    "session.py",
+    "settings.py",
+    "sip-dispatch-rule.json",
+    "sip-inbound-trunk.json",
+    "state.py",
+    "tools/__init__.py",
+    "tools/find_or_create_customer.py",
+    "tools/find_slots.py",
+    "tools/record_complaint.py",
+    "tools/save_booking.py",
+    "utils/__init__.py",
+    "utils/dev_metrics.py",
+    "utils/google.py",
+    "utils/knowledge.py",
+    "utils/telemetry.py",
+    "utils/telephony.py",
+    "utils/tracing.py"
+  ],
+  "notes": [
+    "listen: slng via slng.STT (livekit-plugins-slng\u003e=1.8.1, verified 2026-07-15)",
+    "reason: google via _GoogleVertexLLM (livekit-agents[google], verified 2026-09-14)",
+    "speak: slng via slng.TTS (livekit-plugins-slng\u003e=1.8.1, verified 2026-07-15)",
+    "turn role lowers to LiveKit Inference turn detection; its binding placement is advisory",
+    "turn pace snappy (silence 0.3s authored, closes at 1.2s)"
+  ],
+  "provider": "livekit",
+  "required_env": [
+    "GOOGLE_API_KEY",
+    "LANGFUSE_BASE_URL",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "LIVEKIT_API_KEY",
+    "LIVEKIT_API_SECRET",
+    "LIVEKIT_URL",
+    "MANAGER_PHONE_NUMBER",
+    "OPENAI_API_KEY",
+    "REDIS_URL",
+    "SIP_AUTH_PASSWORD",
+    "SIP_AUTH_USERNAME",
+    "SIP_FROM_NUMBER",
+    "SIP_TRUNK_HOSTNAME",
+    "SLNG_API_KEY"
+  ],
+  "secrets": [
+    {
+      "name": "GOOGLE_API_KEY",
+      "referenced_by": [
+        "agent.yaml models think reasoning"
+      ]
+    },
+    {
+      "name": "LANGFUSE_BASE_URL",
+      "referenced_by": [
+        "tracing.provider: langfuse"
+      ]
+    },
+    {
+      "name": "LANGFUSE_PUBLIC_KEY",
+      "referenced_by": [
+        "tracing.provider: langfuse"
+      ]
+    },
+    {
+      "name": "LANGFUSE_SECRET_KEY",
+      "referenced_by": [
+        "tracing.provider: langfuse"
+      ]
+    },
+    {
+      "name": "MANAGER_PHONE_NUMBER",
+      "referenced_by": [
+        "agent.yaml destinations manager_line"
+      ]
+    },
+    {
+      "name": "OPENAI_API_KEY"
+    },
+    {
+      "name": "SIP_AUTH_PASSWORD",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment sip_password"
+      ]
+    },
+    {
+      "name": "SIP_AUTH_USERNAME",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment sip_username"
+      ]
+    },
+    {
+      "name": "SIP_FROM_NUMBER",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment from_number"
+      ]
+    },
+    {
+      "name": "SIP_TRUNK_HOSTNAME",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment sip_address"
+      ]
+    },
+    {
+      "name": "SLNG_API_KEY",
+      "referenced_by": [
+        "agent.yaml models listen transcriber"
+      ]
+    },
+    {
+      "name": "TWILIO_ACCOUNT_SID",
+      "referenced_by": [
+        "connections/twilio_voice.yaml environment account_sid"
+      ]
+    },
+    {
+      "name": "TWILIO_AUTH_TOKEN",
+      "referenced_by": [
+        "connections/twilio_voice.yaml environment auth_token"
+      ]
+    },
+    {
+      "name": "TWILIO_PHONE_NUMBER",
+      "referenced_by": [
+        "connections/twilio_voice.yaml environment from_number"
+      ]
+    }
+  ],
+  "sizing": [
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "workers",
+      "status": "unbenchmarked",
+      "target": "livekit",
+      "value": "10"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "gpus",
+      "status": "unbenchmarked",
+      "target": "livekit",
+      "value": "0"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_concurrency_quota.realtime_audio",
+      "status": "unbenchmarked",
+      "target": "livekit",
+      "value": "5"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_session_time_quota.realtime_audio",
+      "status": "unbenchmarked",
+      "target": "livekit",
+      "value": "25m0s"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_concurrency_quota.telephony",
+      "status": "unbenchmarked",
+      "target": "livekit",
+      "value": "5"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_session_time_quota.telephony",
+      "status": "unbenchmarked",
+      "target": "livekit",
+      "value": "25m0s"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_call_start_rate.telephony",
+      "status": "unbenchmarked",
+      "target": "livekit",
+      "value": "1"
+    }
+  ],
+  "supported": {
+    "ceiling": "1.8.1",
+    "floor": "1.8.1",
+    "verified": "2026-09-13"
+  },
+  "target": "livekit",
+  "telephony": {
+    "route": {
+      "provider": "livekit",
+      "transport": "sip",
+      "carrier": "twilio"
+    },
+    "processes": [
+      {
+        "name": "agent",
+        "command": [
+          "uv",
+          "run",
+          "python",
+          "-m",
+          "livekit.agents",
+          "start",
+          "agent.py"
+        ],
+        "health": "/",
+        "readiness": "/"
+      }
+    ],
+    "required_env": [
+      "GOOGLE_API_KEY",
+      "LANGFUSE_BASE_URL",
+      "LANGFUSE_PUBLIC_KEY",
+      "LANGFUSE_SECRET_KEY",
+      "LIVEKIT_API_KEY",
+      "LIVEKIT_API_SECRET",
+      "LIVEKIT_URL",
+      "MANAGER_PHONE_NUMBER",
+      "OPENAI_API_KEY",
+      "REDIS_URL",
+      "SIP_AUTH_PASSWORD",
+      "SIP_AUTH_USERNAME",
+      "SIP_FROM_NUMBER",
+      "SIP_TRUNK_HOSTNAME",
+      "SLNG_API_KEY"
+    ],
+    "locally_supplied_environment": [
+      "LIVEKIT_API_KEY",
+      "LIVEKIT_API_SECRET",
+      "LIVEKIT_URL",
+      "REDIS_URL"
+    ],
+    "environment": {
+      "from_number": "SIP_FROM_NUMBER",
+      "sip_address": "SIP_TRUNK_HOSTNAME",
+      "sip_password": "SIP_AUTH_PASSWORD",
+      "sip_username": "SIP_AUTH_USERNAME"
+    },
+    "manual_steps": [
+      "get LIVEKIT_URL and the API key pair from the LiveKit Cloud project settings, or from a self-hosted LiveKit Server configuration; a self-hosted deployment configures LiveKit Server and LiveKit SIP with the same Redis deployment",
+      "point the carrier's origination URI at the LiveKit project SIP URI with transport=tcp (the LiveKit Cloud project settings page, or lk project list --json with the p_ prefix dropped from ProjectId); for a self-hosted deployment, deploy LiveKit SIP with public SIP signaling and RTP ports and point origination at that public SIP endpoint instead",
+      "get the selected carrier SIP address, username, password, and phone number from its SIP trunking console; these four reach the deployed agent's dial-out path directly, so no outbound trunk is registered",
+      "attach the phone number to that carrier trunk from inside the trunk, not from the number (in Twilio: the trunk's Numbers tab, Add a Number); a number attached to a SIP trunk ignores its own voice configuration silently, so it serves this route and no other",
+      "for inbound calls only, create the two LiveKit records from the emitted JSON with lk --project \u003cname\u003e sip inbound create - and lk --project \u003cname\u003e sip dispatch create -, naming the project on every command; the trunk ID the first command prints is what the dispatch rule's ${UNMUTE_SIP_TRUNK_ID} token is replaced with"
+    ],
+    "evidence": [
+      {
+        "feature": "cold_transfer",
+        "tag": "provisional",
+        "note": "live inbound, cold transfer and warm transfer run 2026-08-12; no credentialed smoke runs in CI on any route",
+        "docs": "https://docs.livekit.io/telephony/start/providers/twilio/",
+        "verified": "2026-08-12",
+        "smoke": false
+      },
+      {
+        "feature": "inbound",
+        "tag": "provisional",
+        "note": "live inbound, cold transfer and warm transfer run 2026-08-12; no credentialed smoke runs in CI on any route",
+        "docs": "https://docs.livekit.io/telephony/start/providers/twilio/",
+        "verified": "2026-08-12",
+        "smoke": false
+      },
+      {
+        "feature": "route",
+        "tag": "provisional",
+        "note": "live inbound, cold transfer and warm transfer run 2026-08-12; no credentialed smoke runs in CI on any route",
+        "docs": "https://docs.livekit.io/telephony/start/providers/twilio/",
+        "verified": "2026-08-12",
+        "smoke": false
+      }
+    ],
+    "services": [
+      "application",
+      "livekit_server",
+      "livekit_sip",
+      "redis"
+    ],
+    "coordination": "shared",
+    "coordination_reasons": [
+      {
+        "name": "livekit_control_plane",
+        "consumers": [
+          "livekit_server",
+          "livekit_sip"
+        ]
+      }
+    ],
+    "admission_owner": "livekit_dispatch"
+  },
+  "variables": [
+    {
+      "description": "Today's date in the salon's own timezone, YYYY-MM-DD.",
+      "has_default": false,
+      "name": "booking_date",
+      "type": "string"
+    },
+    {
+      "description": "The weekday today falls on, spelled out in English: Monday to Sunday.",
+      "has_default": true,
+      "name": "booking_weekday",
+      "type": "string"
+    },
+    {
+      "description": "The number the carrier says is calling, in E.164. Empty on a browser call. Only a suggestion: the prompt reads it back and the caller may give another.",
+      "has_default": false,
+      "name": "customer_phone",
+      "type": "string"
+    },
+    {
+      "description": "The salon's own wall clock when the call began, HH:MM on a 24 hour clock.",
+      "has_default": false,
+      "name": "salon_local_time",
+      "type": "string"
+    }
+  ],
+  "version": "1.8.1"
+}

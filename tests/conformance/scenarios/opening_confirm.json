@@ -1,0 +1,91 @@
+{
+  "name": "opening_confirm",
+  "about": "A step opens on the tool it ends on, which has confirm lines. With the order held, code asks the confirm line at once, with no model request, and the caller's yes runs the tool. With no order held, the step says its announce and listens; the model then calls the tool and code asks.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "close_order",
+        "when": "The caller wants to close an order.",
+        "instructions": "Close the order the caller names.",
+        "tools": ["lookup_order"],
+        "arguments": ["order_id"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {"found": [true]},
+            "confirm": ["Shall I close order {{input.order_id}}?"],
+            "say": ["Order {{result.order.id}} is {{result.status}}."]
+          }
+        ],
+        "opening": "listen",
+        "announce": ["Sure, which order is it?"],
+        "opens_with": {"tool": "lookup_order", "arguments": {"order_id": "order_id"}}
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [
+      {"found": true, "order": {"id": "A-12"}, "status": "closed"},
+      {"found": true, "order": {"id": "B-7"}, "status": "closed"}
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Please close order A-12.",
+      "model": [
+        {"site": "", "calls": [{"name": "close_order", "arguments": {"order_id": "A-12"}}]}
+      ],
+      "spoken": ["Shall I close order A-12?"]
+    },
+    {
+      "caller": "Yes.",
+      "model": [
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]}
+      ],
+      "spoken": ["Order A-12 is closed."]
+    },
+    {
+      "caller": "Close another one for me.",
+      "model": [
+        {"site": "", "calls": [{"name": "close_order", "arguments": {}}]}
+      ],
+      "spoken": ["Sure, which order is it?"]
+    },
+    {
+      "caller": "B-7.",
+      "model": [
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
+      ],
+      "spoken": ["Shall I close order B-7?"]
+    },
+    {
+      "caller": "Yes.",
+      "model": [
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
+      ],
+      "spoken": ["Order B-7 is closed."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "B-7", "status": "closed", "note": null, "tags": []},
+    "tool_calls": [
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}},
+      {"name": "lookup_order", "arguments": {"order_id": "B-7"}}
+    ],
+    "events": [
+      "task.started task=close_order",
+      "task.ended_on_tool task=close_order saved=order_id,status",
+      "task.completed task=close_order saved=order_id,status",
+      "task.started task=close_order",
+      "task.ended_on_tool task=close_order saved=order_id,status",
+      "task.completed task=close_order saved=order_id,status"
+    ]
+  }
+}

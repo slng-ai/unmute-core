@@ -1,0 +1,26 @@
+{
+  "name": "realtime_usage_span",
+  "about": "The model reports its token counts at the end of each answer, and each answer's llm span shows them. No request of a realtime model passes through the library, so its span is its reply, recorded once the reply is over.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "realtime": true,
+  "tool_results": {
+    "search_web": [{"hours": "9 to 5"}]
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {"site": "", "calls": [{"name": "search_web", "arguments": {"q": "hours"}}], "usage": [310, 4]},
+        {"site": "", "text": "We are open 9 to 5.", "usage": [330, 9]}
+      ],
+      "spoken": ["We are open 9 to 5."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [{"name": "search_web", "arguments": {"q": "hours"}}],
+    "events": [],
+    "agent": "main"
+  }
+}

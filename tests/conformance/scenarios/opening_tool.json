@@ -1,0 +1,100 @@
+{
+  "name": "opening_tool",
+  "about": "A group takes the order id as an argument. Its step opens on a search in code and says a line from the result, with no model request; the model then reads that result. When no line fills, the step opens as before: its announce, then a model reply.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "instructions": "Find order {{order_id}}.",
+        "tools": ["lookup_order", "search_web"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+        "announce": ["Let me look."],
+        "opens_with": {
+          "tool": "search_web",
+          "arguments": {"q": "order_id"},
+          "say": ["Order {{result.order}} is {{result.state}}. Shall I close it?"]
+        }
+      }
+    ],
+    "groups": [
+      {
+        "name": "order_flow",
+        "when": "The caller wants help with an order.",
+        "steps": ["find_order"],
+        "context_scope": "shared",
+        "arguments": ["order_id"]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "search_web": [{"order": "A-12", "state": "open"}, {"nothing": "here"}],
+    "lookup_order": [
+      {"found": true, "order": {"id": "A-12"}, "status": "closed"},
+      {"found": true, "order": {"id": "B-7"}, "status": "open"}
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Please close order A-12.",
+      "model": [
+        {"site": "", "calls": [{"name": "order_flow", "arguments": {"order_id": "A-12"}}]}
+      ],
+      "spoken": ["Order A-12 is open. Shall I close it?"]
+    },
+    {
+      "caller": "Yes.",
+      "model": [
+        {"site": "task:find_order", "heard": ["Please close order A-12.", "Yes."], "result": "{\"order\": \"A-12\", \"state\": \"open\"}", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
+        {"site": "", "text": "It is closed."}
+      ],
+      "spoken": ["It is closed."]
+    },
+    {
+      "caller": "Now check order B-7.",
+      "model": [
+        {"site": "", "calls": [{"name": "order_flow", "arguments": {"order_id": "B-7"}}]},
+        {"site": "task:find_order", "text": "What would you like to know about it?"}
+      ],
+      "spoken": ["Let me look.", "What would you like to know about it?"]
+    },
+    {
+      "caller": "Is it still open?",
+      "model": [
+        {"site": "task:find_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]},
+        {"site": "", "text": "Yes, it is still open."}
+      ],
+      "spoken": ["Yes, it is still open."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "B-7", "status": "open", "note": null, "tags": []},
+    "tool_calls": [
+      {"name": "search_web", "arguments": {"q": "A-12"}},
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}},
+      {"name": "search_web", "arguments": {"q": "B-7"}},
+      {"name": "lookup_order", "arguments": {"order_id": "B-7"}}
+    ],
+    "events": [
+      "group.started group=order_flow",
+      "group.step_started group=order_flow task=find_order step=0",
+      "task.started group=order_flow task=find_order step=0",
+      "task.ended_on_tool group=order_flow task=find_order step=0 saved=order_id,status",
+      "task.completed group=order_flow task=find_order step=0 saved=order_id,status",
+      "group.completed group=order_flow",
+      "group.started group=order_flow",
+      "group.step_started group=order_flow task=find_order step=0",
+      "task.started group=order_flow task=find_order step=0",
+      "task.ended_on_tool group=order_flow task=find_order step=0 saved=order_id,status",
+      "task.completed group=order_flow task=find_order step=0 saved=order_id,status",
+      "group.completed group=order_flow"
+    ],
+    "agent": "main"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "name": "end_reason_caller",
+  "about": "The caller hangs up. A tool on the call's end reads the reason, caller_hung_up. The agent did not end the call.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "reason": "{{call.end_reason}}"
+      }
+    }
+  },
+  "caller_hangs_up": true,
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [
+        {
+          "site": "",
+          "text": "Hello."
+        }
+      ],
+      "spoken": [
+        "Hello."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "ended": false,
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "reason": "caller_hung_up"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "prefetch_before_greeting",
+  "about": "A lookup before the greeting saves the caller's name, and the fixed greeting line says it.",
+  "instructions": "You help callers with their orders. Caller: {{note}}.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "greeting": "Hello {{note}}, welcome back.",
+  "prefetch": {
+    "lookup_customer": {
+      "assign": {
+        "note": "name"
+      }
+    }
+  },
+  "tool_results": {
+    "lookup_customer": [
+      {
+        "name": "Ana"
+      }
+    ]
+  },
+  "turns": [],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": "Ana",
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "opening": [
+      "Hello Ana, welcome back."
+    ],
+    "event_calls": [
+      {
+        "name": "lookup_customer"
+      }
+    ]
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "name": "main_save_values_all_owned",
+  "about": "With save_values on and every value saved by a task, the main agent is offered no save tool. Its request still ends with the values block, whose header names no tool.",
+  "instructions": "You help callers with their orders.",
+  "save_values": true,
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_details",
+        "when": "The caller gives their order details.",
+        "instructions": "Take the order details.",
+        "assign": [
+          {"variable": "order_id", "path": ["order_id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true},
+          {"variable": "note", "path": ["note"], "optional": true},
+          {"variable": "tags", "path": ["tags"], "optional": true}
+        ]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Hello.",
+      "model": [
+        {
+          "site": "",
+          "tools": ["lookup_order", "search_web", "normalize", "take_details"],
+          "last_system": "Values of this call.\n- order_id, saved by the task take_details: none recorded yet.\n- status, saved by the task take_details: none recorded yet.\n- note, saved by the task take_details: none recorded yet.\n- tags, saved by the task take_details: []",
+          "text": "Hello, how can I help?"
+        }
+      ],
+      "spoken": ["Hello, how can I help?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "agent": "main"
+  }
+}

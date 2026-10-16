@@ -1,0 +1,55 @@
+{
+  "name": "handoff_beside_task",
+  "about": "One reply starts a task and then a handoff. The task runs; the handoff is refused, so the main agent keeps the call.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Find order {{order_id}}.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+        "announce": ["Let me look."]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "handoffs": {"to_notes": "notes"},
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": ["search_web"],
+      "tasks": {"mode": "record"}
+    }
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "order": {"id": "A-12"}, "status": "open"}]
+  },
+  "turns": [
+    {
+      "caller": "Find order A-12, then put me through to notes.",
+      "model": [
+        {"site": "", "calls": [{"name": "find_order"}, {"name": "to_notes"}]},
+        {"site": "task:find_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
+        {"site": "", "prompt": "You help callers with their orders.", "text": "Order A-12 is open."}
+      ],
+      "spoken": ["Let me look.", "Order A-12 is open."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-12", "status": "open", "note": null, "tags": []},
+    "tool_calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}],
+    "events": [
+      "task.started task=find_order",
+      "task.ended_on_tool task=find_order saved=order_id,status",
+      "task.completed task=find_order saved=order_id,status"
+    ],
+    "agent": "main"
+  }
+}

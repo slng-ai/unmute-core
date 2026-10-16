@@ -1,0 +1,135 @@
+{
+  "name": "prompt_suffix_summary",
+  "about": "A PromptSuffix hook reaches the summary request a handoff makes, and the prompt of the agent that takes the call.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "handoffs": {
+    "to_notes": {
+      "to": "notes",
+      "context": {
+        "history": "summary"
+      }
+    }
+  },
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": [
+        "search_web"
+      ],
+      "tasks": {
+        "mode": "record",
+        "tasks": []
+      }
+    }
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ]
+  },
+  "hooks": {
+    "prompt_suffix": "/no_think"
+  },
+  "turns": [
+    {
+      "caller": "Hi.",
+      "model": [
+        {
+          "site": "",
+          "text": "Orders here.",
+          "prompt_ends": "\n\n/no_think"
+        }
+      ],
+      "spoken": [
+        "Orders here."
+      ]
+    },
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "text": "Let me see.",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ],
+          "prompt_ends": "\n\n/no_think"
+        },
+        {
+          "site": "",
+          "text": "We are open 9 to 5.",
+          "prompt_ends": "\n\n/no_think"
+        }
+      ],
+      "spoken": [
+        "Let me see.",
+        "We are open 9 to 5."
+      ]
+    },
+    {
+      "caller": "Put me through to notes.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "to_notes"
+            }
+          ],
+          "prompt_ends": "\n\n/no_think"
+        },
+        {
+          "site": "summary",
+          "heard": [
+            "user: Hi.\nassistant: Orders here.\nuser: When are you open?\nassistant: Let me see.\nassistant: We are open 9 to 5.\nuser: Put me through to notes."
+          ],
+          "tools": [],
+          "text": "The caller asked the opening hours, 9 to 5.",
+          "prompt_ends": "\n\n/no_think"
+        },
+        {
+          "site": "",
+          "prompt": "You take notes.\n\n/no_think",
+          "heard": [],
+          "order": [
+            "assistant"
+          ],
+          "text": "Notes desk.",
+          "prompt_ends": "\n\n/no_think"
+        }
+      ],
+      "spoken": [
+        "Notes desk."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      }
+    ],
+    "events": [],
+    "agent": "notes"
+  }
+}

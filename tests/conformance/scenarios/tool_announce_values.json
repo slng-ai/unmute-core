@@ -1,0 +1,101 @@
+{
+  "name": "tool_announce_values",
+  "about": "An announce line fills a value the call started with before it is said, and the tool waits for it to play. A tool that hides its result gives the model {\"ok\": true}. A line that reads an unset value refuses the call before anything is said or run.",
+  "instructions": "You help callers at {{note}}.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "call_start": {
+    "note": "Salon Sol"
+  },
+  "tool_options": {
+    "search_web": {
+      "announce": [
+        "One moment at {{note}}."
+      ],
+      "announce_wait": true,
+      "show_result": false,
+      "result_instructions": "Say only that it worked."
+    },
+    "normalize": {
+      "announce": [
+        "Checking order {{order_id}}."
+      ]
+    }
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "prompt": "You help callers at {{note}}.",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result": "{\"ok\": true}",
+          "text": "Done."
+        }
+      ],
+      "spoken": [
+        "One moment at Salon Sol.",
+        "Done."
+      ]
+    },
+    {
+      "caller": "Check my order.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "normalize"
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result": "{\"refused\": \"order_id not set yet. Get it from the caller, then call this tool again.\"}",
+          "text": "What is your order number?"
+        }
+      ],
+      "spoken": [
+        "What is your order number?"
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": "Salon Sol",
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      }
+    ],
+    "events": [],
+    "agent": "main"
+  }
+}

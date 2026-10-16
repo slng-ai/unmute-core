@@ -1,0 +1,39 @@
+{
+  "name": "step_native_tool",
+  "about": "A task that lists a native tool offers it in its step, after its own tools and finish, and the step calls it like any tool.",
+  "instructions": "You help callers with their orders.",
+  "native_tools": {"weather": {"temp": 20}},
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants a note taken.",
+        "instructions": "Take a note.",
+        "assign": [{"variable": "note", "path": ["note"], "optional": true}],
+        "native_tools": ["weather"]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Take a note about the weather.",
+      "model": [
+        {"site": "", "calls": [{"name": "take_note"}]},
+        {
+          "site": "task:take_note",
+          "tools": ["finish", "weather"],
+          "calls": [{"name": "weather"}]
+        },
+        {"site": "task:take_note", "result": "{\"temp\": 20}", "text": "It is 20 degrees."}
+      ],
+      "spoken": ["It is 20 degrees."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [{"name": "weather", "arguments": {}}],
+    "events": ["task.started task=take_note"],
+    "agent": "a step"
+  }
+}

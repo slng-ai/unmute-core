@@ -1,0 +1,77 @@
+{
+  "name": "greeting_worded_withholds_handoffs",
+  "about": "A greeting the model words leaves out the agent's handoff tools, so it cannot hand the call on before it said anything. They come back once the caller speaks, and the model calls one.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "worded_greeting": true,
+  "handoffs": {
+    "to_notes": "notes"
+  },
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": [],
+      "tasks": {
+        "mode": "record",
+        "tasks": []
+      }
+    }
+  },
+  "opening": [
+    {
+      "site": "",
+      "tools": [
+        "lookup_order",
+        "search_web",
+        "normalize"
+      ],
+      "text": "Hello, how can I help?"
+    }
+  ],
+  "turns": [
+    {
+      "caller": "Put me through to notes.",
+      "model": [
+        {
+          "site": "",
+          "tools": [
+            "lookup_order",
+            "search_web",
+            "normalize",
+            "to_notes"
+          ],
+          "calls": [
+            {
+              "name": "to_notes"
+            }
+          ]
+        },
+        {
+          "site": "",
+          "prompt": "You take notes.",
+          "text": "Notes desk."
+        }
+      ],
+      "spoken": [
+        "Notes desk."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "agent": "notes",
+    "opening": [
+      "Hello, how can I help?"
+    ]
+  }
+}

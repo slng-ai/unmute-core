@@ -1,0 +1,51 @@
+{
+  "name": "refused_save",
+  "about": "The model saves a status the State refuses. The refusal goes back to the model, which asks again and then saves a valid status.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "set_status",
+        "when": "The caller wants to change an order's status.",
+        "instructions": "Ask which status the order should have.",
+        "assign": [{"variable": "status", "path": ["status"]}]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "I want to change my order's status.",
+      "model": [
+        {"site": "", "calls": [{"name": "set_status"}]},
+        {"site": "task:set_status", "text": "Which status should it have?"}
+      ],
+      "spoken": ["Which status should it have?"]
+    },
+    {
+      "caller": "Make it pending.",
+      "model": [
+        {"site": "task:set_status", "calls": [{"name": "finish", "arguments": {"status": "pending"}}]},
+        {"site": "task:set_status", "result": "{\"refused\": \"Not recorded: status: Input should be 'open' or 'closed'. Convert what the caller already told you into that format and call finish again; ask the caller only for something they haven't said.\"}", "text": "It can only be open or closed. Should I close it?"}, {"site": "task:set_status", "tool_choice": "required", "tools": ["finish", "not_yet"], "calls": [{"name": "not_yet"}]}
+      ],
+      "spoken": ["It can only be open or closed. Should I close it?"]
+    },
+    {
+      "caller": "Yes, close it.",
+      "model": [
+        {"site": "task:set_status", "calls": [{"name": "finish", "arguments": {"status": "closed"}}]},
+        {"site": "", "text": "Your order is closed now."}
+      ],
+      "spoken": ["Your order is closed now."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": "closed", "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [
+      "task.started task=set_status",
+      "task.value_refused task=set_status",
+      "task.completed task=set_status saved=status"
+    ]
+  }
+}

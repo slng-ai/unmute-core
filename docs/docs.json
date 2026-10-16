@@ -1,0 +1,166 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Unmute",
+  "description": "unmute-core: the Python library that runs Unmute voice agents on LiveKit and Pipecat.",
+  "colors": {
+    "primary": "#8A7300",
+    "light": "#F7E98A",
+    "dark": "#8A7300"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs"
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "unmute-core",
+        "icon": "package",
+        "groups": [
+          {
+            "group": "Get started",
+            "public": true,
+            "pages": [
+              "core/index",
+              "core/start/why-unmute-core",
+              "core/start/installation",
+              "core/start/quickstart",
+              "core/start/unmute-and-core"
+            ]
+          },
+          {
+            "group": "Build a salon agent",
+            "public": true,
+            "pages": [
+              "core/tutorial/overview",
+              "core/tutorial/answer-the-phone",
+              "core/tutorial/remember-the-caller",
+              "core/tutorial/check-the-diary",
+              "core/tutorial/book-step-by-step",
+              "core/tutorial/hand-off-complaints",
+              "core/tutorial/know-the-time",
+              "core/tutorial/quiet-callers",
+              "core/tutorial/see-every-call",
+              "core/tutorial/what-you-built"
+            ]
+          },
+          {
+            "group": "On your framework",
+            "public": true,
+            "pages": [
+              "core/frameworks/standalone",
+              "core/frameworks/livekit",
+              "core/frameworks/pipecat"
+            ]
+          },
+          {
+            "group": "Guides",
+            "public": true,
+            "pages": [
+              "core/build/state",
+              {
+                "group": "Tools",
+                "root": "core/build/tools",
+                "pages": [
+                  "core/build/knowledge"
+                ]
+              },
+              {
+                "group": "Tasks",
+                "root": "core/build/tasks",
+                "pages": [
+                  "core/build/tasks/first-task",
+                  "core/build/tasks/groups",
+                  "core/build/tasks/how-a-step-ends",
+                  "core/build/tasks/held-saves",
+                  "core/build/tasks/confirm-in-code",
+                  "core/build/tasks/what-the-model-reads"
+                ]
+              },
+              "core/build/handoffs",
+              {
+                "group": "The call",
+                "pages": [
+                  "core/build/call-lifecycle",
+                  "core/build/prefetch",
+                  "core/build/turn-taking"
+                ]
+              },
+              "core/build/hooks"
+            ]
+          },
+          {
+            "group": "Example agents",
+            "public": true,
+            "pages": [
+              "core/examples/overview",
+              "core/examples/typed-path",
+              "core/examples/nosh",
+              "core/examples/kestrel",
+              "core/examples/wasla",
+              "core/examples/faro"
+            ]
+          },
+          {
+            "group": "Models",
+            "public": true,
+            "pages": [
+              "core/models/model-call",
+              "core/models/slng",
+              "core/models/realtime"
+            ]
+          },
+          {
+            "group": "Phone calls",
+            "public": true,
+            "pages": [
+              "core/telephony"
+            ]
+          },
+          {
+            "group": "Run and observe",
+            "public": true,
+            "pages": [
+              "core/observe/telemetry"
+            ]
+          },
+          {
+            "group": "Reference",
+            "public": true,
+            "pages": [
+              "core/reference/agent-spec",
+              "core/reference/livekit",
+              "core/reference/model-call",
+              "core/reference/slng",
+              "core/reference/call-lifecycle",
+              "core/reference/handoffs",
+              "core/reference/hooks",
+              "core/reference/pipecat",
+              "core/reference/prefetch",
+              "core/reference/settings",
+              "core/reference/state",
+              "core/reference/turn-taking",
+              "core/reference/telemetry",
+              "core/reference/dev-records",
+              "core/reference/telephony",
+              "core/reference/tools",
+              "core/reference/tasks"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "icon": "github",
+        "label": "GitHub",
+        "href": "https://github.com/slng-ai/unmute-core"
+      }
+    ]
+  }
+}

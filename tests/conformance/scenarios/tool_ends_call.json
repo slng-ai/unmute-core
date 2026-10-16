@@ -1,0 +1,48 @@
+{
+  "name": "tool_ends_call",
+  "about": "A tool whose effect ends the conversation ends the call only when it succeeds. A result that reports an error leaves the call going, and the model answers it. Once the tool succeeds, the call ends with no model reply after it: the goodbye rides in the reply that called the tool.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants to leave a note.",
+        "instructions": "Take the caller's note.",
+        "assign": [{"variable": "note", "path": ["note"]}]
+      }
+    ]
+  },
+  "tool_options": {
+    "normalize": {"effect": "ends_conversation"}
+  },
+  "tool_results": {
+    "normalize": [{"error": "the line is busy"}, {"ok": true}]
+  },
+  "turns": [
+    {
+      "caller": "That is all, thanks. Bye.",
+      "model": [
+        {"site": "", "text": "Goodbye!", "calls": [{"name": "normalize", "arguments": {"reason": "done"}}]},
+        {"site": "", "text": "Sorry, I could not end the call. Anything else?"}
+      ],
+      "spoken": ["Goodbye!", "Sorry, I could not end the call. Anything else?"]
+    },
+    {
+      "caller": "No, bye.",
+      "model": [
+        {"site": "", "text": "Goodbye!", "calls": [{"name": "normalize", "arguments": {"reason": "done"}}]}
+      ],
+      "spoken": ["Goodbye!"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [
+      {"name": "normalize", "arguments": {"reason": "done"}},
+      {"name": "normalize", "arguments": {"reason": "done"}}
+    ],
+    "events": [],
+    "ended": true
+  }
+}

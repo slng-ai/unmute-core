@@ -1,0 +1,70 @@
+{
+  "name": "transfer_unavailable_hangs_up",
+  "about": "A transfer nobody takes, with on_unavailable hangup: the phone line says the unavailable line, and the call ends with no model reply after it.",
+  "instructions": "You help callers with their orders. Transfer them to billing when they ask.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "transfers": {
+    "send_to_billing": {
+      "fails": "no answer",
+      "on_unavailable": "hangup"
+    }
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "reason": "{{call.end_reason}}"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Put me through to billing, please.",
+      "model": [
+        {
+          "site": "",
+          "prompt": "You help callers with their orders. Transfer them to billing when they ask.",
+          "calls": [
+            {
+              "name": "send_to_billing"
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Putting you through now, one moment."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "send_to_billing"
+      }
+    ],
+    "events": [],
+    "ended": true,
+    "line_said": [
+      "I'm sorry, nobody can take your call right now. Goodbye."
+    ],
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "reason": "agent_ended"
+        }
+      }
+    ]
+  }
+}

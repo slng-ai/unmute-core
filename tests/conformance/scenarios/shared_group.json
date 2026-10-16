@@ -1,0 +1,81 @@
+{
+  "name": "shared_group",
+  "about": "A two-step group with shared context runs both steps, then hands back to the main agent. Each step hears every caller line so far.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "instructions": "Find order {{order_id}}.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+        "announce": ["Let me look."]
+      },
+      {
+        "name": "take_note",
+        "instructions": "Take a note.",
+        "assign": [{"variable": "note", "path": ["note"], "optional": true}]
+      }
+    ],
+    "groups": [
+      {
+        "name": "order_flow",
+        "when": "The caller wants help with an order.",
+        "steps": ["find_order", "take_note"],
+        "context_scope": "shared"
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "order": {"id": "A-12"}, "status": "open"}]
+  },
+  "turns": [
+    {
+      "caller": "I need help with my order.",
+      "model": [
+        {"site": "", "calls": [{"name": "order_flow"}]},
+        {"site": "task:find_order", "heard": ["I need help with my order."], "text": "What is the order number?"}
+      ],
+      "spoken": ["Let me look.", "What is the order number?"]
+    },
+    {
+      "caller": "It is A-12.",
+      "model": [
+        {"site": "task:find_order", "heard": ["I need help with my order.", "It is A-12."], "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
+        {"site": "task:take_note", "heard": ["I need help with my order.", "It is A-12."], "text": "Any note to add?"}
+      ],
+      "spoken": ["Any note to add?"]
+    },
+    {
+      "caller": "Mark it urgent.",
+      "model": [
+        {"site": "task:take_note", "heard": ["I need help with my order.", "It is A-12.", "Mark it urgent."], "text": "Noted.", "calls": [{"name": "finish", "arguments": {"note": "urgent"}}]},
+        {"site": "", "heard": ["I need help with my order."], "result": "{\"status\": \"completed\", \"task\": \"order_flow\", \"steps\": [{\"step\": \"find_order\", \"outcome\": \"completed\", \"saved\": {\"order_id\": \"A-12\", \"status\": \"open\"}}, {\"step\": \"take_note\", \"outcome\": \"completed\", \"saved\": {\"note\": \"urgent\"}, \"said\": \"Noted.\"}]}", "text": "Anything else?"}
+      ],
+      "spoken": ["Noted.", "Anything else?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-12", "status": "open", "note": "urgent", "tags": []},
+    "tool_calls": [
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}}
+    ],
+    "events": [
+      "group.started group=order_flow",
+      "group.step_started group=order_flow task=find_order step=0",
+      "task.started group=order_flow task=find_order step=0",
+      "task.ended_on_tool group=order_flow task=find_order step=0 saved=order_id,status",
+      "task.completed group=order_flow task=find_order step=0 saved=order_id,status",
+      "group.step_started group=order_flow task=take_note step=1",
+      "task.started group=order_flow task=take_note step=1",
+      "task.completed group=order_flow task=take_note step=1 saved=note",
+      "group.completed group=order_flow"
+    ]
+  }
+}

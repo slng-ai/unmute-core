@@ -1,0 +1,89 @@
+{
+  "name": "tool_locked_shape",
+  "about": "A tool locks its customer argument to the whole {{customer}} shape of the State. The model never sends it, and the tool runs with the shape as an object.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "shaped_state": true,
+  "call_start": {
+    "customer": {
+      "name": "Ana",
+      "city": "Madrid"
+    }
+  },
+  "tool_options": {
+    "search_web": {
+      "locked": {
+        "customer": "{{customer}}"
+      },
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          },
+          "customer": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "q",
+          "customer"
+        ]
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "We are open 9 to 5."
+        }
+      ],
+      "spoken": [
+        "We are open 9 to 5."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": [],
+      "customer": {
+        "name": "Ana",
+        "city": "Madrid"
+      },
+      "amount": null
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours",
+          "customer": {
+            "name": "Ana",
+            "city": "Madrid"
+          }
+        }
+      }
+    ],
+    "events": []
+  }
+}

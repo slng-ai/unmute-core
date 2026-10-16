@@ -1,0 +1,53 @@
+{
+  "name": "one_task",
+  "about": "The main agent hands one task over. Its tool finds the order and ends the step, and the main agent answers from the run record.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Find order {{order_id}}.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+        "announce": ["Let me look."]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "order": {"id": "A-12"}, "status": "open"}]
+  },
+  "turns": [
+    {
+      "caller": "Where is my order?",
+      "model": [
+        {"site": "", "calls": [{"name": "find_order"}]},
+        {"site": "task:find_order", "text": "What is the order number?"}
+      ],
+      "spoken": ["Let me look.", "What is the order number?"]
+    },
+    {
+      "caller": "It is A-12.",
+      "model": [
+        {"site": "task:find_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
+        {"site": "", "text": "Order A-12 is open."}
+      ],
+      "spoken": ["Order A-12 is open."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-12", "status": "open", "note": null, "tags": []},
+    "tool_calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}],
+    "events": [
+      "task.started task=find_order",
+      "task.ended_on_tool task=find_order saved=order_id,status",
+      "task.completed task=find_order saved=order_id,status"
+    ]
+  }
+}

@@ -1,0 +1,55 @@
+"""LiveKit voice agent, compiled by Unmute from this package's agent.yaml."""
+
+from __future__ import annotations
+
+import os
+
+from dotenv import load_dotenv
+from livekit.agents import AgentServer, JobContext
+
+from call import prewarm, run_call
+from settings import DEFAULT_HEALTH_PORT, LOCAL_INIT_TIMEOUT_SECS, MAX_SESSIONS
+
+load_dotenv()
+
+
+def telephony_load(agent_server: AgentServer) -> float:
+    """Report how full this worker is, so the platform stops routing to a full one.
+
+    Args:
+        agent_server: The server whose active jobs are counted.
+
+    Returns:
+        The load, from 0.0 (idle) to 1.0 (at MAX_SESSIONS).
+    """
+    return min(len(agent_server.active_jobs) / MAX_SESSIONS, 1.0)
+
+
+server = AgentServer(
+    port=int(os.getenv("UNMUTE_AGENT_HEALTH_PORT", DEFAULT_HEALTH_PORT)),
+    drain_timeout=900,
+    load_threshold=1.0,
+)
+server.load_fnc = telephony_load
+server.setup_fnc = prewarm
+if os.getenv("UNMUTE_LOCAL_RUN") == "1":
+    # One browser call needs one warm spare, not one index build per CPU.
+    server.update_options(
+        num_idle_processes=1, initialize_process_timeout=LOCAL_INIT_TIMEOUT_SECS
+    )
+
+
+@server.rtc_session(agent_name="salon-concierge-single-prompt-livekit")
+async def entrypoint(ctx: JobContext) -> None:
+    """Run one call LiveKit dispatched to this worker.
+
+    Args:
+        ctx: The job LiveKit dispatched for this call.
+    """
+    await run_call(ctx)
+
+
+# No __main__ block: this module is started through livekit-agents' supported
+# CLI, `python -m livekit.agents start agent.py`, which imports it and finds the
+# `server` above. The older per-script entry point goes through a CLI upstream
+# has deprecated and will remove.

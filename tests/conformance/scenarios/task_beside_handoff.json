@@ -1,0 +1,66 @@
+{
+  "name": "task_beside_handoff",
+  "about": "One reply hands off and then starts a task. The handoff wins; the task is refused and the notes agent speaks first. The notes agent has a task of the same name, which must not start either.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Find order {{order_id}}.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+        "announce": ["Let me look."]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "handoffs": {"to_notes": "notes"},
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": ["search_web", "lookup_order"],
+      "tasks": {
+        "mode": "record",
+        "tasks": [
+          {
+            "name": "find_order",
+            "when": "The caller asks about an order.",
+            "instructions": "Find order {{order_id}}.",
+            "tools": ["lookup_order"],
+            "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+            "announce": ["Let me look."]
+          }
+        ],
+        "task_only_tools": ["lookup_order"]
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Put me through to notes, and find order A-12.",
+      "model": [
+        {"site": "", "calls": [{"name": "to_notes"}, {"name": "find_order"}]},
+        {
+          "site": "",
+          "prompt": "You take notes.",
+          "heard": ["Put me through to notes, and find order A-12."],
+          "tools": ["search_web", "find_order"],
+          "text": "Notes desk."
+        }
+      ],
+      "spoken": ["Notes desk."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "agent": "notes"
+  }
+}

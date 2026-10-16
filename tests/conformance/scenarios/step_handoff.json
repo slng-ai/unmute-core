@@ -1,0 +1,144 @@
+{
+  "name": "step_handoff",
+  "about": "A step whose task lists a handoff leaves it out of its opening reply and offers it, after its own tools, once the caller speaks. Calling it ends the step and its task, and the next agent takes the call, hearing what was said in the step.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Find order {{order_id}}.",
+        "tools": [
+          "lookup_order"
+        ],
+        "assign": [
+          {
+            "variable": "order_id",
+            "path": [
+              "order",
+              "id"
+            ],
+            "optional": true
+          },
+          {
+            "variable": "status",
+            "path": [
+              "status"
+            ],
+            "optional": true
+          }
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {
+              "found": [
+                true
+              ]
+            }
+          }
+        ],
+        "handoffs": [
+          "to_notes"
+        ]
+      }
+    ],
+    "task_only_tools": [
+      "lookup_order"
+    ]
+  },
+  "handoffs": {
+    "to_notes": "notes"
+  },
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": [
+        "search_web"
+      ],
+      "tasks": {
+        "mode": "record",
+        "tasks": []
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "I need help with an order.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "find_order"
+            }
+          ]
+        },
+        {
+          "site": "task:find_order",
+          "tools": [
+            "lookup_order",
+            "finish"
+          ],
+          "text": "Which order?"
+        }
+      ],
+      "spoken": [
+        "Which order?"
+      ]
+    },
+    {
+      "caller": "Actually, put me through to notes.",
+      "model": [
+        {
+          "site": "task:find_order",
+          "calls": [
+            {
+              "name": "to_notes"
+            }
+          ],
+          "tools": [
+            "lookup_order",
+            "finish",
+            "to_notes"
+          ]
+        },
+        {
+          "site": "",
+          "prompt": "You take notes.",
+          "heard": [
+            "I need help with an order.",
+            "Actually, put me through to notes."
+          ],
+          "order": [
+            "user",
+            "assistant",
+            "user"
+          ],
+          "tools": [
+            "search_web"
+          ],
+          "text": "Notes desk."
+        }
+      ],
+      "spoken": [
+        "Notes desk."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [
+      "task.started task=find_order",
+      "task.handed_off task=find_order"
+    ],
+    "agent": "notes"
+  }
+}

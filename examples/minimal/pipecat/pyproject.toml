@@ -1,0 +1,32 @@
+[project]
+name = "minimal-pipecat"
+version = "0.1.0"
+description = "One piece of unmute-core at a time, on a stock Pipecat app"
+requires-python = ">=3.12"
+dependencies = [
+    "pipecat-ai[openai,runner,silero,webrtc]==1.12.0",
+    "pipecat-slng>=0.7.0,<0.8",
+    "unmute-core[pipecat,slng]",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+unmute-core = { path = "../../..", editable = true }
+
+[dependency-groups]
+dev = ["ruff==0.15.7", "ty"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN"]
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty.environment]
+python-version = "3.12"

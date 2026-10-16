@@ -1,0 +1,53 @@
+{
+  "name": "tool_announce",
+  "about": "A tool with an announce line says it as the tool starts, before its result, both when the main agent calls it and when a step does. A refused call says nothing.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Find the order.",
+        "tools": ["search_web"],
+        "assign": [{"variable": "order_id", "path": ["order"], "optional": true}]
+      }
+    ]
+  },
+  "tool_options": {
+    "search_web": {"announce": ["Let me check."]}
+  },
+  "tool_results": {
+    "search_web": [{"hours": "9 to 5"}, {"order": "A-12"}]
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {"site": "", "calls": [{"name": "search_web", "arguments": {"q": "hours"}}]},
+        {"site": "", "text": "We are open 9 to 5."}
+      ],
+      "spoken": ["Let me check.", "We are open 9 to 5."]
+    },
+    {
+      "caller": "And my order A-12?",
+      "model": [
+        {"site": "", "calls": [{"name": "find_order"}]},
+        {"site": "task:find_order", "calls": [{"name": "search_web", "arguments": {"q": "A-12"}}]},
+        {"site": "task:find_order", "text": "Order A-12 is on its way."}
+      ],
+      "spoken": ["Let me check.", "Order A-12 is on its way."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [
+      {"name": "search_web", "arguments": {"q": "hours"}},
+      {"name": "search_web", "arguments": {"q": "A-12"}}
+    ],
+    "events": [
+      "task.started task=find_order"
+    ],
+    "agent": "a step"
+  }
+}

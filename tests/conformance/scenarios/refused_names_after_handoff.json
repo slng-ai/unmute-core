@@ -1,0 +1,59 @@
+{
+  "name": "refused_names_after_handoff",
+  "about": "After a handoff, a tool reads a value only the first agent's task saves. The refusal asks the caller instead of naming a task the new agent cannot start.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller gives an order number.",
+        "instructions": "Ask for the order number.",
+        "assign": [{"variable": "order_id", "path": ["order_id"]}]
+      }
+    ]
+  },
+  "handoffs": {
+    "to_notes": {"to": "notes", "context": {"history": "messages"}}
+  },
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": ["normalize"],
+      "tasks": {"mode": "record", "tasks": []}
+    }
+  },
+  "tool_options": {
+    "normalize": {
+      "announce": ["Checking order {{order_id}}."]
+    }
+  },
+  "turns": [
+    {
+      "caller": "Put me through to notes.",
+      "model": [
+        {"site": "", "calls": [{"name": "to_notes"}]},
+        {"site": "", "prompt": "You take notes.", "text": "Notes desk."}
+      ],
+      "spoken": ["Notes desk."]
+    },
+    {
+      "caller": "Check my order.",
+      "model": [
+        {"site": "", "calls": [{"name": "normalize"}]},
+        {
+          "site": "",
+          "result": "{\"refused\": \"order_id not set yet. Get it from the caller, then call this tool again.\"}",
+          "text": "What is your order number?"
+        }
+      ],
+      "spoken": ["What is your order number?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "agent": "notes"
+  }
+}

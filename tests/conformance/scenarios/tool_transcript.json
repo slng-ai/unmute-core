@@ -1,0 +1,44 @@
+{
+  "name": "tool_transcript",
+  "about": "A tool the model calls locks the transcript. It gets the call's messages so far, the caller's newest line among them, as an event tool does.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "tool_options": {
+    "search_web": {
+      "locked": {"transcript": "$transcript"},
+      "parameters": {
+        "type": "object",
+        "properties": {"q": {"type": "string"}, "transcript": {"type": "string"}},
+        "required": ["q", "transcript"]
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [{"site": "", "text": "Hello."}],
+      "spoken": ["Hello."]
+    },
+    {
+      "caller": "When are you open?",
+      "model": [
+        {"site": "", "calls": [{"name": "search_web", "arguments": {"q": "hours"}}]},
+        {"site": "", "text": "We are open 9 to 5."}
+      ],
+      "spoken": ["We are open 9 to 5."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours",
+          "transcript": "user: Hi there\nassistant: Hello.\nuser: When are you open?"
+        }
+      }
+    ],
+    "events": []
+  }
+}

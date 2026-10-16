@@ -1,0 +1,102 @@
+{
+  "name": "thought_signature_handoff",
+  "about": "The model signs its tool calls, as Gemini 3 does, and the call moves to an agent with a model of its own, hearing the full history. It has the first agent's tool too, so LiveKit keeps that call in its history. That model's requests replay the first agent's signed call with its signature, and its own signed calls with theirs.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "handoffs": {
+    "to_notes": {"to": "notes", "context": {"history": "full"}}
+  },
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": ["lookup_order", "search_web"],
+      "model": "notes-model",
+      "tasks": {
+        "mode": "record",
+        "tasks": []
+      }
+    }
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "status": "open"}],
+    "search_web": [{"hours": "9 to 5"}]
+  },
+  "turns": [
+    {
+      "caller": "Where is order A-12?",
+      "model": [
+        {
+          "site": "",
+          "model": "scripted",
+          "calls": [
+            {
+              "name": "lookup_order",
+              "arguments": {"order_id": "A-12"},
+              "extra": {"google": {"thought_signature": "sig-main"}}
+            }
+          ]
+        },
+        {
+          "site": "",
+          "model": "scripted",
+          "replayed": {"lookup_order": {"google": {"thought_signature": "sig-main"}}},
+          "text": "Order A-12 is open."
+        }
+      ],
+      "spoken": ["Order A-12 is open."]
+    },
+    {
+      "caller": "Put me through to notes.",
+      "model": [
+        {"site": "", "model": "scripted", "calls": [{"name": "to_notes"}]},
+        {
+          "site": "",
+          "model": "notes-model",
+          "prompt": "You take notes.",
+          "replayed": {"lookup_order": {"google": {"thought_signature": "sig-main"}}},
+          "text": "Notes desk."
+        }
+      ],
+      "spoken": ["Notes desk."]
+    },
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "model": "notes-model",
+          "replayed": {"lookup_order": {"google": {"thought_signature": "sig-main"}}},
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {"q": "hours"},
+              "extra": {"google": {"thought_signature": "sig-notes"}}
+            }
+          ]
+        },
+        {
+          "site": "",
+          "model": "notes-model",
+          "replayed": {
+            "lookup_order": {"google": {"thought_signature": "sig-main"}},
+            "search_web": {"google": {"thought_signature": "sig-notes"}}
+          },
+          "text": "We are open 9 to 5."
+        }
+      ],
+      "spoken": ["We are open 9 to 5."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}},
+      {"name": "search_web", "arguments": {"q": "hours"}}
+    ],
+    "events": [],
+    "agent": "notes"
+  }
+}

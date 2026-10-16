@@ -1,0 +1,52 @@
+{
+  "name": "end_reason_failure",
+  "about": "The model call fails for good: the failure line plays and the call hangs up. A tool on the call's end reads the reason, error.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "reason": "{{call.end_reason}}"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [
+        {
+          "site": "",
+          "fail": true
+        }
+      ],
+      "spoken": [
+        "I'm sorry, something went wrong on our side. Please call back later. Goodbye."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "ended": true,
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "reason": "error"
+        }
+      }
+    ]
+  }
+}

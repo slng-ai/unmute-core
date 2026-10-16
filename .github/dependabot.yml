@@ -1,0 +1,11 @@
+# Keeps the pinned action hashes current. Library dependencies stay as ranges in
+# pyproject.toml, and CI tests both ends: the lock (newest) and scripts/check-floors.sh (oldest).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

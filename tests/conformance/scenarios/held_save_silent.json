@@ -1,0 +1,34 @@
+{
+  "name": "held_save_silent",
+  "about": "The step's first reply reads the note back and saves in the same reply. The save is refused, since the caller has said nothing in the step yet, and held. The caller hangs up without a word. The call's end saves the held note, unconfirmed, and asks the model nothing.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants to leave a note.",
+        "instructions": "Take the caller's note.",
+        "assign": [{"variable": "note", "path": ["note"]}]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Please note that I want a call back.",
+      "model": [
+        {"site": "", "calls": [{"name": "take_note"}]},
+        {"site": "task:take_note", "text": "Your note: a call back. Is that right?", "calls": [{"name": "finish", "arguments": {"note": "a call back"}}]}
+      ],
+      "spoken": ["Your note: a call back. Is that right?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": "a call back", "tags": []},
+    "tool_calls": [],
+    "events": [
+      "task.started task=take_note"
+    ],
+    "agent": "a step"
+  }
+}

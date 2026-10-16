@@ -1,0 +1,53 @@
+{
+  "name": "group_then_end",
+  "about": "A group whose then is end completes, and the call ends: the step's last words play, and the main agent is never asked for a reply.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "instructions": "Take the caller's note, then say goodbye.",
+        "assign": [{"variable": "note", "path": ["note"]}]
+      }
+    ],
+    "groups": [
+      {
+        "name": "leave_note",
+        "when": "The caller wants to leave a note and go.",
+        "steps": ["take_note"],
+        "context_scope": "shared",
+        "then": "end"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "I want to leave a note.",
+      "model": [
+        {"site": "", "calls": [{"name": "leave_note"}]},
+        {"site": "task:take_note", "text": "What is your note?"}
+      ],
+      "spoken": ["What is your note?"]
+    },
+    {
+      "caller": "Call me back tomorrow.",
+      "model": [
+        {"site": "task:take_note", "text": "Noted. Goodbye!", "calls": [{"name": "finish", "arguments": {"note": "call me back tomorrow"}}]}
+      ],
+      "spoken": ["Noted. Goodbye!"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": "call me back tomorrow", "tags": []},
+    "tool_calls": [],
+    "events": [
+      "group.started group=leave_note",
+      "group.step_started group=leave_note task=take_note step=0",
+      "task.started group=leave_note task=take_note step=0",
+      "task.completed group=leave_note task=take_note step=0 saved=note",
+      "group.completed group=leave_note"
+    ],
+    "ended": true
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "name": "handoff_own_model",
+  "about": "The notes agent runs on a model of its own. After the handoff, its replies and its task step go to that model, and its first reply offers no handoff tool, nor does that reply's tool follow-up. Its summary for the way back is written by its own model. Back on the main agent, the call's model answers again, with no handoff tool until the caller speaks.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "handoffs": {"to_notes": "notes"},
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": ["search_web"],
+      "model": "notes-model",
+      "tasks": {
+        "mode": "record",
+        "tasks": [
+          {
+            "name": "take_note",
+            "when": "The caller wants a note taken.",
+            "instructions": "Take a note.",
+            "assign": [{"variable": "note", "path": ["note"], "optional": true}]
+          }
+        ]
+      },
+      "handoffs": {
+        "to_orders": {"to": "main", "context": {"history": "summary"}}
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "I need a note taken.",
+      "model": [
+        {"site": "", "model": "scripted", "tools": ["lookup_order", "search_web", "normalize", "to_notes"], "calls": [{"name": "to_notes"}]},
+        {
+          "site": "",
+          "model": "notes-model",
+          "prompt": "You take notes.",
+          "tools": ["search_web", "take_note"],
+          "text": "Notes desk.",
+          "calls": [{"name": "search_web", "arguments": {"q": "notes"}}]
+        },
+        {"site": "", "model": "notes-model", "tools": ["search_web", "take_note"], "text": "What can I note?"}
+      ],
+      "spoken": ["Notes desk.", "What can I note?"]
+    },
+    {
+      "caller": "Take a note.",
+      "model": [
+        {"site": "", "model": "notes-model", "tools": ["search_web", "take_note", "to_orders"], "calls": [{"name": "take_note"}]},
+        {"site": "task:take_note", "model": "notes-model", "text": "What should it say?"}
+      ],
+      "spoken": ["What should it say?"]
+    },
+    {
+      "caller": "Call me back.",
+      "model": [
+        {"site": "task:take_note", "model": "notes-model", "calls": [{"name": "finish", "arguments": {"note": "call back"}}]},
+        {"site": "", "model": "notes-model", "text": "Saved."}
+      ],
+      "spoken": ["Saved."]
+    },
+    {
+      "caller": "Back to orders, please.",
+      "model": [
+        {"site": "", "model": "notes-model", "calls": [{"name": "to_orders"}]},
+        {"site": "summary", "model": "notes-model", "tools": [], "text": "The caller left a note to be called back."},
+        {
+          "site": "",
+          "model": "scripted",
+          "prompt": "You help callers with their orders.",
+          "tools": ["lookup_order", "search_web", "normalize"],
+          "text": "Orders again."
+        }
+      ],
+      "spoken": ["Orders again."]
+    },
+    {
+      "caller": "Thanks.",
+      "model": [
+        {"site": "", "model": "scripted", "tools": ["lookup_order", "search_web", "normalize", "to_notes"], "text": "You're welcome."}
+      ],
+      "spoken": ["You're welcome."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": "call back", "tags": []},
+    "tool_calls": [{"name": "search_web", "arguments": {"q": "notes"}}],
+    "events": [
+      "task.started task=take_note",
+      "task.completed task=take_note saved=note"
+    ],
+    "agent": "main"
+  }
+}

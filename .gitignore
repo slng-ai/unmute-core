@@ -1,0 +1,32 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+!docs/core/build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local-only development files (local/REPO_MAP.md)
+local/
+
+# Claude Code worktrees, one per parallel session
+.claude/worktrees/
+
+# Local secrets and planning
+.env
+.env.local
+config/secrets.json
+specs/
+.agents/
+
+# Tool caches
+.ruff_cache/
+.pytest_cache/
+.coverage
+
+# The Faro example keeps its learners in SQLite
+examples/**/*.sqlite3

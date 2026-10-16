@@ -1,0 +1,66 @@
+{
+  "name": "hook_replaces_result",
+  "about": "An after_tool hook puts its own result in place of what search_web returned. The tool ran, and the model reads the hook's result.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ]
+  },
+  "hooks": {
+    "results": {
+      "search_web": {
+        "hours": "closed"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result": "{\"hours\": \"closed\"}",
+          "text": "We are closed."
+        }
+      ],
+      "spoken": [
+        "We are closed."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      }
+    ],
+    "events": []
+  }
+}

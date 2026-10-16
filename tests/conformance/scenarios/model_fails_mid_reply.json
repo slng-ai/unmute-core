@@ -1,0 +1,47 @@
+{
+  "name": "model_fails_mid_reply",
+  "about": "The model says some words, then its call fails. The caller hears the words once, the call goes on with no failure line, and the next turn runs as usual.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "turns": [
+    {
+      "caller": "Where is my order?",
+      "model": [
+        {
+          "site": "",
+          "text": "Let me check on that",
+          "fail_after_text": true
+        }
+      ],
+      "spoken": [
+        "Let me check on that"
+      ]
+    },
+    {
+      "caller": "Are you still there?",
+      "model": [
+        {
+          "site": "",
+          "text": "Yes, I am here."
+        }
+      ],
+      "spoken": [
+        "Yes, I am here."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "ended": false
+  }
+}

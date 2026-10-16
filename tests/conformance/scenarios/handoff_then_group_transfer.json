@@ -1,0 +1,93 @@
+{
+  "name": "handoff_then_group_transfer",
+  "about": "The call reaches the notes agent by a handoff. Its group, whose then is transfer, hands the call back to the main agent after its last step. The notes agent and its step run on its own model; back on the main agent, the call's model answers, and the first reply offers no handoff tool.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "handoffs": {"to_notes": "notes"},
+  "then_targets": {"main": {"to": "main", "announce": "Back to orders."}},
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": ["search_web"],
+      "model": "notes-model",
+      "tasks": {
+        "mode": "record",
+        "tasks": [
+          {
+            "name": "take_note",
+            "instructions": "Take the caller's note.",
+            "assign": [{"variable": "note", "path": ["note"]}]
+          }
+        ],
+        "groups": [
+          {
+            "name": "leave_note",
+            "when": "The caller wants to leave a note.",
+            "steps": ["take_note"],
+            "context_scope": "shared",
+            "then": "transfer",
+            "then_target": "main"
+          }
+        ]
+      },
+      "handoffs": {"to_orders": "main"}
+    }
+  },
+  "turns": [
+    {
+      "caller": "I need the notes desk.",
+      "model": [
+        {"site": "", "model": "scripted", "calls": [{"name": "to_notes"}]},
+        {
+          "site": "",
+          "model": "notes-model",
+          "prompt": "You take notes.",
+          "tools": ["search_web", "leave_note"],
+          "text": "Notes desk."
+        }
+      ],
+      "spoken": ["Notes desk."]
+    },
+    {
+      "caller": "I want to leave a note.",
+      "model": [
+        {"site": "", "model": "notes-model", "tools": ["search_web", "leave_note", "to_orders"], "calls": [{"name": "leave_note"}]},
+        {"site": "task:take_note", "model": "notes-model", "text": "What is your note?"}
+      ],
+      "spoken": ["What is your note?"]
+    },
+    {
+      "caller": "Call me back tomorrow.",
+      "model": [
+        {"site": "task:take_note", "model": "notes-model", "text": "Noted.", "calls": [{"name": "finish", "arguments": {"note": "call me back tomorrow"}}]},
+        {
+          "site": "",
+          "model": "scripted",
+          "prompt": "You help callers with their orders.",
+          "tools": ["lookup_order", "search_web", "normalize"],
+          "text": "Orders again."
+        }
+      ],
+      "spoken": ["Noted.", "Back to orders.", "Orders again."]
+    },
+    {
+      "caller": "Thanks.",
+      "model": [
+        {"site": "", "model": "scripted", "tools": ["lookup_order", "search_web", "normalize", "to_notes"], "text": "You're welcome."}
+      ],
+      "spoken": ["You're welcome."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": "call me back tomorrow", "tags": []},
+    "tool_calls": [],
+    "events": [
+      "group.started group=leave_note",
+      "group.step_started group=leave_note task=take_note step=0",
+      "task.started group=leave_note task=take_note step=0",
+      "task.completed group=leave_note task=take_note step=0 saved=note",
+      "group.completed group=leave_note"
+    ],
+    "agent": "main"
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "name": "end_tool_beside_last",
+  "about": "A reply with a goodbye and two tool calls, one of them ends the conversation, listed last. The call ends after that reply: the goodbye is said once and the model is not asked again.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_options": {
+    "normalize": {
+      "effect": "ends_conversation"
+    }
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "reason": "{{call.end_reason}}"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "That is all, bye.",
+      "model": [
+        {
+          "site": "",
+          "text": "Goodbye!",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            },
+            {
+              "name": "normalize",
+              "arguments": {
+                "reason": "done"
+              }
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Goodbye!"
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      },
+      {
+        "name": "normalize",
+        "arguments": {
+          "reason": "done"
+        }
+      }
+    ],
+    "events": [],
+    "ended": true,
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "reason": "agent_ended"
+        }
+      }
+    ],
+    "opening": [
+      "Hello, this is the order desk."
+    ]
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ]
+  },
+  "greeting": "Hello, this is the order desk.",
+  "realtime": true
+}

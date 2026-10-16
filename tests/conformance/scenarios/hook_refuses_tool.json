@@ -1,0 +1,57 @@
+{
+  "name": "hook_refuses_tool",
+  "about": "A before_tool hook refuses search_web. The tool never runs, and the model reads why it did not.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ]
+  },
+  "hooks": {
+    "refuse": {
+      "search_web": "Search is closed today."
+    }
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result": "{\"refused\": \"Search is closed today.\"}",
+          "text": "I cannot look that up today."
+        }
+      ],
+      "spoken": [
+        "I cannot look that up today."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": []
+  }
+}

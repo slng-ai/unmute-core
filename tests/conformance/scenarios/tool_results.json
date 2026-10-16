@@ -1,0 +1,66 @@
+{
+  "name": "tool_results",
+  "about": "An agent with no tasks: a registry reply answers a tool's result in place of a model reply, picked by a result field or a State value, with a date said in the call's language, and assign rows save the result. A result that does not fit the tool's output fails the call, saves nothing and speaks nothing.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "language": "es",
+  "call_start": {"note": "vip"},
+  "tool_options": {
+    "lookup_order": {
+      "output": {"order_id": "Id", "status": "Literal[\"open\", \"closed\"]", "due": "Date"}
+    },
+    "search_web": {"output": {"hours": "str"}}
+  },
+  "assign": {
+    "lookup_order": [
+      {"variable": "order_id", "path": ["order_id"]},
+      {"variable": "status", "path": ["status"]}
+    ]
+  },
+  "replies": [
+    {"tool": "lookup_order", "when": {"status": ["closed"]}, "say": ["El pedido {{result.order_id}} está cerrado."]},
+    {"tool": "lookup_order", "state": {"note": ["vip"]}, "say": ["El pedido {{result.order_id}} llega el {{result.due}}."]},
+    {"tool": "search_web", "say": ["Abrimos de {{result.hours}}."]}
+  ],
+  "tool_results": {
+    "lookup_order": [
+      {"order_id": "A-1", "status": "closed", "due": "2026-10-09"},
+      {"order_id": "A-12", "status": "open", "due": "2026-10-16"}
+    ],
+    "search_web": [{"open": "9 a 5"}]
+  },
+  "turns": [
+    {
+      "caller": "¿Y el pedido A-1?",
+      "model": [{"site": "", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-1"}}]}],
+      "spoken": ["El pedido A-1 está cerrado."]
+    },
+    {
+      "caller": "¿Cuándo llega el A-12?",
+      "model": [{"site": "", "order": ["user", "tool", "assistant", "user"], "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]}],
+      "spoken": ["El pedido A-12 llega el viernes, 16 de octubre de 2026."]
+    },
+    {
+      "caller": "¿A qué hora abren?",
+      "model": [
+        {"site": "", "calls": [{"name": "search_web", "arguments": {"q": "horario"}}]},
+        {
+          "site": "",
+          "result_holds": "search_web returned a result that does not fit Output: hours: Field required. Do not claim success.",
+          "text": "Lo siento, no puedo comprobarlo ahora."
+        }
+      ],
+      "spoken": ["Lo siento, no puedo comprobarlo ahora."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-12", "status": "open", "note": "vip", "tags": []},
+    "tool_calls": [
+      {"name": "lookup_order", "arguments": {"order_id": "A-1"}},
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}},
+      {"name": "search_web", "arguments": {"q": "horario"}}
+    ],
+    "events": [],
+    "agent": "main"
+  }
+}

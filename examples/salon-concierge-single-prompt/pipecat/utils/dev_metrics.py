@@ -1,0 +1,1287 @@
+"""Call-scoped, immediate dev events. Inert outside the local dev loop."""
+
+from __future__ import annotations
+
+import contextlib
+import contextvars
+import json
+import math
+import os
+import re
+import sys
+import time
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from pipecat.frames.frames import (
+    BotStartedSpeakingFrame,
+    BotStoppedSpeakingFrame,
+    CancelFrame,
+    ErrorFrame,
+    Frame,
+    FunctionCallCancelFrame,
+    FunctionCallInProgressFrame,
+    FunctionCallResultFrame,
+    InterimTranscriptionFrame,
+    InterruptionFrame,
+    LLMContextFrame,
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    LLMTextFrame,
+    MetricsFrame,
+    ProposedUserStartedSpeakingFrame,
+    ProposedUserStoppedSpeakingFrame,
+    TranscriptionFrame,
+    TTSSpeakFrame,
+    TTSStoppedFrame,
+    UserStartedSpeakingFrame,
+    UserStoppedSpeakingFrame,
+)
+from pipecat.metrics.metrics import (
+    ProcessingMetricsData,
+    TextAggregationMetricsData,
+    TTFBMetricsData,
+)
+from pipecat.observers.base_observer import BaseObserver
+from pipecat.observers.user_bot_latency_observer import UserBotLatencyObserver
+from pipecat.runner.types import RunnerArguments
+
+SENTINEL = "UNMUTE_METRIC"
+METRICS_ENV = "UNMUTE_DEV_METRICS"
+_METADATA = "unmute_dev"
+
+# An async event handler registered on a pipecat processor.
+_Handler = Callable[..., Awaitable[None]]
+
+# Handoffs and delegate controls get a row and no duration: they hand over to
+# a task rather than returning a result.
+HANDOFF_CONTROLS = frozenset(
+    {
+        "to_manager",
+    }
+)
+
+
+def metrics_enabled() -> bool:
+    """Report whether the dev loop asked for metric events.
+
+    Returns:
+        True when `UNMUTE_DEV_METRICS` is set to anything but "" or "0".
+    """
+    return os.environ.get(METRICS_ENV, "") not in ("", "0")
+
+
+def _emit(record: dict[str, Any]) -> None:
+    """Print one record as a sentinel-prefixed JSON line.
+
+    Args:
+        record: The entity snapshot to send to the dev server.
+    """
+    # A closed local output cannot interrupt the voice pipeline.
+    with contextlib.suppress(OSError, ValueError):
+        print(f"{SENTINEL} {json.dumps(record, separators=(',', ':'))}", flush=True)
+
+
+def _error_kind(text: object) -> str:
+    """Return the exception's type name, and never the message beside it.
+
+    A provider's error text quotes the request that failed, and a handler's
+    quotes whatever it was working on, so neither belongs on a page that
+    deliberately carries no prompts, tool arguments or results. The type name
+    cannot carry any of that: it is an identifier from the code, so it is
+    returned only when it reads as one. The message itself stays in the agent's
+    own log, which `unmute dev` writes beside the build.
+
+    Args:
+        text: The error, or the text of one, as the framework reported it.
+
+    Returns:
+        The type name when it reads as an identifier, otherwise "an error".
+    """
+    head = str(text or "").split(":", 1)[0].strip()
+    return head if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", head) else "an error"
+
+
+def _separator(
+    previous: str, text: str, previous_includes_spaces: bool, includes_spaces: bool
+) -> str:
+    """Return the text to put between two transcript chunks.
+
+    Same boundary rule as Pipecat's concatenate_aggregated_text; retain the
+    source chunks themselves, including their leading and trailing spaces.
+
+    Args:
+        previous: The chunk before this one, "" when there is none.
+        text: The chunk being joined.
+        previous_includes_spaces: Whether the previous chunk carries its own spacing.
+        includes_spaces: Whether this chunk carries its own spacing.
+
+    Returns:
+        "" or a single space.
+    """
+    if not previous or not text or (previous_includes_spaces and includes_spaces):
+        return ""
+    if not previous_includes_spaces and not includes_spaces:
+        return " "
+    return "" if previous[-1].isspace() or text[0].isspace() else " "
+
+
+class DevReporter:
+    """Observe native boundaries without replacing a service or its iterator."""
+
+    def __init__(self, runner_args: RunnerArguments) -> None:
+        """Start reporting when the dev loop asked for it and named the call.
+
+        Args:
+            runner_args: The runner's arguments, whose body carries the dev call identity.
+        """
+        self.enabled = metrics_enabled()
+        body = getattr(runner_args, "body", None)
+        call_id = body.get("unmute_dev_call_id") if isinstance(body, dict) else None
+        if self.enabled and not (
+            isinstance(call_id, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,128}", call_id)
+        ):
+            print(
+                "WARNING Dev events unavailable: missing or invalid dev call identity.",
+                file=sys.stderr,
+                flush=True,
+            )
+            self.enabled = False
+        self.call_id = call_id
+        self._closed = False
+        self._error = False
+        self._handlers: list[tuple[Any, str, _Handler]] = []
+        self._serial = 0
+        self._records: dict[tuple[str, str], dict[str, Any]] = {}
+        self._scope: contextvars.ContextVar[dict[str, Any] | None] = (
+            contextvars.ContextVar("unmute_dev_scope", default=None)
+        )
+        self._input: str | None = None
+        self._start_frames: set[tuple[Any, ...]] = set()
+        self._input_messages: dict[str, str] = {}
+        self._input_segments: dict[str, list[str]] = {}
+        self._text_spacing: dict[str, bool] = {}
+        self._interim: dict[int, str] = {}
+        self._requests: dict[str, dict[str, Any]] = {}
+        self._tools: dict[tuple[int, str], dict[str, Any]] = {}
+        self._tool_frames: set[tuple[Any, ...]] = set()
+        self._tts_contexts: dict[tuple[int, str], list[str]] = {}
+        self._latency_observer: UserBotLatencyObserver | None = None
+        self._attached: set[tuple[int, str]] = set()
+        if self.enabled:
+            self._put(
+                "call",
+                "call",
+                {
+                    "target": "pipecat",
+                    "state": "open",
+                    "input_boundaries": "partial",
+                    "model_calls": "known",
+                    "generated_text": "available",
+                },
+            )
+
+    def _id(self, prefix: str) -> str:
+        """Return the next identifier for an entity kind.
+
+        Args:
+            prefix: The kind the identifier names, such as "llm" or "tool".
+
+        Returns:
+            The prefix and a call-wide serial number.
+        """
+        self._serial += 1
+        return f"{prefix}-{self._serial}"
+
+    def _put(self, kind: str, identity: str, payload: dict[str, Any]) -> None:
+        """Emit an entity snapshot unless it says nothing new.
+
+        Args:
+            kind: The entity kind, which is also the payload's key in the record.
+            identity: The entity's identifier.
+            payload: The entity's whole current state.
+        """
+        if not self.enabled or self._closed:
+            return
+        old = self._records.get((kind, identity))
+        if old and old[kind] == payload:
+            return
+        record = {
+            "version": 2,
+            "kind": kind,
+            "call_id": self.call_id,
+            "id": identity,
+            "revision": old["revision"] + 1 if old else 1,
+            "order": old["order"] if old else len(self._records) + 1,
+            kind: dict(payload),
+        }
+        self._records[kind, identity] = record
+        _emit(record)
+
+    def _update(self, kind: str, identity: str, **changes: Any) -> None:
+        """Merge changes into an entity already recorded and emit it.
+
+        Args:
+            kind: The entity kind.
+            identity: The entity's identifier.
+            **changes: The payload fields to set.
+        """
+        old = self._records.get((kind, identity))
+        if old:
+            self._put(kind, identity, dict(old[kind], **changes))
+
+    def _frame_scope(self, frame: Frame) -> dict[str, Any]:
+        """Read the cause a frame carries, or nothing when it is not this call's.
+
+        Args:
+            frame: The frame whose metadata to read.
+
+        Returns:
+            A copy of the captured scope, empty when there is none.
+        """
+        value = frame.metadata.get(_METADATA)
+        return (
+            dict(value)
+            if isinstance(value, dict) and value.get("call_id") == self.call_id
+            else {}
+        )
+
+    def stamp(self, frame: Frame) -> Frame:
+        """Carry only captured cause, preserving all other frame metadata.
+
+        Args:
+            frame: The frame to mark with the current scope.
+
+        Returns:
+            The same frame.
+        """
+        if self.enabled and not self._closed and _METADATA not in frame.metadata:
+            scope = self._scope.get()
+            if scope:
+                frame.metadata[_METADATA] = dict(scope)
+        return frame
+
+    def activation_metadata(
+        self, existing: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Build activation metadata that carries the current cause.
+
+        Args:
+            existing: The metadata the activation already has.
+
+        Returns:
+            A copy of it with the current scope added when there is one.
+        """
+        metadata = dict(existing or {})
+        scope = self._scope.get()
+        if self.enabled and not self._closed and scope:
+            metadata[_METADATA] = dict(scope)
+        return metadata
+
+    def enter_activation(
+        self, args: dict[str, Any] | None
+    ) -> contextvars.Token[dict[str, Any] | None] | None:
+        """Adopt the cause an activation was started with.
+
+        Args:
+            args: The activation arguments, whose metadata may carry a scope.
+
+        Returns:
+            The token to hand to `exit_activation`, or None when reporting is off.
+        """
+        if not self.enabled or self._closed:
+            return None
+        metadata = (args or {}).get("metadata") or {}
+        scope = metadata.get(_METADATA)
+        if not isinstance(scope, dict) or scope.get("call_id") != self.call_id:
+            scope = None
+        return self._scope.set(scope)
+
+    def exit_activation(
+        self, token: contextvars.Token[dict[str, Any] | None] | None
+    ) -> None:
+        """Restore the scope from before `enter_activation`.
+
+        Args:
+            token: What `enter_activation` returned.
+        """
+        if token is not None:
+            self._scope.reset(token)
+
+    def _listen(self, source: Any, event: str) -> Callable[[_Handler], _Handler]:
+        """Build a decorator that registers an event handler until `finish`.
+
+        Args:
+            source: The processor or observer to listen on.
+            event: The event name.
+
+        Returns:
+            A decorator that registers the handler and returns the wrapped one.
+        """
+
+        def register(handler: _Handler) -> _Handler:
+            async def active(*args: Any, **kwargs: Any) -> None:
+                # An event task already scheduled at cleanup can still run.
+                if not self._closed:
+                    await handler(*args, **kwargs)
+
+            source.add_event_handler(event, active)
+            self._handlers.append((source, event, active))
+            return active
+
+        return register
+
+    def observers(self) -> list[BaseObserver]:
+        """Return the observers to attach to the pipeline task.
+
+        Returns:
+            The latency and speech observers, created on first use, or none when reporting is off.
+        """
+        if not self.enabled or self._closed:
+            return []
+        if self._latency_observer is not None:
+            return [self._latency_observer]
+        observer = UserBotLatencyObserver()
+        self._latency_observer = observer
+
+        @self._listen(observer, "on_first_bot_speech_latency")
+        async def first_speech(_observer: Any, seconds: float | None) -> None:
+            self._measure(
+                "call:first-speech",
+                "first_speech",
+                seconds,
+                "pipecat-client-connected",
+                scope="call",
+            )
+
+        @self._listen(observer, "on_latency_measured")
+        async def reply_latency(_observer: Any, seconds: float | None) -> None:
+            self._measure(
+                self._id("reply-latency"),
+                "reply_latency",
+                seconds,
+                "pipecat-user-bot-latency",
+                reason="The native audio callback does not identify its response.",
+            )
+
+        @self._listen(observer, "on_latency_breakdown")
+        async def breakdown_ready(_observer: Any, breakdown: Any) -> None:
+            if breakdown.user_turn_secs is not None:
+                self._measure(
+                    self._id("turn-detection"),
+                    "turn_detection",
+                    breakdown.user_turn_secs,
+                    "pipecat-vad-stop-to-turn-release",
+                    reason="The native breakdown does not identify its input.",
+                )
+            # TTFB, text aggregation and tools already arrived at their sources.
+            # The aggregate carries no request IDs and cannot refine ownership.
+            #
+            # The contributions are different: they name every part of the wait,
+            # including the parts no service measures, so they are the only
+            # answer to "where did that reply's time go". They are recorded whole
+            # and the framework's own total goes with them, so a part dropped
+            # here is a timeline that no longer adds up rather than a quiet gap.
+            parts = [
+                {
+                    "key": part.key,
+                    "label": part.label,
+                    "owner": part.owner,
+                    "owner_kind": str(part.owner_kind),
+                    "start_time": part.start_time,
+                    "duration_secs": part.duration_secs,
+                }
+                for part in breakdown.contributions
+            ]
+            if parts and breakdown.measured_from is not None:
+                self._put(
+                    "breakdown",
+                    self._id("breakdown"),
+                    {
+                        "measured_from": str(breakdown.measured_from),
+                        "total_secs": breakdown.total_secs,
+                        "parts": parts,
+                    },
+                )
+
+        return [observer, _SpeechObserver(self)]
+
+    def speech_measured(self, seconds: float, response: str | None = None) -> None:
+        """Record how long the bot spoke, which no service reports.
+
+        A synthesizer reports when it produced audio, not how long the caller
+        listened to it, and a live model reports neither. The transport's own
+        speaking frames are the only place the length of a reply shows up.
+
+        Args:
+            seconds: How long the bot's speech lasted.
+            response: The reply the speech belongs to, when one is known.
+        """
+        self._measure(
+            self._id("speech-duration"),
+            "speech_duration",
+            seconds,
+            "pipecat-bot-speaking-frames",
+            scope="response" if response else "unassigned",
+            exchange_id=response,
+            reason=None
+            if response
+            else "The transport reports the bot's speech without a response identity.",
+        )
+
+    def speaking_response(self) -> str | None:
+        """Return the reply whose speech is starting, when exactly one is in flight.
+
+        Read when the speech starts, because synthesis for a reply can finish
+        while the caller is still hearing it. Two replies queued behind each
+        other, or a live model that runs no synthesis at all, leave the speech
+        unassigned rather than attached to a reply by how recent it is.
+
+        Returns:
+            The reply's identifier, or None when there is not exactly one.
+        """
+        if not self.enabled or self._closed:
+            return None
+        records = (
+            self._records.get(("operation", operation))
+            for operations in self._tts_contexts.values()
+            for operation in operations
+        )
+        responses = {
+            record["operation"]["exchange_id"]
+            for record in records
+            if record and record["operation"].get("exchange_id")
+        }
+        return responses.pop() if len(responses) == 1 else None
+
+    def _measure(
+        self,
+        identity: str,
+        metric: str,
+        value: float | None,
+        source: str,
+        *,
+        scope: str = "unassigned",
+        exchange_id: str | None = None,
+        operation_id: str | None = None,
+        state: str | None = None,
+        reason: str | None = None,
+        model: str | None = None,
+        provider: str | None = None,
+    ) -> None:
+        """Record one timing, measured or explained as unavailable.
+
+        Args:
+            identity: The measurement's identifier.
+            metric: What was timed, such as "first_response".
+            value: The duration in seconds, or None when it is not known.
+            source: Where the number came from.
+            scope: What the timing belongs to.
+            exchange_id: The exchange it belongs to, when known.
+            operation_id: The operation it belongs to, when known.
+            state: Overrides the measured or unavailable state.
+            reason: Why the value is missing or only partly attributed.
+            model: The model the service reported.
+            provider: The service that reported it.
+        """
+        valid = isinstance(value, (float, int)) and math.isfinite(value) and value >= 0
+        payload: dict[str, Any] = {
+            "scope": scope,
+            "metric": metric,
+            "unit": "seconds",
+            "source": source,
+            "state": state or ("measured" if valid else "unavailable"),
+        }
+        if valid and payload["state"] == "measured":
+            payload["value"] = value
+        elif value is not None:
+            reason = "The SDK did not provide a finite nonnegative measurement."
+        optional = {
+            "exchange_id": exchange_id,
+            "operation_id": operation_id,
+            "reason": reason,
+            "model": model,
+            "provider": provider,
+        }
+        payload |= {key: field for key, field in optional.items() if field}
+        self._put("measurement", identity, payload)
+
+    def _service_metrics(
+        self, processor: Any, role: str, frame: Frame, cause: dict[str, Any]
+    ) -> None:
+        """Record the timings a service's metrics frame carries.
+
+        Args:
+            processor: The service whose frame this is.
+            role: The service's role, "stt", "llm" or "tts".
+            frame: The frame passing the service; anything but a metrics frame is ignored.
+            cause: The scope the frame carries, which says what the timing belongs to.
+        """
+        if not isinstance(frame, MetricsFrame):
+            return
+        if id(processor) in frame.metadata.get("unmute_dev_metric_inputs", []):
+            return
+        if frame.metadata.get("unmute_dev_metrics_reported") == self.call_id:
+            return
+        frame.metadata["unmute_dev_metrics_reported"] = self.call_id
+        for data in frame.data:
+            # This checks the emitting source, never the owner of an operation.
+            if data.processor != processor.name:
+                continue
+            if isinstance(data, TTFBMetricsData):
+                metric, source = "first_response", f"pipecat-{role}-ttfb"
+            elif isinstance(data, ProcessingMetricsData):
+                metric, source = "request_duration", f"pipecat-{role}-processing"
+            elif isinstance(data, TextAggregationMetricsData):
+                metric, source = "text_aggregation", "pipecat-text-aggregation"
+            else:
+                # TTFAT/TTFA embed the standalone TTFB again; token/audio usage
+                # and internal reasoning durations are not these nine timings.
+                continue
+            operation = cause.get("operation_id") if role == "llm" else None
+            response = cause.get("response_id")
+            input_id = cause.get("input_id")
+            scope = (
+                "operation"
+                if operation
+                else "response"
+                if response
+                else "input"
+                if input_id
+                else "unassigned"
+            )
+            identity = f"{operation}:{metric}" if operation else self._id(metric)
+            self._measure(
+                identity,
+                metric,
+                data.value,
+                source,
+                scope=scope,
+                operation_id=operation,
+                exchange_id=response or input_id,
+                model=data.model,
+                provider=type(processor).__name__,
+                reason="The callback carries no operation identity."
+                if not operation
+                else None,
+            )
+            if operation and data.model:
+                self._update("operation", operation, model=data.model)
+
+    def _attach(self, processor: Any, role: str) -> bool:
+        """Watch a service once.
+
+        Args:
+            processor: The service to watch.
+            role: The service's role, "stt", "llm", "tts" or "user".
+
+        Returns:
+            False when reporting is off or the service is already watched.
+        """
+        key = (id(processor), role)
+        if not self.enabled or self._closed or key in self._attached:
+            return False
+        self._attached.add(key)
+        if role in ("stt", "llm", "tts"):
+
+            @self._listen(processor, "on_before_process_frame")
+            async def metrics_input(_processor: Any, frame: Frame) -> None:
+                if isinstance(frame, MetricsFrame):
+                    frame.metadata.setdefault("unmute_dev_metric_inputs", []).append(
+                        id(processor)
+                    )
+
+            @self._listen(processor, "on_error")
+            async def source_error(_processor: Any, frame: ErrorFrame) -> None:
+                if frame.fatal or not processor.is_usable:
+                    self._error = True
+                    # Which service stopped working, and nothing it said. A
+                    # call that reads "error" alone sends the author hunting
+                    # through logs for the service; the message itself is in
+                    # those logs, where quoting a request is not a leak.
+                    self._update(
+                        "call",
+                        "call",
+                        state="error",
+                        reason=f"{processor.name} reported a fatal error.",
+                    )
+
+        return True
+
+    def _input_boundary(self, frame: Frame) -> None:
+        """Open an input exchange when the caller starts speaking.
+
+        Args:
+            frame: A frame passing the user aggregator.
+        """
+        if isinstance(frame, UserStartedSpeakingFrame):
+            sibling = getattr(frame, "broadcast_sibling_id", None)
+            key = (
+                tuple(sorted((frame.id, sibling)))
+                if sibling is not None
+                else (frame.id,)
+            )
+            if key in self._start_frames:
+                return
+            self._start_frames.add(key)
+            if self._input:
+                self._update("exchange", self._input, state="incomplete")
+            self._input = self._id("input")
+            self._put(
+                "exchange",
+                self._input,
+                {
+                    "role": "input",
+                    "state": "open",
+                    "link_status": "known",
+                },
+            )
+        # A speech-stop SystemFrame can overtake the final transcript. The
+        # user aggregator's context emission below is the commit boundary.
+
+    def _associate_text(self, identity: str, input_id: str) -> None:
+        """Attach a caller's text segment to an input and re-join its segments.
+
+        Args:
+            identity: The text segment's identifier.
+            input_id: The input exchange it belongs to.
+        """
+        record = self._records.get(("text", identity))
+        if not record:
+            return
+        message_id = self._input_messages.setdefault(
+            input_id, record["text"]["message_id"]
+        )
+        segments = self._input_segments.setdefault(input_id, [])
+        if identity not in segments:
+            segments.append(identity)
+        previous = ""
+        previous_includes_spaces = False
+        for segment in segments:
+            text = self._records["text", segment]["text"]["text"]
+            includes_spaces = self._text_spacing[segment]
+            separator = _separator(
+                previous, text, previous_includes_spaces, includes_spaces
+            )
+            self._update(
+                "text",
+                segment,
+                exchange_id=input_id,
+                message_id=message_id,
+                separator_before=separator,
+            )
+            if text:
+                previous = text
+                previous_includes_spaces = includes_spaces
+
+    def observe_stt(self, stt: Any) -> Any:
+        """Watch a transcriber's frames and record what the caller said.
+
+        Args:
+            stt: The speech-to-text service.
+
+        Returns:
+            The same service.
+        """
+        if not self._attach(stt, "stt"):
+            return stt
+
+        @self._listen(stt, "on_before_process_frame")
+        async def stt_before(_processor: Any, frame: Frame) -> None:
+            self._scope.set(self._frame_scope(frame) or None)
+
+        @self._listen(stt, "on_before_push_frame")
+        async def text_ready(_processor: Any, frame: Frame) -> None:
+            self.stamp(frame)
+            self._service_metrics(stt, "stt", frame, self._frame_scope(frame))
+            if not isinstance(frame, (InterimTranscriptionFrame, TranscriptionFrame)):
+                return
+            existing = self._frame_scope(frame)
+            if existing.get("text_id"):
+                return
+            identity = self._interim.get(id(stt)) or self._id("user-text")
+            old = self._records.get(("text", identity))
+            message_id = old["text"]["message_id"] if old else self._id("user-message")
+            final = isinstance(frame, TranscriptionFrame)
+            payload = {
+                "message_id": message_id,
+                "speaker": "user",
+                "text": frame.text,
+                "state": "final" if final else "provisional",
+                "origin": "recognition",
+                "separator_before": "",
+            }
+            if old and old["text"].get("exchange_id"):
+                payload["exchange_id"] = old["text"]["exchange_id"]
+            # finalized marks recognizer utterance timing, not segment finality.
+            self._put("text", identity, payload)
+            self._text_spacing[identity] = frame.includes_inter_frame_spaces
+            if payload.get("exchange_id"):
+                self._associate_text(identity, payload["exchange_id"])
+            frame.metadata[_METADATA] = {"call_id": self.call_id, "text_id": identity}
+            if final:
+                self._interim.pop(id(stt), None)
+            else:
+                self._interim[id(stt)] = identity
+
+        return stt
+
+    def observe_aggregators(self, user: Any, assistant: Any) -> None:
+        """Watch the context aggregators, where a caller's turn is committed.
+
+        Args:
+            user: The user aggregator.
+            assistant: The assistant aggregator.
+        """
+        if not self._attach(user, "user"):
+            return
+
+        @self._listen(user, "on_before_process_frame")
+        async def user_before(_processor: Any, frame: Frame) -> None:
+            self._input_boundary(frame)
+            scope = self._frame_scope(frame)
+            # A proposed turn boundary is a caller frame too: when the transcriber
+            # or a live model decides the turn, the proposal is the frame whose
+            # processing pushes the context, so the input has to be in scope then
+            # or its exchange never ends.
+            caller_frame = isinstance(
+                frame,
+                (
+                    InterimTranscriptionFrame,
+                    TranscriptionFrame,
+                    UserStartedSpeakingFrame,
+                    UserStoppedSpeakingFrame,
+                    ProposedUserStartedSpeakingFrame,
+                    ProposedUserStoppedSpeakingFrame,
+                ),
+            )
+            input_id = scope.get("input_id") or (self._input if caller_frame else None)
+            if input_id:
+                scope["call_id"] = self.call_id
+                scope["input_id"] = input_id
+                if scope.get("text_id"):
+                    self._associate_text(scope["text_id"], input_id)
+                frame.metadata[_METADATA] = scope
+            self._scope.set(scope or None)
+
+        @self._listen(user, "on_before_push_frame")
+        async def user_push(_processor: Any, frame: Frame) -> None:
+            self._input_boundary(frame)
+            scope = dict(self._scope.get() or {})
+            if isinstance(frame, UserStartedSpeakingFrame) and self._input:
+                scope.update(call_id=self.call_id, input_id=self._input)
+                self._scope.set(scope)
+                if scope.get("text_id"):
+                    self._associate_text(scope["text_id"], self._input)
+            self.stamp(frame)
+            if isinstance(frame, LLMContextFrame) and scope.get("input_id"):
+                self._update("exchange", scope["input_id"], state="ended")
+                if self._input == scope["input_id"]:
+                    self._input = None
+
+        @self._listen(assistant, "on_before_process_frame")
+        async def assistant_before(_processor: Any, frame: Frame) -> None:
+            # A long-lived queue without captured cause stays unassigned.
+            self._scope.set(self._frame_scope(frame) or None)
+
+        @self._listen(assistant, "on_before_push_frame")
+        async def assistant_push(_processor: Any, frame: Frame) -> None:
+            self.stamp(frame)
+
+    def _response(self, scope: dict[str, Any]) -> str:
+        """Return the reply a scope belongs to, opening one when it has none.
+
+        Args:
+            scope: The cause the current work carries.
+
+        Returns:
+            The response exchange's identifier.
+        """
+        response = scope.get("response_id")
+        if response and ("exchange", response) in self._records:
+            return response
+        response = self._id("response")
+        payload = {
+            "role": "response",
+            "state": "open",
+            "playback": "unknown",
+            "link_status": "known" if scope.get("input_id") else "unavailable",
+        }
+        if scope.get("input_id"):
+            payload["input_id"] = scope["input_id"]
+        self._put("exchange", response, payload)
+        self._measure(
+            f"{response}:reply-latency",
+            "reply_latency",
+            None,
+            "pipecat-user-bot-latency",
+            scope="response",
+            exchange_id=response,
+            reason="Pipecat reports audio latency without a response identity.",
+        )
+        return response
+
+    def _tool_event(self, llm: Any, frame: Frame, cause: dict[str, Any]) -> None:
+        """Track a tool call from the frames the framework pushes for it.
+
+        Args:
+            llm: The service that pushed the frame.
+            frame: A function call frame; any other frame is ignored.
+            cause: The scope the frame carries.
+        """
+        if not isinstance(
+            frame,
+            (
+                FunctionCallInProgressFrame,
+                FunctionCallResultFrame,
+                FunctionCallCancelFrame,
+            ),
+        ):
+            return
+        # A control hands over to a task instead of returning a result, so it
+        # gets a row and no duration. Hiding it left the model call it causes
+        # with no visible cause; timing it read as a tool that ran for the
+        # whole flow.
+        control = frame.function_name in HANDOFF_CONTROLS
+        sibling = getattr(frame, "broadcast_sibling_id", None)
+        frame_key = (
+            tuple(sorted((frame.id, sibling))) if sibling is not None else (frame.id,)
+        )
+        if frame_key in self._tool_frames:
+            return
+        self._tool_frames.add(frame_key)
+        key = (id(llm), frame.tool_call_id)
+        if isinstance(frame, FunctionCallInProgressFrame):
+            kind = "handoff" if control else "tool"
+            operation = self._id(kind)
+            payload: dict[str, Any] = {
+                "type": kind,
+                "name": frame.function_name,
+                "state": "running",
+            }
+            linked = {
+                "exchange_id": cause.get("response_id"),
+                "parent_operation_id": cause.get("operation_id"),
+            }
+            payload |= {field: value for field, value in linked.items() if value}
+            self._put("operation", operation, payload)
+            self._tools[key] = {
+                "id": operation,
+                "scope": dict(cause),
+                "started": time.monotonic(),
+                "ended": False,
+                "control": control,
+            }
+            # This hook runs inside the actual native tool task. Its result and
+            # error callbacks inherit this cause; another tool has another task.
+            # A control keeps the request's scope instead, so an error raised
+            # inside the delegate still marks the request failed, as before.
+            if not control:
+                self._scope.set(dict(cause, tool_operation_id=operation))
+            return
+        tool = self._tools.get(key)
+        if not tool:
+            return
+        if (
+            isinstance(frame, FunctionCallResultFrame)
+            and frame.properties
+            and not frame.properties.is_final
+        ):
+            return
+        if isinstance(frame, FunctionCallCancelFrame):
+            # run_llm is set on one kind of cancellation only: the call's own
+            # deadline, which asks for inference because nothing else will tell
+            # the model the call is over. An interruption and a cancellation the
+            # model asked for both leave it False. So this is the framework's own
+            # answer to "did it run out of time", rather than one read off a log
+            # line whose wording is not a contract.
+            if getattr(frame, "run_llm", False):
+                self._end_tool(
+                    tool,
+                    "timed_out",
+                    reason="It ran past its deadline and was cancelled.",
+                )
+            else:
+                self._end_tool(tool, "cancelled")
+            return
+        # A handler that raised never reports, so the framework settles the call
+        # on its behalf: the result is a sentence written for the model to read
+        # and the error is what actually went wrong.
+        error = getattr(frame, "error", None)
+        if error:
+            self._end_tool(
+                tool, "failed", reason=f"The handler raised {_error_kind(error)}."
+            )
+        else:
+            self._end_tool(tool, "returned")
+
+    def _end_tool(
+        self, tool: dict[str, Any], state: str, reason: str | None = None
+    ) -> None:
+        """Settle a tool call once and time it.
+
+        Args:
+            tool: The tool's bookkeeping entry.
+            state: The state it ended in.
+            reason: What went wrong, when something did.
+        """
+        if tool["ended"]:
+            return
+        tool["ended"] = True
+        operation = tool["id"]
+        self._update(
+            "operation",
+            operation,
+            state=state,
+            **({"reason": reason} if reason else {}),
+        )
+        if tool["control"]:
+            return
+        self._measure(
+            f"{operation}:duration",
+            "tool_duration",
+            time.monotonic() - tool["started"],
+            "pipecat-function-call-frames",
+            scope="operation",
+            operation_id=operation,
+            exchange_id=tool["scope"].get("response_id"),
+        )
+
+    def observe_llm(self, llm: Any) -> Any:
+        """Watch a language model service and record its requests and text.
+
+        Args:
+            llm: The language model service.
+
+        Returns:
+            The same service.
+        """
+        if not self._attach(llm, "llm"):
+            return llm
+        pending: set[str] = set()
+
+        @self._listen(llm, "on_before_process_frame")
+        async def llm_before(_processor: Any, frame: Frame) -> None:
+            if isinstance(frame, (InterruptionFrame, CancelFrame)):
+                for operation in tuple(pending):
+                    self._end_request(operation, "cancelled")
+            scope = self._frame_scope(frame)
+            if isinstance(frame, LLMContextFrame):
+                scope.pop("tool_operation_id", None)
+                operation = self._id("llm")
+                scope.update(
+                    call_id=self.call_id,
+                    response_id=self._response(scope),
+                    operation_id=operation,
+                )
+                self._requests[operation] = {
+                    "scope": dict(scope),
+                    "text_id": None,
+                    "ended": False,
+                }
+                pending.add(operation)
+                self._put(
+                    "operation",
+                    operation,
+                    {
+                        "exchange_id": scope["response_id"],
+                        "type": "llm",
+                        "name": llm.name,
+                        "state": "running",
+                    },
+                )
+                for metric, source in (
+                    ("first_response", "ttfb"),
+                    ("request_duration", "processing"),
+                ):
+                    self._measure(
+                        f"{operation}:{metric}",
+                        metric,
+                        None,
+                        f"pipecat-llm-{source}",
+                        scope="operation",
+                        operation_id=operation,
+                        exchange_id=scope["response_id"],
+                        state="pending",
+                    )
+                frame.metadata[_METADATA] = dict(scope)
+            self._scope.set(scope or None)
+
+        @self._listen(llm, "on_before_push_frame")
+        async def llm_push(_processor: Any, frame: Frame) -> None:
+            self.stamp(frame)
+            scope = self._frame_scope(frame)
+            self._service_metrics(llm, "llm", frame, scope)
+            self._tool_event(llm, frame, scope)
+            if isinstance(frame, ErrorFrame) and scope.get("tool_operation_id"):
+                failed = next(
+                    (
+                        tool
+                        for tool in self._tools.values()
+                        if tool["id"] == scope["tool_operation_id"]
+                    ),
+                    None,
+                )
+                if failed is not None:
+                    self._end_tool(
+                        failed,
+                        "failed",
+                        reason=f"The handler raised {_error_kind(frame.error)}.",
+                    )
+                    return
+            operation: Any = scope.get("operation_id")
+            request = self._requests.get(operation)
+            if isinstance(frame, LLMFullResponseStartFrame) and not request:
+                # Some services generate without a concrete context invocation.
+                self._update("call", "call", model_calls="partial")
+            if not request:
+                return
+            if type(frame) is LLMTextFrame:
+                if request["ended"]:
+                    return
+                identity = request["text_id"] or self._id("answer-text")
+                request["text_id"] = identity
+                old = self._records.get(("text", identity))
+                text = old["text"]["text"] if old else ""
+                separator = _separator(
+                    text,
+                    frame.text,
+                    request.get("includes_spaces", True),
+                    frame.includes_inter_frame_spaces,
+                )
+                self._put(
+                    "text",
+                    identity,
+                    {
+                        "exchange_id": scope["response_id"],
+                        "message_id": identity,
+                        "speaker": "assistant",
+                        "text": text + separator + frame.text,
+                        "state": "provisional",
+                        "origin": "generated",
+                        "separator_before": "",
+                    },
+                )
+                if frame.text:
+                    request["includes_spaces"] = frame.includes_inter_frame_spaces
+            elif isinstance(frame, LLMFullResponseEndFrame):
+                self._end_request(operation, "ended")
+                pending.discard(operation)
+            elif isinstance(frame, ErrorFrame):
+                self._end_request(operation, "failed")
+                pending.discard(operation)
+
+        return llm
+
+    def _end_request(self, operation: str, state: str) -> None:
+        """Settle a model request once and close what it left open.
+
+        Args:
+            operation: The request's operation identifier.
+            state: The state it ended in, "ended", "cancelled" or "failed".
+        """
+        request = self._requests.get(operation)
+        if not request or request["ended"]:
+            return
+        request["ended"] = True
+        self._update("operation", operation, state=state)
+        if request["text_id"]:
+            self._update(
+                "text",
+                request["text_id"],
+                state="final" if state == "ended" else "incomplete",
+            )
+        for metric in ("first_response", "request_duration"):
+            identity = f"{operation}:{metric}"
+            record = self._records.get(("measurement", identity))
+            if record and record["measurement"]["state"] == "pending":
+                self._update(
+                    "measurement",
+                    identity,
+                    state="unavailable",
+                    reason=f"The request {state} before this measurement arrived.",
+                )
+        if state in ("cancelled", "failed"):
+            self._update(
+                "exchange",
+                request["scope"]["response_id"],
+                state="interrupted" if state == "cancelled" else "incomplete",
+            )
+
+    def observe_tts(self, tts: Any) -> Any:
+        """Watch a synthesizer and record its requests.
+
+        Args:
+            tts: The text-to-speech service.
+
+        Returns:
+            The same service.
+        """
+        if not self._attach(tts, "tts"):
+            return tts
+
+        @self._listen(tts, "on_before_process_frame")
+        async def tts_before(_processor: Any, frame: Frame) -> None:
+            scope = self._frame_scope(frame)
+            if isinstance(frame, TTSSpeakFrame) and not scope.get("direct_text_id"):
+                identity = self._id("direct-text")
+                response = self._response(scope)
+                scope.update(
+                    call_id=self.call_id, response_id=response, direct_text_id=identity
+                )
+                frame.metadata[_METADATA] = dict(scope)
+                self._put(
+                    "text",
+                    identity,
+                    {
+                        "exchange_id": response,
+                        "message_id": identity,
+                        "speaker": "assistant",
+                        "text": frame.text,
+                        "state": "final",
+                        "origin": "generated",
+                        "separator_before": "",
+                    },
+                )
+            self._scope.set(scope or None)
+
+        @self._listen(tts, "on_before_push_frame")
+        async def tts_push(_processor: Any, frame: Frame) -> None:
+            self.stamp(frame)
+            self._service_metrics(tts, "tts", frame, self._frame_scope(frame))
+            if isinstance(frame, TTSStoppedFrame):
+                for operation in self._tts_contexts.pop(
+                    (id(tts), frame.context_id), []
+                ):
+                    self._update("operation", operation, state="ended")
+
+        @self._listen(tts, "on_tts_request")
+        async def tts_request(_processor: Any, context_id: str, _text: str) -> None:
+            cause = self._scope.get() or {}
+            operation = self._id("tts")
+            payload = {"type": "tts", "name": tts.name, "state": "running"}
+            if cause.get("response_id"):
+                payload["exchange_id"] = cause["response_id"]
+            self._put("operation", operation, payload)
+            self._tts_contexts.setdefault((id(tts), context_id), []).append(operation)
+
+        return tts
+
+    def finish(self, *, error: bool = False, reason: str | None = None) -> None:
+        """Close every open entity, end the call and stop listening.
+
+        Args:
+            error: Whether the call ended in an error.
+            reason: What ended the call, in the words of whatever raised.
+        """
+        if not self.enabled or self._closed:
+            return
+        if reason:
+            # What ended the call, in the words of whatever raised. Without it
+            # an unhandled exception shows as a call that stopped for no stated
+            # reason, and the answer is in a terminal the author has closed.
+            self._update("call", "call", reason=reason)
+        # Completed text and synthesis prove the response finished generating,
+        # not that the browser played it. Keep playback unknown, and require
+        # every associated operation to have succeeded before ending a response.
+        final_text, final_tts, unfinished = set(), set(), set()
+        for (kind, _identity), record in self._records.items():
+            payload = record[kind]
+            response = payload.get("exchange_id")
+            if kind == "text" and payload["speaker"] == "assistant":
+                (final_text if payload["state"] == "final" else unfinished).add(
+                    response
+                )
+            elif kind == "operation":
+                if payload["state"] not in ("ended", "returned"):
+                    unfinished.add(response)
+                elif payload["type"] == "tts":
+                    final_tts.add(response)
+        completed = (final_text & final_tts) - unfinished
+        for (kind, identity), record in list(self._records.items()):
+            if (kind == "text" and record[kind]["state"] == "provisional") or (
+                kind == "operation" and record[kind]["state"] == "running"
+            ):
+                self._update(kind, identity, state="incomplete")
+            elif kind == "exchange" and record[kind]["state"] == "open":
+                self._update(
+                    kind,
+                    identity,
+                    state="ended" if identity in completed else "incomplete",
+                )
+            elif kind == "measurement" and record[kind]["state"] == "pending":
+                self._update(
+                    kind,
+                    identity,
+                    state="unavailable",
+                    reason="The call ended before this measurement arrived.",
+                )
+        self._update("call", "call", state="error" if error or self._error else "ended")
+        self._closed = True
+        for source, event, handler in self._handlers:
+            source.remove_event_handler(event, handler)
+        self._handlers.clear()
+        self._scope.set(None)
+        self._input = None
+        self._latency_observer = None
+        self._records.clear()
+        self._requests.clear()
+        self._interim.clear()
+        self._input_messages.clear()
+        self._input_segments.clear()
+        self._text_spacing.clear()
+        self._attached.clear()
+        self._start_frames.clear()
+        self._tools.clear()
+        self._tool_frames.clear()
+        self._tts_contexts.clear()
+
+
+class _SpeechObserver(BaseObserver):
+    """Times the bot's speech from the transport's own speaking frames.
+
+    The frames are pushed both ways, so one reply produces two of each: the
+    first start opens the stretch and the first stop closes it, and the copies
+    land on a closed stretch and are ignored.
+    """
+
+    def __init__(self, reporter: DevReporter) -> None:
+        """Time speech on behalf of a reporter.
+
+        Args:
+            reporter: The reporter that receives each measured stretch.
+        """
+        super().__init__()
+        self._reporter = reporter
+        self._started: float | None = None
+        self._response: str | None = None
+
+    async def on_push_frame(self, data: Any) -> None:
+        """Open or close the speaking stretch when the bot's speaking frames pass.
+
+        Args:
+            data: The observed frame push.
+        """
+        if isinstance(data.frame, BotStartedSpeakingFrame):
+            if self._started is None:
+                self._started = time.monotonic()
+                self._response = self._reporter.speaking_response()
+        elif (
+            isinstance(data.frame, BotStoppedSpeakingFrame)
+            and self._started is not None
+        ):
+            started, self._started = self._started, None
+            response, self._response = self._response, None
+            self._reporter.speech_measured(time.monotonic() - started, response)
+
+
+def install_dev_metrics(runner_args: RunnerArguments) -> DevReporter:
+    """Create the call's reporter.
+
+    Args:
+        runner_args: The runner's arguments, whose body carries the dev call identity.
+
+    Returns:
+        A reporter that is inert unless the dev loop enabled it.
+    """
+    return DevReporter(runner_args)

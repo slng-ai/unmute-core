@@ -1,0 +1,103 @@
+{
+  "name": "thought_signature_finish_check",
+  "about": "The model signs its tool calls, as Gemini 3 does, and a finish check runs. The check's request replays the step's signed call with its signature. The finish the check chose keeps the check's own signature: when the State refuses it, the step's next request replays it signed.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "set_status",
+        "when": "The caller wants to change an order's status.",
+        "instructions": "Look the order up, then ask which status it should have.",
+        "tools": ["lookup_order"],
+        "assign": [{"variable": "status", "path": ["status"]}]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "order": {"id": "A-12"}}]
+  },
+  "turns": [
+    {
+      "caller": "I want to change order A-12.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {"name": "set_status", "extra": {"google": {"thought_signature": "sig-main"}}}
+          ]
+        },
+        {
+          "site": "task:set_status",
+          "calls": [
+            {
+              "name": "lookup_order",
+              "arguments": {"order_id": "A-12"},
+              "extra": {"google": {"thought_signature": "sig-step"}}
+            }
+          ]
+        },
+        {
+          "site": "task:set_status",
+          "replayed": {"lookup_order": {"google": {"thought_signature": "sig-step"}}},
+          "text": "Which status should it have?"
+        }
+      ],
+      "spoken": ["Which status should it have?"]
+    },
+    {
+      "caller": "Make it pending.",
+      "model": [
+        {
+          "site": "task:set_status",
+          "replayed": {"lookup_order": {"google": {"thought_signature": "sig-step"}}},
+          "text": "Noted: pending."
+        },
+        {
+          "site": "task:set_status",
+          "tool_choice": "required",
+          "tools": ["finish", "not_yet"],
+          "replayed": {"lookup_order": {"google": {"thought_signature": "sig-step"}}},
+          "calls": [
+            {
+              "name": "finish",
+              "arguments": {"status": "pending"},
+              "extra": {"google": {"thought_signature": "sig-check"}}
+            }
+          ]
+        },
+        {
+          "site": "task:set_status",
+          "replayed": {
+            "lookup_order": {"google": {"thought_signature": "sig-step"}},
+            "finish": {"google": {"thought_signature": "sig-check"}}
+          },
+          "text": "It can only be open or closed."
+        }
+      ],
+      "spoken": ["Noted: pending.", "It can only be open or closed."]
+    },
+    {
+      "caller": "Close it.",
+      "model": [
+        {"site": "task:set_status", "calls": [{"name": "finish", "arguments": {"status": "closed"}}]},
+        {
+          "site": "",
+          "replayed": {"set_status": {"google": {"thought_signature": "sig-main"}}},
+          "text": "Your order is closed now."
+        }
+      ],
+      "spoken": ["Your order is closed now."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": "closed", "note": null, "tags": []},
+    "tool_calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}],
+    "events": [
+      "task.started task=set_status",
+      "task.value_refused task=set_status",
+      "task.completed task=set_status saved=status"
+    ]
+  }
+}

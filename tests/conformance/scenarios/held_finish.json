@@ -1,0 +1,40 @@
+{
+  "name": "held_finish",
+  "about": "The step's lookup returns, and the model finishes without a word: refused, so the caller hears the result first. The reply to that refusal says the result and calls nothing. The runtime then sends the finish it held back, as that reply's own call.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "check_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Look the order up and tell the caller its status.",
+        "tools": ["lookup_order"],
+        "assign": [{"variable": "status", "path": ["status"]}]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {"lookup_order": [{"found": true, "order": {"id": "A-12"}, "status": "open"}]},
+  "turns": [
+    {
+      "caller": "What is the status of order A-12?",
+      "model": [
+        {"site": "", "calls": [{"name": "check_order"}]},
+        {"site": "task:check_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
+        {"site": "task:check_order", "calls": [{"name": "finish", "arguments": {"status": "open"}}]},
+        {"site": "task:check_order", "text": "Order A-12 is open."},
+        {"site": "", "text": "Anything else?"}
+      ],
+      "spoken": ["Order A-12 is open.", "Anything else?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": "open", "note": null, "tags": []},
+    "tool_calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}],
+    "events": [
+      "task.started task=check_order",
+      "task.completed task=check_order saved=status"
+    ]
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "name": "end_reason_tool",
+  "about": "A tool that ends the conversation ends the call. A tool on the call's end reads the reason, agent_ended.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_options": {
+    "normalize": {
+      "effect": "ends_conversation"
+    }
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "reason": "{{call.end_reason}}"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "That is all, bye.",
+      "model": [
+        {
+          "site": "",
+          "text": "Goodbye!",
+          "calls": [
+            {
+              "name": "normalize",
+              "arguments": {
+                "reason": "done"
+              }
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Goodbye!"
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "normalize",
+        "arguments": {
+          "reason": "done"
+        }
+      }
+    ],
+    "events": [],
+    "ended": true,
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "reason": "agent_ended"
+        }
+      }
+    ]
+  }
+}

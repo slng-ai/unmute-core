@@ -1,0 +1,72 @@
+[project]
+name = "salon-concierge-single-prompt"
+version = "0.1.0"
+description = "Generated Pipecat voice agent (compiled by unmute)."
+requires-python = ">=3.12"
+dependencies = [
+    "pipecat-ai[google,runner,silero,tracing,webrtc,websocket]==1.12.0",
+    "llama-index-core",
+    "llama-index-embeddings-openai",
+    "llama-index-readers-file",
+    "llama-index-retrievers-bm25",
+    "pipecat-slng>=0.7.0,<0.8",
+    "pydantic-extra-types[phonenumbers]>=2.11,<3",
+    "python-dotenv>=1.0",
+
+    "opentelemetry-exporter-otlp-proto-http>=1.33,<2",
+
+    "unmute-core[pipecat]",
+]
+# The `websocket` extra is in the pipecat-ai extras above. It happens to arrive
+# with `runner` today (both pull fastapi), and it is declared anyway: this project
+# terminates a carrier's WebSocket, so it should say so rather than inherit it
+# from a neighbour that might stop carrying it.
+
+[tool.uv]
+package = false
+
+# llama-index-retrievers-bm25 declares pystemmer<3, and PyStemmer 2.2.0.3 publishes
+# no linux aarch64 wheel (nor musllinux aarch64, nor win_arm64). This image is
+# always Linux, so the host OS is irrelevant and the architecture decides
+# everything: on arm64 the resolver falls back to the source distribution, neither
+# base image carries a compiler, and the build fails outright while passing in
+# x86_64 CI.
+#
+#     fatal error: stdlib.h: No such file or directory
+#     error: Command '['gcc', ...]' returned non-zero exit status 1
+#
+# PyStemmer 3.1.0 publishes wheels for linux x86_64 and aarch64, musllinux on both
+# arches, macOS on both, and Windows x86/amd64/arm64, cp38 through cp314. It is
+# strictly better covered than anything the declared pin allows, which is why this
+# is one override rather than a per-platform special case. It drops i686 and PyPy,
+# and no base image here is either.
+#
+# Adding a toolchain instead was measured at roughly 400 MB and a slower build, for
+# a compiler the image never needs again.
+#
+# Verified 2026-08-26 in both base images and on both architectures, through the
+# retriever rather than a bare import: BM25 retrieval works on 3.1.0, and so does
+# stemming, which is the only reason the dependency exists at all (a query for
+# "closing" still matches a passage that says "closed"). Remove this when the
+# retriever relaxes its own pin.
+override-dependencies = ["pystemmer>=3.1.0,<4"]
+
+[tool.uv.sources]
+unmute-core = { path = "../../..", editable = true }
+
+[dependency-groups]
+dev = ["ruff==0.15.7", "ty"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN"]
+ignore = ["E501", "ANN401", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tools/*" = ["D", "ANN"]
+"logic/*" = ["D", "ANN"]
+
+[tool.ty.environment]
+python-version = "3.12"

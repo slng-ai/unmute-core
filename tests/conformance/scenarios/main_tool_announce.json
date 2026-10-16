@@ -1,0 +1,32 @@
+{
+  "name": "main_tool_announce",
+  "about": "An agent with no tasks: its own tool says its announce line as it starts, before its result. The prompt's placeholder is filled from the call state, and the request carries it unfilled with the value beside it.",
+  "instructions": "You help callers with their orders. Order on file: {{order_id}}.",
+  "tasks": {"mode": "record", "tasks": []},
+  "tool_options": {
+    "search_web": {"announce": ["Let me check."]}
+  },
+  "tool_results": {
+    "search_web": [{"hours": "9 to 5"}]
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "prompt": "You help callers with their orders. Order on file: {{order_id}}.",
+          "calls": [{"name": "search_web", "arguments": {"q": "hours"}}]
+        },
+        {"site": "", "result": "{\"hours\": \"9 to 5\"}", "text": "We are open 9 to 5."}
+      ],
+      "spoken": ["Let me check.", "We are open 9 to 5."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [{"name": "search_web", "arguments": {"q": "hours"}}],
+    "events": [],
+    "agent": "main"
+  }
+}

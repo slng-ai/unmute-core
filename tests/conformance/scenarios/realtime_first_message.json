@@ -1,0 +1,42 @@
+{
+  "name": "realtime_first_message",
+  "about": "A tool on the caller's first message runs once and reads that message. Its note reaches the model's later answers. A realtime model answers the first message while the tool runs, then reads the note in its instructions.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "realtime": true,
+  "event_tools": {
+    "classify": {
+      "on": ["first_user_message"],
+      "locked": {"said": "{{call.first_user_message}}"},
+      "delay_s": 0.05,
+      "note": true
+    }
+  },
+  "tool_results": {
+    "classify": [{"intent": "order"}]
+  },
+  "turns": [
+    {
+      "caller": "Where is my order?",
+      "model": [{"site": "", "text": "Let me see."}],
+      "spoken": ["Let me see."]
+    },
+    {
+      "caller": "It is A-12.",
+      "model": [
+        {
+          "site": "",
+          "holds": "- classify ran on its own when the caller first spoke. Result: {\"intent\": \"order\"}",
+          "text": "Thanks."
+        }
+      ],
+      "spoken": ["Thanks."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "event_calls": [{"name": "classify", "arguments": {"said": "Where is my order?"}}]
+  }
+}

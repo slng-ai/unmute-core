@@ -1,0 +1,107 @@
+{
+  "name": "task_history_summary",
+  "about": "A task with history summary opens on a summary of the call, asked for at the summary site, in place of what was said.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants a note taken.",
+        "instructions": "Take a note.",
+        "history": "summary",
+        "assign": [
+          {
+            "variable": "note",
+            "path": [
+              "note"
+            ],
+            "optional": true
+          }
+        ]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Hi.",
+      "model": [
+        {
+          "site": "",
+          "text": "Orders here."
+        }
+      ],
+      "spoken": [
+        "Orders here."
+      ]
+    },
+    {
+      "caller": "Take a note.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "take_note"
+            }
+          ]
+        },
+        {
+          "site": "summary",
+          "heard": [
+            "user: Hi.\nassistant: Orders here.\nuser: Take a note."
+          ],
+          "tools": [],
+          "text": "The caller wants a note taken."
+        },
+        {
+          "site": "task:take_note",
+          "heard": [],
+          "order": [
+            "assistant"
+          ],
+          "text": "What should it say?"
+        }
+      ],
+      "spoken": [
+        "What should it say?"
+      ]
+    },
+    {
+      "caller": "Call me back.",
+      "model": [
+        {
+          "site": "task:take_note",
+          "calls": [
+            {
+              "name": "finish",
+              "arguments": {
+                "note": "call back"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "Saved."
+        }
+      ],
+      "spoken": [
+        "Saved."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": "call back",
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [
+      "task.started task=take_note",
+      "task.completed task=take_note saved=note"
+    ]
+  }
+}

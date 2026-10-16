@@ -1,0 +1,41 @@
+{
+  "name": "refused_names_supplier",
+  "about": "A tool reads a value that no one has saved yet. A task saves that value, so the refusal tells the model to run the task first.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller gives an order number.",
+        "instructions": "Ask for the order number.",
+        "assign": [{"variable": "order_id", "path": ["order_id"]}]
+      }
+    ]
+  },
+  "tool_options": {
+    "normalize": {
+      "announce": ["Checking order {{order_id}}."]
+    }
+  },
+  "turns": [
+    {
+      "caller": "Check my order.",
+      "model": [
+        {"site": "", "calls": [{"name": "normalize"}]},
+        {
+          "site": "",
+          "result": "{\"refused\": \"order_id not set yet. Run find_order first: it saves order_id, then call this tool again.\"}",
+          "text": "What is your order number?"
+        }
+      ],
+      "spoken": ["What is your order number?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "agent": "main"
+  }
+}

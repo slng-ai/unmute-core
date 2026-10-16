@@ -1,0 +1,339 @@
+"""Try several model calls in order, by the failover rules.
+
+It holds no framework types. Its rules: a first-event budget per call, and no retry or
+failover once the caller has part of the answer. A same-model retry of a short-lived failure is an
+option, off by default: the SLNG Context Router already retries behind its own plan.
+"""
+
+import asyncio
+import logging
+from collections.abc import AsyncIterator, Callable, Sequence, Set
+from enum import Enum, auto
+from typing import Annotated, ClassVar
+
+from pydantic import Field, SkipValidation, validate_call
+from pydantic.dataclasses import dataclass
+
+from unmute_core._pydantic import VALUE, named_errors, original_errors
+from unmute_core.model._call import (
+    ModelCallArg,
+    ModelEvent,
+    ModelRequest,
+    Usage,
+    close_model,
+    model_name,
+    variable_key_max,
+)
+from unmute_core.model._failover import (
+    STOP_STATUSES,
+    Next,
+    error_code,
+    http_status,
+    next_step,
+    retry_delay,
+)
+
+logger = logging.getLogger(__name__)
+
+FIRST_EVENT_TIMEOUT_S = 45.0
+"""A first-event budget that clears slow reasoning models, which think before they answer.
+Thinking models took up to 33 s to start on a call simulator."""
+SAME_MODEL_RETRIES_S = (0.25, 0.75)
+"""Suggested pauses before each same-model retry. A proxy that still routes to a stopping
+upstream fails again at once, so a short pause lets it pick a healthy one."""
+MIN_RETRY_BUDGET_S = 0.5
+"""A retry is skipped when less than this would be left of the first-event budget."""
+
+
+def _short_lived(status: int | None) -> bool:
+    """Return True for a failure the same model may not repeat: no status, 408, 429 or a 5xx."""
+    return status is None or status in (408, 429) or status >= 500
+
+
+class _Decision(Enum):
+    """What follows a call that failed before it answered."""
+
+    WAIT = auto()
+    RETRY = auto()
+    FAIL_OVER = auto()
+    RAISE = auto()
+
+
+@original_errors
+@dataclass(frozen=True, config=VALUE)
+class FailOver:
+    """One move from a failed model call to the next.
+
+    Attributes:
+        index: The position of the call that failed.
+        failed: The model name of the call that failed, or ``unknown``.
+        next: The model name of the call tried next, or ``unknown``.
+        status: The HTTP status of the failure, or None when there was none.
+        error: The error the call raised, or None when it answered nothing.
+    """
+
+    index: int
+    failed: str
+    next: str
+    status: int | None
+    error: SkipValidation[BaseException | None]
+
+
+class FallbackModelCall:
+    """A model call that moves to the next one when a call fails before it answers.
+
+    It is optional. A framework's own fallback, like LiveKit's ``FallbackAdapter``, works
+    without it. It is a ``ModelCall`` too, so it can nest. Build one per call: it remembers
+    which call answered last.
+
+    Attributes:
+        retries_itself: True. The chain fails over, so an adapter must not retry the whole
+            chain again.
+    """
+
+    retries_itself: ClassVar[bool] = True
+
+    @named_errors("FallbackModelCall")
+    @validate_call
+    def __init__(
+        self,
+        calls: Annotated[Sequence[ModelCallArg], Field(min_length=1)],
+        *,
+        first_event_timeout_s: Annotated[float, Field(gt=0)] | None = None,
+        max_wait_s: Annotated[float, Field(ge=0)] = 2.0,
+        same_model_retries: Sequence[Annotated[float, Field(ge=0)]] = (),
+        stop_statuses: Set[int] = STOP_STATUSES,
+        stop_codes: Set[str] | None = None,
+        on_fail_over: SkipValidation[Callable[[FailOver], None]] | None = None,
+        sticky: bool = False,
+    ) -> None:
+        """Keep the calls in the order they are tried.
+
+        Args:
+            calls: The model calls, first choice first.
+            first_event_timeout_s: How long a call may take to start answering before the
+                next one is tried, its same-model retries included. None waits as long as
+                the call does. ``FIRST_EVENT_TIMEOUT_S`` clears slow reasoning models.
+            max_wait_s: The longest ``Retry-After`` worth waiting for. A longer one fails over.
+            same_model_retries: The pause before each retry of the same call after a
+                short-lived failure (no status, 408, 429 or a 5xx). A 429 whose
+                ``Retry-After`` fits ``max_wait_s`` waits that long once instead.
+                ``SAME_MODEL_RETRIES_S`` is the suggested setting. Empty moves to the next
+                call at once.
+            stop_statuses: The statuses that end the chain at once. ``STOP_STATUSES`` by default.
+            stop_codes: The error codes that end the chain at once. None reads each call's
+                own ``stop_codes``, like the router's ``project_mode_forbidden``.
+            on_fail_over: Called at each move to the next call, with a ``FailOver``. An
+                error it raises is logged and the chain goes on.
+            sticky: Start each request with the call that answered last, then the others in
+                the given order, as LiveKit's ``FallbackAdapter(sticky=True)`` does. A dead
+                first call is then tried once, not on every request.
+
+        Raises:
+            ValueError: If ``calls`` is empty, or a wait is below zero.
+        """
+        self._calls = list(calls)
+        self._first_event_timeout_s = first_event_timeout_s
+        self._max_wait_s = max_wait_s
+        self._same_model_retries = tuple(same_model_retries)
+        self._stop_statuses = frozenset(stop_statuses)
+        self._stop_codes = frozenset(
+            stop_codes
+            if stop_codes is not None
+            else (code for call in calls for code in getattr(call, "stop_codes", ()))
+        )
+        self._on_fail_over = on_fail_over
+        self._sticky = sticky
+        self._active = 0
+        self._answered = 0
+
+    @property
+    def _next(self) -> object:
+        """The call the next request starts with."""
+        return self._calls[self._active if self._sticky else 0]
+
+    @property
+    def model(self) -> str:
+        """The model name of the call the next request starts with."""
+        return str(getattr(self._next, "model", "") or "")
+
+    @property
+    def provider(self) -> str:
+        """Who serves the call the next request starts with."""
+        return str(getattr(self._next, "provider", "") or "")
+
+    @property
+    def answered(self) -> str:
+        """The model name of the call that answered last, the first before any answer."""
+        return model_name(self._calls[self._answered])
+
+    @property
+    def variable_key_max(self) -> int | None:
+        """The tightest placeholder key limit of the wrapped calls, or None for no limit."""
+        return variable_key_max(*self._calls)
+
+    async def aclose(self) -> None:
+        """Close every call that has an ``aclose``."""
+        await asyncio.gather(*(close_model(call) for call in self._calls))
+
+    def _left(self, started: float) -> float | None:
+        """Return what is left of a call's first-event budget, or None without one."""
+        if self._first_event_timeout_s is None:
+            return None
+        return max(0.0, self._first_event_timeout_s - (asyncio.get_running_loop().time() - started))
+
+    def _retry_pause(self, retries: int, started: float) -> float | None:
+        """Return the pause before the next same-model retry, or None when none is left."""
+        if retries >= len(self._same_model_retries):
+            return None
+        pause = self._same_model_retries[retries]
+        left = self._left(started)
+        return None if left is not None and left - pause < MIN_RETRY_BUDGET_S else pause
+
+    def _fail_over(
+        self, index: int, next_index: int, status: int | None, error: BaseException | None
+    ) -> None:
+        """Tell ``on_fail_over`` that call ``index`` gave way to call ``next_index``."""
+        if self._on_fail_over is None:
+            return
+        event = FailOver(
+            index=index,
+            failed=model_name(self._calls[index]),
+            next=model_name(self._calls[next_index]),
+            status=status,
+            error=error,
+        )
+        try:
+            self._on_fail_over(event)
+        except Exception:
+            logger.exception("on_fail_over raised, the chain goes on")
+
+    async def _first(
+        self, events: AsyncIterator[ModelEvent], budget: float | None
+    ) -> tuple[ModelEvent | None, Usage | None]:
+        """Wait for the first answer event within the budget, and a ``Usage`` that came first.
+
+        A ``Usage`` is no answer. None when the stream holds nothing else.
+        """
+        usage: Usage | None = None
+        async with asyncio.timeout(budget):
+            while isinstance(event := await anext(events, None), Usage):
+                usage = event
+            return event, usage
+
+    def _decide(
+        self,
+        error: Exception,
+        index: int,
+        last: bool,
+        started: float,
+        waited: bool,
+        retries: int,
+    ) -> tuple[_Decision, float]:
+        """Choose what follows a call that failed before it answered.
+
+        Args:
+            error: What the call raised.
+            index: The call's place in the chain.
+            last: True for the last call of the chain.
+            started: When this call's budget began, on the loop's clock.
+            waited: True once a ``Retry-After`` wait happened for this call.
+            retries: How many short retries this call had.
+
+        Returns:
+            The decision and the seconds to sleep first, 0 when it does not sleep.
+        """
+        status = http_status(error)
+        step = next_step(
+            status,
+            started=False,
+            code=error_code(error),
+            stop_statuses=self._stop_statuses,
+            stop_codes=self._stop_codes,
+        )
+        if step is Next.RETRY and not waited:
+            response = getattr(error, "response", None)
+            headers = getattr(response, "headers", None) or {}
+            if (delay := retry_delay(headers, budget_s=self._max_wait_s)) is not None:
+                logger.warning("model call %d: status %s, retrying in %.1f s", index, status, delay)
+                return _Decision.WAIT, delay
+        if (
+            step in (Next.FAIL_OVER, Next.RETRY)
+            and _short_lived(status)
+            and (pause := self._retry_pause(retries, started)) is not None
+        ):
+            logger.warning(
+                "model call %d failed (status %s, %s), retrying it in %.2f s",
+                index,
+                status,
+                type(error).__name__,
+                pause,
+            )
+            return _Decision.RETRY, pause
+        if step is Next.STOP or last:
+            return _Decision.RAISE, 0.0
+        return _Decision.FAIL_OVER, 0.0
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        """Stream from the first call that starts answering.
+
+        Raises:
+            Exception: The error of a call that stopped, failed after it started answering,
+                or was the last one.
+        """
+        loop = asyncio.get_running_loop()
+        order = (
+            [self._active, *(i for i in range(len(self._calls)) if i != self._active)]
+            if self._sticky
+            else list(range(len(self._calls)))
+        )
+        for position, index in enumerate(order):
+            call = self._calls[index]
+            last = position == len(order) - 1
+            next_index = order[position + 1] if not last else index
+            waited = False
+            retries = 0
+            started = loop.time()
+            while True:
+                events = aiter(call.stream(request))
+                try:
+                    first, usage = await self._first(events, self._left(started))
+                except Exception as error:
+                    status = http_status(error)
+                    decision, delay = self._decide(error, index, last, started, waited, retries)
+                    if decision is _Decision.WAIT:
+                        await asyncio.sleep(delay)
+                        waited = True
+                    elif decision is _Decision.RETRY:
+                        await asyncio.sleep(delay)
+                        retries += 1
+                    elif decision is _Decision.RAISE:
+                        raise
+                    else:
+                        logger.warning(
+                            "model call %d failed (status %s, %s), trying the next one",
+                            index,
+                            status,
+                            type(error).__name__,
+                        )
+                        self._fail_over(index, next_index, status, error)
+                        break
+                    continue
+                if first is None and not last:
+                    logger.warning("model call %d answered nothing, trying the next one", index)
+                    self._fail_over(index, next_index, None, None)
+                    break
+                if first is None:
+                    logger.warning("the last model call answered nothing: an empty reply")
+                    if usage is not None:
+                        yield usage
+                if first is not None:
+                    self._active = self._answered = (
+                        index  # ponytail: concurrent requests race, last wins
+                    )
+                    yield first
+                    async for event in events:
+                        yield event
+                    if usage is not None:
+                        yield usage
+                return

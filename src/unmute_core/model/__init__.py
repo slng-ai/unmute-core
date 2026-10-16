@@ -1,0 +1,107 @@
+"""The one plug point for model requests.
+
+Adapters build a ``ModelRequest`` and stream it through a ``ModelCall``. ``NativeModelCall``
+runs a framework's own LLM and fills the prompt here. The SLNG Context Router is
+``unmute_core.slng.RouterModelCall``. ``FallbackModelCall`` tries several in order. Either
+way the model sees the same final prompt.
+"""
+
+from unmute_core.model._call import (
+    FINISH_TOOL_NAME,
+    STEP_START_CUE,
+    SUMMARY_SITE,
+    ModelAnswer,
+    ModelCall,
+    ModelEvent,
+    ModelRequest,
+    NamedModelCall,
+    NativeModelCall,
+    TextDelta,
+    ToolCall,
+    ToolChoice,
+    Usage,
+    answered_model,
+    close_model,
+    collect,
+    model_name,
+    provider_name,
+    retries_itself,
+    tool_choice,
+    variable_key_max,
+)
+from unmute_core.model._failover import (
+    STOP_CODES,
+    STOP_STATUSES,
+    Next,
+    error_code,
+    http_status,
+    next_step,
+    retry_delay,
+)
+from unmute_core.model._fallback import FIRST_EVENT_TIMEOUT_S, FailOver, FallbackModelCall
+from unmute_core.model._openai import OpenAIModelCall
+from unmute_core.model._prompt import (
+    MissingVariablesError,
+    fill_messages,
+    render_prompt,
+    router_messages,
+    template_variables,
+)
+from unmute_core.model._reasoning import ReasoningFilter
+from unmute_core.model._signatures import (
+    EXTRA_CONTENT,
+    REPLAYED_PROVIDERS,
+    SKIP_THOUGHT_SIGNATURE,
+    has_signature,
+    is_gemini,
+    replayed_extra,
+    signed_tool_calls,
+)
+
+__all__ = [
+    "EXTRA_CONTENT",
+    "FINISH_TOOL_NAME",
+    "FIRST_EVENT_TIMEOUT_S",
+    "REPLAYED_PROVIDERS",
+    "SKIP_THOUGHT_SIGNATURE",
+    "STEP_START_CUE",
+    "STOP_CODES",
+    "STOP_STATUSES",
+    "SUMMARY_SITE",
+    "FailOver",
+    "FallbackModelCall",
+    "MissingVariablesError",
+    "ModelAnswer",
+    "ModelCall",
+    "ModelEvent",
+    "ModelRequest",
+    "NamedModelCall",
+    "NativeModelCall",
+    "Next",
+    "OpenAIModelCall",
+    "ReasoningFilter",
+    "TextDelta",
+    "ToolCall",
+    "ToolChoice",
+    "Usage",
+    "answered_model",
+    "close_model",
+    "collect",
+    "error_code",
+    "fill_messages",
+    "has_signature",
+    "http_status",
+    "is_gemini",
+    "model_name",
+    "next_step",
+    "provider_name",
+    "render_prompt",
+    "replayed_extra",
+    "retries_itself",
+    "retry_delay",
+    "router_messages",
+    "signed_tool_calls",
+    "template_variables",
+    "tool_choice",
+    "variable_key_max",
+]

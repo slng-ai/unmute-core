@@ -1,0 +1,44 @@
+[project]
+name = "voice-stack"
+version = "0.1.0"
+description = "The EU voice stack the use-case examples share: SLNG speech and Gemini on Vertex, on LiveKit or Pipecat"
+requires-python = ">=3.12"
+dependencies = [
+    "unmute-core",
+]
+
+[project.optional-dependencies]
+livekit = [
+    "livekit-agents[google]==1.8.7",
+    "livekit-plugins-silero>=1.8.7",
+    "livekit-plugins-slng>=1.8.7",
+    "unmute-core[livekit]",
+]
+pipecat = [
+    "pipecat-ai[google,runner,silero,webrtc]==1.12.0",
+    "pipecat-slng>=0.7.0,<0.8",
+    "unmute-core[pipecat]",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+unmute-core = { path = "../..", editable = true }
+
+[dependency-groups]
+dev = ["ruff==0.15.7", "ty"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN"]
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty.environment]
+python-version = "3.12"

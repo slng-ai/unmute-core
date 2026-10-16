@@ -1,0 +1,24 @@
+--- a/agent.yaml
++++ b/agent.yaml
+@@ -204,14 +204,15 @@
+     #   model: gpt-5.6-luna
+     #   params:
+     #     reasoning_effort: "none"
+     reasoning:
+-      provider: google
+-      model: gemini-3.1-flash-lite
++      provider: slng
++      model: gpt-5.6-luna
++      agent_id: salon-concierge-slng-v1
++      upstream:
++        provider: openai
+       params:
+-        vertexai: true
+-        location: eu
+-        thinking_config:
+-          thinking_level: MINIMAL
++        world_part: eu-north
++        reasoning_effort: "none"
+   speak:
+     voice:
+       provider: slng

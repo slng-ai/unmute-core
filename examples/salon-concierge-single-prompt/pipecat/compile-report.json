@@ -1,0 +1,358 @@
+{
+  "agents": [
+    "concierge"
+  ],
+  "bindings": [
+    {
+      "binding": {
+        "language": "en",
+        "model": "soniox/speech-ai:rt-v5",
+        "params": {
+          "world_part": "eu-north"
+        },
+        "placement": "api",
+        "provider": "slng"
+      },
+      "role": "listen",
+      "target": "pipecat"
+    },
+    {
+      "binding": {
+        "endpointing_delay": "200ms",
+        "model": "silero",
+        "pace": "snappy",
+        "placement": "local",
+        "provider": "local"
+      },
+      "role": "turn",
+      "target": "pipecat"
+    },
+    {
+      "binding": {
+        "language": "en",
+        "model": "cartesia/sonic:3.5",
+        "params": {
+          "warm_standby_enabled": true,
+          "world_part": "eu-north"
+        },
+        "placement": "api",
+        "provider": "slng",
+        "voice": "62ae83ad-4f6a-430b-af41-a9bede9286ca"
+      },
+      "profile": "voice",
+      "role": "speak",
+      "target": "pipecat"
+    },
+    {
+      "binding": {
+        "model": "gemini-3.1-flash-lite",
+        "params": {
+          "location": "eu",
+          "thinking_config": {
+            "thinking_level": "MINIMAL"
+          },
+          "vertexai": true
+        },
+        "placement": "api",
+        "provider": "google"
+      },
+      "profile": "reasoning",
+      "role": "reason",
+      "target": "pipecat"
+    }
+  ],
+  "deployment_regions": [
+    "eu-central"
+  ],
+  "entry_agent": "concierge",
+  "generated_files": [
+    ".dockerignore",
+    ".env.example",
+    "Dockerfile",
+    "README.md",
+    "agents.py",
+    "bot.py",
+    "call.py",
+    "call_state.py",
+    "compile-report.json",
+    "compose.dev.yaml",
+    "pcc-deploy.toml",
+    "prompts/__init__.py",
+    "prompts/concierge.md",
+    "pyproject.toml",
+    "session.py",
+    "settings.py",
+    "state.py",
+    "tools/__init__.py",
+    "tools/find_or_create_customer.py",
+    "tools/find_slots.py",
+    "tools/record_complaint.py",
+    "tools/save_booking.py",
+    "utils/__init__.py",
+    "utils/dev_metrics.py",
+    "utils/google.py",
+    "utils/knowledge.py",
+    "utils/telemetry.py",
+    "utils/telephony.py",
+    "utils/tracing.py"
+  ],
+  "notes": [
+    "interruption: protecting the greeting, because a phone leg has no echo cancellation and the agent would otherwise interrupt itself; set conversation.interruption.protect to override, or to [] for none",
+    "listen: slng via SlngSTTService (pipecat-slng\u003e=0.6.0,\u003c0.7, verified 2026-10-02)",
+    "reason: google via GoogleLLMService (pipecat-ai[google], verified 2026-07-17)",
+    "speak: slng via SlngTTSService (pipecat-slng\u003e=0.6.0,\u003c0.7, verified 2026-10-02)",
+    "turn role lowers to on-device VAD (Silero); its binding is advisory",
+    "turn pace snappy (silence 0.2s authored, closes at 1.2s)"
+  ],
+  "provider": "pipecat",
+  "required_env": [
+    "GOOGLE_API_KEY",
+    "LANGFUSE_BASE_URL",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "MANAGER_PHONE_NUMBER",
+    "OPENAI_API_KEY",
+    "SLNG_API_KEY",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_PHONE_NUMBER"
+  ],
+  "secrets": [
+    {
+      "name": "GOOGLE_API_KEY",
+      "referenced_by": [
+        "agent.yaml models think reasoning"
+      ]
+    },
+    {
+      "name": "LANGFUSE_BASE_URL",
+      "referenced_by": [
+        "tracing.provider: langfuse"
+      ]
+    },
+    {
+      "name": "LANGFUSE_PUBLIC_KEY",
+      "referenced_by": [
+        "tracing.provider: langfuse"
+      ]
+    },
+    {
+      "name": "LANGFUSE_SECRET_KEY",
+      "referenced_by": [
+        "tracing.provider: langfuse"
+      ]
+    },
+    {
+      "name": "MANAGER_PHONE_NUMBER",
+      "referenced_by": [
+        "agent.yaml destinations manager_line"
+      ]
+    },
+    {
+      "name": "OPENAI_API_KEY"
+    },
+    {
+      "name": "SIP_AUTH_PASSWORD",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment sip_password"
+      ]
+    },
+    {
+      "name": "SIP_AUTH_USERNAME",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment sip_username"
+      ]
+    },
+    {
+      "name": "SIP_FROM_NUMBER",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment from_number"
+      ]
+    },
+    {
+      "name": "SIP_TRUNK_HOSTNAME",
+      "referenced_by": [
+        "connections/twilio_sip.yaml environment sip_address"
+      ]
+    },
+    {
+      "name": "SLNG_API_KEY",
+      "referenced_by": [
+        "agent.yaml models listen transcriber"
+      ]
+    },
+    {
+      "name": "TWILIO_ACCOUNT_SID",
+      "referenced_by": [
+        "connections/twilio_voice.yaml environment account_sid"
+      ]
+    },
+    {
+      "name": "TWILIO_AUTH_TOKEN",
+      "referenced_by": [
+        "connections/twilio_voice.yaml environment auth_token"
+      ]
+    },
+    {
+      "name": "TWILIO_PHONE_NUMBER",
+      "referenced_by": [
+        "connections/twilio_voice.yaml environment from_number"
+      ]
+    }
+  ],
+  "sizing": [
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "workers",
+      "status": "unbenchmarked",
+      "target": "pipecat",
+      "value": "10"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "gpus",
+      "status": "unbenchmarked",
+      "target": "pipecat",
+      "value": "0"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_concurrency_quota.realtime_audio",
+      "status": "unbenchmarked",
+      "target": "pipecat",
+      "value": "5"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_session_time_quota.realtime_audio",
+      "status": "unbenchmarked",
+      "target": "pipecat",
+      "value": "25m0s"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_concurrency_quota.telephony",
+      "status": "unbenchmarked",
+      "target": "pipecat",
+      "value": "5"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_session_time_quota.telephony",
+      "status": "unbenchmarked",
+      "target": "pipecat",
+      "value": "25m0s"
+    },
+    {
+      "basis": "2026-07-15 conservative 1 session per worker/GPU; channels=realtime_audio,telephony",
+      "metric": "provider_call_start_rate.telephony",
+      "status": "unbenchmarked",
+      "target": "pipecat",
+      "value": "1"
+    }
+  ],
+  "supported": {
+    "ceiling": "1.10.0",
+    "floor": "1.10.0",
+    "verified": "2026-09-12"
+  },
+  "target": "pipecat",
+  "telephony": {
+    "route": {
+      "provider": "pipecat",
+      "transport": "cloud-websocket",
+      "carrier": "twilio"
+    },
+    "processes": [],
+    "required_env": [
+      "GOOGLE_API_KEY",
+      "LANGFUSE_BASE_URL",
+      "LANGFUSE_PUBLIC_KEY",
+      "LANGFUSE_SECRET_KEY",
+      "MANAGER_PHONE_NUMBER",
+      "OPENAI_API_KEY",
+      "SLNG_API_KEY",
+      "TWILIO_ACCOUNT_SID",
+      "TWILIO_AUTH_TOKEN",
+      "TWILIO_PHONE_NUMBER"
+    ],
+    "locally_supplied_environment": [],
+    "environment": {
+      "account_sid": "TWILIO_ACCOUNT_SID",
+      "auth_token": "TWILIO_AUTH_TOKEN",
+      "from_number": "TWILIO_PHONE_NUMBER"
+    },
+    "manual_steps": [
+      "select a Voice-capable number you own in this Twilio account (or reuse the one another target already uses; a number serves one target at a time), and take it off any SIP trunk first, because a number on a trunk ignores its voice configuration silently",
+      "run `pipecat cloud organizations list` and note the organization name; it is the one value the compiler cannot know",
+      "create a TwiML Bin holding the exact markup the generated README dictates, with the organization name pasted in (Twilio Console, TwiML Bins, create)",
+      "point the number's \"A call comes in\" at that TwiML Bin (Phone Numbers, Manage, Active Numbers, your number, Voice Configuration)"
+    ],
+    "evidence": [
+      {
+        "feature": "cold_transfer",
+        "tag": "provisional",
+        "note": "live inbound and cold transfer run 2026-08-13; the transfer's decline path is emitted and offline-proven but has not been run; no credentialed smoke runs in CI on any route",
+        "docs": "https://docs.pipecat.ai/pipecat-cloud/guides/telephony/twilio-websocket",
+        "verified": "2026-08-13",
+        "smoke": false
+      },
+      {
+        "feature": "inbound",
+        "tag": "provisional",
+        "note": "live inbound and cold transfer run 2026-08-13; the transfer's decline path is emitted and offline-proven but has not been run; no credentialed smoke runs in CI on any route",
+        "docs": "https://docs.pipecat.ai/pipecat-cloud/guides/telephony/twilio-websocket",
+        "verified": "2026-08-13",
+        "smoke": false
+      },
+      {
+        "feature": "route",
+        "tag": "provisional",
+        "note": "live inbound and cold transfer run 2026-08-13; the transfer's decline path is emitted and offline-proven but has not been run; no credentialed smoke runs in CI on any route",
+        "docs": "https://docs.pipecat.ai/pipecat-cloud/guides/telephony/twilio-websocket",
+        "verified": "2026-08-13",
+        "smoke": false
+      }
+    ],
+    "services": [
+      "application"
+    ],
+    "coordination": "shared",
+    "coordination_reasons": [
+      {
+        "name": "admission",
+        "consumers": [
+          "application"
+        ]
+      }
+    ],
+    "admission_owner": "generated_runtime"
+  },
+  "variables": [
+    {
+      "description": "Today's date in the salon's own timezone, YYYY-MM-DD.",
+      "has_default": false,
+      "name": "booking_date",
+      "type": "string"
+    },
+    {
+      "description": "The weekday today falls on, spelled out in English: Monday to Sunday.",
+      "has_default": true,
+      "name": "booking_weekday",
+      "type": "string"
+    },
+    {
+      "description": "The number the carrier says is calling, in E.164. Empty on a browser call. Only a suggestion: the prompt reads it back and the caller may give another.",
+      "has_default": false,
+      "name": "customer_phone",
+      "type": "string"
+    },
+    {
+      "description": "The salon's own wall clock when the call began, HH:MM on a 24 hour clock.",
+      "has_default": false,
+      "name": "salon_local_time",
+      "type": "string"
+    }
+  ],
+  "version": "1.10.0"
+}

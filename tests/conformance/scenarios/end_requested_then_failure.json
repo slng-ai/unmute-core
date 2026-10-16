@@ -1,0 +1,129 @@
+{
+  "name": "end_requested_then_failure",
+  "about": "A held save waits for the call's end. A tool ends the conversation, and then the request the end makes about the held save fails. The call already asked to end: no failure line is said, and the end reason stays agent_ended.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants to leave a note.",
+        "instructions": "Take the caller's note.",
+        "tools": [
+          "normalize"
+        ],
+        "assign": [
+          {
+            "variable": "note",
+            "path": [
+              "note"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "tool_options": {
+    "normalize": {
+      "effect": "ends_conversation"
+    }
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "reason": "{{call.end_reason}}"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Please note that I want a call back.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "take_note"
+            }
+          ]
+        },
+        {
+          "site": "task:take_note",
+          "text": "Your note: a call back. Is that right?",
+          "calls": [
+            {
+              "name": "finish",
+              "arguments": {
+                "note": "a call back"
+              }
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Your note: a call back. Is that right?"
+      ]
+    },
+    {
+      "caller": "No, make it an email instead. Bye.",
+      "model": [
+        {
+          "site": "task:take_note",
+          "text": "Sure, an email. Goodbye.",
+          "calls": [
+            {
+              "name": "normalize",
+              "arguments": {
+                "reason": "done"
+              }
+            }
+          ]
+        },
+        {
+          "site": "task:take_note",
+          "tool_choice": "required",
+          "tools": [
+            "finish",
+            "not_yet"
+          ],
+          "fail": true
+        }
+      ],
+      "spoken": [
+        "Sure, an email. Goodbye."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "normalize",
+        "arguments": {
+          "reason": "done"
+        }
+      }
+    ],
+    "events": [
+      "task.started task=take_note"
+    ],
+    "agent": "a step",
+    "ended": true,
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "reason": "agent_ended"
+        }
+      }
+    ]
+  }
+}

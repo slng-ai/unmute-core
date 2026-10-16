@@ -1,0 +1,51 @@
+{
+  "name": "event_call_end",
+  "about": "A tool on the call's end runs once the caller hangs up, with the transcript, and leaves no note.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "transcript": "$transcript"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [
+        {
+          "site": "",
+          "text": "Hello."
+        }
+      ],
+      "spoken": [
+        "Hello."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "transcript": "user: Hi there\nassistant: Hello."
+        }
+      }
+    ]
+  }
+}

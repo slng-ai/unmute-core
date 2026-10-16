@@ -1,0 +1,22 @@
+{
+  "name": "transfer_unavailable_returns",
+  "about": "A transfer nobody takes, with on_unavailable return_to_caller: the model hears why and keeps helping, and the call goes on.",
+  "instructions": "You help callers with their orders. Transfer them to billing when they ask.",
+  "tasks": {"mode": "record", "tasks": []},
+  "transfers": {"send_to_billing": {"fails": "busy"}},
+  "turns": [
+    {
+      "caller": "Put me through to billing, please.",
+      "model": [
+        {"site": "", "prompt": "You help callers with their orders. Transfer them to billing when they ask.", "calls": [{"name": "send_to_billing"}]},
+        {"site": "", "text": "Billing is busy right now. Can I help you myself?"}
+      ],
+      "spoken": ["Putting you through now, one moment.", "Billing is busy right now. Can I help you myself?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [{"name": "send_to_billing"}],
+    "events": []
+  }
+}

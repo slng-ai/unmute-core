@@ -1,0 +1,65 @@
+{
+  "name": "finish_confirm",
+  "about": "A closing tool with confirm lines does not run on the model's first call: code asks the caller a line filled from that call's input, with no model reply. A changed input is asked again. The same input again, once the line was heard, runs the tool, and code says the receipt.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "close_order",
+        "when": "The caller wants to close an order.",
+        "instructions": "Close the order the caller names.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {"found": [true]},
+            "confirm": ["Shall I close order {{input.order_id}}?"],
+            "say": ["Order {{result.order.id}} is {{result.status}}."]
+          }
+        ]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "order": {"id": "B-7"}, "status": "closed"}]
+  },
+  "turns": [
+    {
+      "caller": "Please close order A-12.",
+      "model": [
+        {"site": "", "calls": [{"name": "close_order"}]},
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]}
+      ],
+      "spoken": ["Shall I close order A-12?"]
+    },
+    {
+      "caller": "Sorry, I meant B-7.",
+      "model": [
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
+      ],
+      "spoken": ["Shall I close order B-7?"]
+    },
+    {
+      "caller": "Yes.",
+      "model": [
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
+      ],
+      "spoken": ["Order B-7 is closed."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "B-7", "status": "closed", "note": null, "tags": []},
+    "tool_calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}],
+    "events": [
+      "task.started task=close_order",
+      "task.ended_on_tool task=close_order saved=order_id,status",
+      "task.completed task=close_order saved=order_id,status"
+    ]
+  }
+}

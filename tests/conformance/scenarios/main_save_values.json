@@ -1,0 +1,50 @@
+{
+  "name": "main_save_values",
+  "about": "The main agent saves a value no task saves with save_values, and its next request ends with the values block. A value a task saves is refused, and stays unsaved.",
+  "instructions": "You help callers with their orders.",
+  "save_values": true,
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants a note taken.",
+        "instructions": "Take a note.",
+        "assign": [{"variable": "note", "path": ["note"], "optional": true}]
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "My order is A-17.",
+      "model": [
+        {
+          "site": "",
+          "tools": ["lookup_order", "search_web", "normalize", "save_values", "take_note"],
+          "calls": [{"name": "save_values", "arguments": {"order_id": "A-17"}}]
+        },
+        {
+          "site": "",
+          "result": "{\"ok\": true, \"saved\": {\"order_id\": \"A-17\"}}",
+          "last_system": "Values of this call. Save new ones with save_values.\n- order_id: A-17\n- status: none recorded yet.\n- note, saved by the task take_note: none recorded yet.\n- tags: []",
+          "text": "Got it, A-17."
+        }
+      ],
+      "spoken": ["Got it, A-17."]
+    },
+    {
+      "caller": "Note that I am in a hurry.",
+      "model": [
+        {"site": "", "calls": [{"name": "save_values", "arguments": {"note": "in a hurry"}}]},
+        {"site": "", "text": "I will take that note."}
+      ],
+      "spoken": ["I will take that note."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-17", "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "agent": "main"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "name": "event_first_message",
+  "about": "A tool on the caller's first message runs once, reads that message, and every later main request keeps its note.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "event_tools": {
+    "classify": {
+      "on": [
+        "first_user_message"
+      ],
+      "locked": {
+        "said": "{{call.first_user_message}}"
+      },
+      "delay_s": 0.05,
+      "note": true
+    }
+  },
+  "tool_results": {
+    "classify": [
+      {
+        "intent": "order"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Where is my order?",
+      "model": [
+        {
+          "site": "",
+          "text": "Let me see.",
+          "last_system": "Results of tools that ran on their own in this call. Use them, but never read them aloud or share the raw data:\n- classify ran on its own when the caller first spoke. Result: {\"intent\": \"order\"}"
+        }
+      ],
+      "spoken": [
+        "Let me see."
+      ]
+    },
+    {
+      "caller": "It is A-12.",
+      "model": [
+        {
+          "site": "",
+          "text": "Thanks.",
+          "last_system": "Results of tools that ran on their own in this call. Use them, but never read them aloud or share the raw data:\n- classify ran on its own when the caller first spoke. Result: {\"intent\": \"order\"}"
+        }
+      ],
+      "spoken": [
+        "Thanks."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "event_calls": [
+      {
+        "name": "classify",
+        "arguments": {
+          "said": "Where is my order?"
+        }
+      }
+    ]
+  }
+}

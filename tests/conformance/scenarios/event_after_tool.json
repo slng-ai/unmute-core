@@ -1,0 +1,102 @@
+{
+  "name": "event_after_tool",
+  "about": "A tool that follows a model's tool runs before the model reads the result, saves a field into State and leaves a note. A tool after it that hides its result runs and leaves none.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "event_tools": {
+    "notify": {
+      "on": [
+        "tool_succeeded:search_web"
+      ],
+      "delay_s": 0.05,
+      "assign": {
+        "status": "status"
+      },
+      "note": true
+    },
+    "audit": {
+      "on": [
+        "tool_succeeded:notify"
+      ],
+      "show_result": false,
+      "note": true
+    },
+    "apologise": {
+      "on": [
+        "tool_failed:search_web"
+      ],
+      "note": true
+    }
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ],
+    "notify": [
+      {
+        "status": "open"
+      }
+    ],
+    "audit": [
+      {
+        "logged": true
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "We are open 9 to 5.",
+          "last_system": "Results of tools that ran on their own in this call. Use them, but never read them aloud or share the raw data:\n- notify ran on its own when search_web succeeded. Result: {\"status\": \"open\"}"
+        }
+      ],
+      "spoken": [
+        "We are open 9 to 5."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": "open",
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      }
+    ],
+    "events": [],
+    "event_calls": [
+      {
+        "name": "notify"
+      },
+      {
+        "name": "audit"
+      }
+    ]
+  }
+}

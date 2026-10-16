@@ -1,0 +1,34 @@
+{
+  "name": "not_ready",
+  "about": "When a check before the greeting fails, the agent says the failure line instead of the greeting and hangs up. The background lookups never run.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "greeting": "Welcome.",
+  "ready_fails": true,
+  "prefetch": {
+    "lookup_customer": {
+      "assign": {
+        "note": "name"
+      },
+      "background": true
+    }
+  },
+  "turns": [],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "ended": true,
+    "opening": [
+      "I'm sorry, something went wrong on our side. Please call back later. Goodbye."
+    ]
+  }
+}

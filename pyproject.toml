@@ -1,0 +1,94 @@
+[project]
+name = "unmute-core"
+version = "0.14.0"
+description = "Typed call state, tasks, tools, handoffs and tracing for voice agents on LiveKit and Pipecat"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Nicola Croon", email = "nicola@slng.ai" }
+]
+keywords = ["voice agents", "livekit", "pipecat", "llm", "telephony", "opentelemetry"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+requires-python = ">=3.12"
+dependencies = [
+    "babel>=2.16,<3",
+    "email-validator>=2.2,<3",
+    "httpx>=0.28,<1",
+    "jsonschema>=4.23,<5",
+    "opentelemetry-exporter-otlp-proto-http>=1.40,<2",
+    "opentelemetry-sdk>=1.40,<2",
+    "phonenumbers>=8.13,<10",
+    "pydantic>=2.11,<3",
+    "pydantic-settings>=2.8,<3",
+]
+
+[project.urls]
+Repository = "https://github.com/slng-ai/unmute-core"
+Documentation = "https://github.com/slng-ai/unmute-core/tree/main/docs"
+Issues = "https://github.com/slng-ai/unmute-core/issues"
+Changelog = "https://github.com/slng-ai/unmute-core/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# Each framework is on its newest release. Unmute's internal/target/driver.go follows.
+# LiveKit 1.8.3 added ToolResult, which the adapter needs.
+livekit = ["livekit-agents>=1.8.7,<1.9"]
+pipecat = ["pipecat-ai>=1.12.0,<1.13"]
+# openai 1.109 added `omit`. livekit-agents 1.8.7 needs openai 3, so LiveKit apps get it
+# anyway; a Pipecat app may stay on openai 1 or 2.
+slng = ["openai>=1.109,<4"]
+# No embedding package: the caller passes its own llama-index embedder.
+knowledge = [
+    "llama-index-core>=0.14,<0.15",
+    "llama-index-readers-file>=0.5,<0.8",
+    "llama-index-retrievers-bm25>=0.6,<0.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=1",
+    "ruff>=0.15",
+    "ty",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--ignore=examples -m 'not live'"
+markers = ["live: needs real API keys. Runs nightly and before a release: pytest -m live"]
+asyncio_mode = "auto"
+
+# Each example project keeps the ruff and ty config Unmute emits for it.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN", "N"]
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "ANN"]
+
+[tool.ty.environment]
+python-version = "3.12"
+
+[tool.ty.src]
+exclude = ["examples"]

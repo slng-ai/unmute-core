@@ -1,0 +1,37 @@
+[project]
+name = "salon-concierge-unmute-pipecat"
+version = "0.1.0"
+description = "The salon concierge on Pipecat, built by hand on unmute-core"
+requires-python = ">=3.12"
+dependencies = [
+    "pipecat-ai[google,runner,silero,webrtc]==1.12.0",
+    "pipecat-slng>=0.7.0,<0.8",
+    "python-dotenv",
+    "salon",
+    "unmute-core[pipecat]",
+]
+
+# llama-index-retrievers-bm25 pins pystemmer<3, which has no linux aarch64 wheel.
+[tool.uv]
+package = false
+override-dependencies = ["pystemmer>=3.1.0,<4"]
+
+[tool.uv.sources]
+salon = { path = "../salon", editable = true }
+unmute-core = { path = "../../..", editable = true }
+
+[dependency-groups]
+dev = ["ruff==0.15.7", "ty"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN"]
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty.environment]
+python-version = "3.12"

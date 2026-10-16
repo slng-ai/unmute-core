@@ -1,0 +1,101 @@
+{
+  "name": "go_back",
+  "about": "In the second step the caller corrects the order number. The model goes back to the first step, which runs again, then the second step resumes and keeps what the caller says next. Go back is offered only once the caller has spoken in the step.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "instructions": "Find order {{order_id}}.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+        "announce": ["Let me look."]
+      },
+      {
+        "name": "take_note",
+        "instructions": "Take a note.",
+        "assign": [{"variable": "note", "path": ["note"], "optional": true}]
+      }
+    ],
+    "groups": [
+      {
+        "name": "order_flow",
+        "when": "The caller wants help with an order.",
+        "steps": ["find_order", "take_note"],
+        "context_scope": "shared"
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [
+      {"found": true, "order": {"id": "A-12"}, "status": "open"},
+      {"found": true, "order": {"id": "B-7"}, "status": "closed"}
+    ]
+  },
+  "turns": [
+    {
+      "caller": "I need help with my order.",
+      "model": [
+        {"site": "", "calls": [{"name": "order_flow"}]},
+        {"site": "task:find_order", "text": "What is the order number?"}
+      ],
+      "spoken": ["Let me look.", "What is the order number?"]
+    },
+    {
+      "caller": "It is A-12.",
+      "model": [
+        {"site": "task:find_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
+        {"site": "task:take_note", "tools": ["finish"], "text": "Any note to add?"}
+      ],
+      "spoken": ["Any note to add?"]
+    },
+    {
+      "caller": "Sorry, the order is B-7, not A-12.",
+      "model": [
+        {"site": "task:take_note", "tools": ["finish", "go_back_to_step"], "calls": [{"name": "go_back_to_step", "arguments": {"steps": ["find_order"]}}]},
+        {"site": "task:find_order", "heard": ["I need help with my order.", "It is A-12.", "Sorry, the order is B-7, not A-12."], "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]},
+        {"site": "task:take_note", "heard": ["I need help with my order.", "It is A-12.", "Sorry, the order is B-7, not A-12."], "tools": ["finish"], "text": "Got it. Any note to add?"}
+      ],
+      "spoken": ["Got it. Any note to add?"]
+    },
+    {
+      "caller": "Note that I call back later.",
+      "model": [
+        {"site": "task:take_note", "calls": [{"name": "finish", "arguments": {"note": "later"}}]},
+        {"site": "", "heard": ["I need help with my order."], "result": "{\"status\": \"completed\", \"task\": \"order_flow\", \"steps\": [{\"step\": \"find_order\", \"outcome\": \"completed\", \"saved\": {\"order_id\": \"B-7\", \"status\": \"closed\"}}, {\"step\": \"find_order\", \"outcome\": \"completed\", \"saved\": {\"order_id\": \"B-7\", \"status\": \"closed\"}}, {\"step\": \"take_note\", \"outcome\": \"completed\", \"saved\": {\"note\": \"later\"}}]}", "text": "Anything else?"}
+      ],
+      "spoken": ["Anything else?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "B-7", "status": "closed", "note": "later", "tags": []},
+    "tool_calls": [
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}},
+      {"name": "lookup_order", "arguments": {"order_id": "B-7"}}
+    ],
+    "events": [
+      "group.started group=order_flow",
+      "group.step_started group=order_flow task=find_order step=0",
+      "task.started group=order_flow task=find_order step=0",
+      "task.ended_on_tool group=order_flow task=find_order step=0 saved=order_id,status",
+      "task.completed group=order_flow task=find_order step=0 saved=order_id,status",
+      "group.step_started group=order_flow task=take_note step=1",
+      "task.started group=order_flow task=take_note step=1",
+      "group.went_back group=order_flow task=take_note step=1",
+      "group.step_started group=order_flow task=find_order step=0",
+      "task.started group=order_flow task=find_order step=0",
+      "task.ended_on_tool group=order_flow task=find_order step=0 saved=order_id,status",
+      "task.completed group=order_flow task=find_order step=0 saved=order_id,status",
+      "group.step_started group=order_flow task=take_note step=1",
+      "task.started group=order_flow task=take_note step=1",
+      "task.completed group=order_flow task=take_note step=1 saved=note",
+      "group.completed group=order_flow"
+    ]
+  }
+}

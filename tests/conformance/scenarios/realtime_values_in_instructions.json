@@ -1,0 +1,33 @@
+{
+  "name": "realtime_values_in_instructions",
+  "about": "The main agent saves a value with save_values, and the model's next answer reads it. A cascade request ends with the values block. A realtime model reads the block at the end of its instructions, which go to it again after the save.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "save_values": true,
+  "realtime": true,
+  "turns": [
+    {
+      "caller": "My order is A-17.",
+      "model": [
+        {
+          "site": "",
+          "holds": "- order_id: none recorded yet.",
+          "calls": [{"name": "save_values", "arguments": {"order_id": "A-17"}}]
+        },
+        {
+          "site": "",
+          "result": "{\"ok\": true, \"saved\": {\"order_id\": \"A-17\"}}",
+          "holds": "- order_id: A-17",
+          "text": "Got it, A-17."
+        }
+      ],
+      "spoken": ["Got it, A-17."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-17", "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "agent": "main"
+  }
+}

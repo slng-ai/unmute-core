@@ -1,0 +1,53 @@
+{
+  "name": "greeting_worded_waits_realtime",
+  "about": "A greeting the model words waits for a slow background lookup on a realtime model too. Its instructions are filled with the saved value, the same text a cascade request shows once filled.",
+  "instructions": "You help callers with their orders. Caller: {{note}}.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "worded_greeting": true,
+  "prefetch": {
+    "lookup_customer": {
+      "assign": {
+        "note": "name"
+      },
+      "background": true,
+      "delay_s": 0.05
+    }
+  },
+  "tool_results": {
+    "lookup_customer": [
+      {
+        "name": "Ana"
+      }
+    ]
+  },
+  "opening": [
+    {
+      "site": "",
+      "text": "Hello Ana, how can I help?",
+      "filled": "You help callers with their orders. Caller: Ana."
+    }
+  ],
+  "turns": [],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": "Ana",
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "opening": [
+      "Hello Ana, how can I help?"
+    ],
+    "event_calls": [
+      {
+        "name": "lookup_customer"
+      }
+    ]
+  },
+  "realtime": true
+}

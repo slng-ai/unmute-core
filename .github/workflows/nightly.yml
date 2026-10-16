@@ -1,0 +1,108 @@
+name: Nightly
+
+# The checks that need real API keys. They never run on a pull request.
+# The Release workflow runs it on every tag, before anything is published.
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      OPENAI_API_KEY:
+        required: false
+      GOOGLE_API_KEY:
+        required: false
+      SLNG_API_KEY:
+        required: false
+      LANGFUSE_PUBLIC_KEY:
+        required: false
+      LANGFUSE_SECRET_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  UV_LINK_MODE: copy
+
+jobs:
+  # tests/live with pytest -m live. The telephony tests place a call a person must
+  # answer, so they get no variables here and skip.
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run pytest -m live -rs
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          UNMUTE_LIVE_REALTIME: "1"
+
+  # One typed caller turn through each hand-written example, with its real model.
+  examples:
+    name: examples live (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - minimal/livekit
+          - minimal/pipecat
+          - parcel-desk/livekit
+          - parcel-desk/pipecat
+          - salon-concierge-unmute/livekit
+          - salon-concierge-unmute/pipecat
+          - kestrel/livekit
+          - kestrel/pipecat
+          - wasla/livekit
+          - wasla/pipecat
+          - nosh/livekit
+          - nosh/pipecat
+          - faro/livekit
+          - faro/pipecat
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: scripts/check-examples.sh --live examples/${{ matrix.project }}
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          SLNG_API_KEY: ${{ secrets.SLNG_API_KEY }}
+          SLNG_ROUTER_URL: ${{ vars.SLNG_ROUTER_URL }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ vars.LANGFUSE_BASE_URL }}
+
+  # Whole scripted calls through each ported use case, on its real model, text only.
+  scenarios:
+    name: scenarios live (${{ matrix.example }}, ${{ matrix.framework }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example: [kestrel, wasla, nosh, faro]
+        framework: [livekit, pipecat]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: scripts/converse-examples.sh examples/${{ matrix.example }}/${{ matrix.framework }}
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          SLNG_API_KEY: ${{ secrets.SLNG_API_KEY }}
+          FARO_DB: ":memory:"

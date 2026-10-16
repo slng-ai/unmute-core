@@ -1,0 +1,42 @@
+{
+  "name": "handoff_plain_agent",
+  "about": "A handoff to an agent with no tasks and no tools of its own. Pipecat hands off with no task stack. The next agent keeps the call state and hears what was said.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "handoffs": {"to_closing": {"to": "closing"}},
+  "agents": {
+    "closing": {
+      "instructions": "You thank the caller.",
+      "tools": [],
+      "tasks": {"mode": "record", "tasks": []}
+    }
+  },
+  "turns": [
+    {
+      "caller": "Hi.",
+      "model": [{"site": "", "text": "Orders here."}],
+      "spoken": ["Orders here."]
+    },
+    {
+      "caller": "That is all, thanks.",
+      "model": [
+        {"site": "", "calls": [{"name": "to_closing"}]},
+        {
+          "site": "",
+          "prompt": "You thank the caller.",
+          "heard": ["Hi.", "That is all, thanks."],
+          "order": ["user", "assistant", "user"],
+          "tools": [],
+          "text": "Thank you for calling."
+        }
+      ],
+      "spoken": ["Thank you for calling."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "tool_calls": [],
+    "events": [],
+    "agent": "closing"
+  }
+}

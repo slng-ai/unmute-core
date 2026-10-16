@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# NLTK, which llama-index uses, refuses hardlinked files. uv hardlinks from its cache on Linux.
+env:
+  UV_LINK_MODE: copy
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run ty check
+      - run: uv run pytest
+
+  # Runs the tests with every dependency at the lowest version pyproject.toml allows.
+  floors:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: scripts/check-floors.sh
+
+  # Proves the core installs and imports with no framework present.
+  base-only:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --locked --no-dev
+      - run: |
+          uv run --no-sync python -c "
+          import importlib.util, unmute_core, unmute_core.model, unmute_core.prefetch, unmute_core.state, unmute_core.telemetry
+          for name in ('livekit', 'pipecat', 'openai', 'llama_index'):
+              assert importlib.util.find_spec(name) is None, f'{name} is installed in the base env'
+          print('unmute_core', unmute_core.__version__, 'imports without a framework, openai or llama-index')
+          "
+
+  # Each Unmute-compiled example installs unmute-core from this checkout and imports it.
+  examples:
+    name: examples (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - salon-concierge/livekit
+          - salon-concierge/pipecat
+          - salon-concierge-single-prompt/livekit
+          - salon-concierge-single-prompt/pipecat
+          - salon-concierge-slng/livekit
+          - salon-concierge-slng/pipecat
+          - salon-concierge-unmute/livekit
+          - salon-concierge-unmute/pipecat
+          - parcel-desk/livekit
+          - parcel-desk/pipecat
+          - minimal/livekit
+          - minimal/pipecat
+          - kestrel/livekit
+          - kestrel/pipecat
+          - wasla/livekit
+          - wasla/pipecat
+          - nosh/livekit
+          - nosh/pipecat
+          - faro/livekit
+          - faro/pipecat
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: scripts/check-examples.sh examples/${{ matrix.project }}
+
+  # The hand-written salon agent's shared package: the diary rules and the agent definition.
+  salon-unmute:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv run --locked --project examples/salon-concierge-unmute/salon pytest examples/salon-concierge-unmute/salon
+
+  # The parcel-desk example's shared package: the spec builds, and the agent does what it says.
+  parcel-desk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv run --locked --project examples/parcel-desk/desk pytest examples/parcel-desk/desk
+
+  # The ported use cases' shared packages: each one's tools, words and tasks, offline.
+  use-cases:
+    name: use case (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [kestrel/kestrel, wasla/wasla, nosh/nosh, faro/faro]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv run --locked --project examples/${{ matrix.package }} pytest examples/${{ matrix.package }}

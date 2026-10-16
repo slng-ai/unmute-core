@@ -1,0 +1,78 @@
+{
+  "name": "event_note_instructions",
+  "about": "A tool on an event leaves a note and has result instructions. The next request's notes say how to use the result, before the result.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "event_tools": {
+    "notify": {
+      "on": [
+        "tool_succeeded:search_web"
+      ],
+      "note": true,
+      "result_instructions": "Read the hours aloud."
+    }
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ],
+    "notify": [
+      {
+        "status": "open"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "We are open 9 to 5.",
+          "last_system": "Results of tools that ran on their own in this call. Use them, but never read them aloud or share the raw data:\n- notify ran on its own when search_web succeeded. Use the result like this: Read the hours aloud. Result: {\"status\": \"open\"}"
+        }
+      ],
+      "spoken": [
+        "We are open 9 to 5."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      }
+    ],
+    "events": [],
+    "event_calls": [
+      {
+        "name": "notify"
+      }
+    ]
+  }
+}

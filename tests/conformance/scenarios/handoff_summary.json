@@ -1,0 +1,126 @@
+{
+  "name": "handoff_summary",
+  "about": "A summary handoff asks the model for a summary of what was said, at the summary site, with no tools. The next agent hears that summary alone.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "handoffs": {
+    "to_notes": {
+      "to": "notes",
+      "context": {
+        "history": "summary"
+      }
+    }
+  },
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": [
+        "search_web"
+      ],
+      "tasks": {
+        "mode": "record",
+        "tasks": []
+      }
+    }
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "hours": "9 to 5"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Hi.",
+      "model": [
+        {
+          "site": "",
+          "text": "Orders here."
+        }
+      ],
+      "spoken": [
+        "Orders here."
+      ]
+    },
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "text": "Let me see.",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "We are open 9 to 5."
+        }
+      ],
+      "spoken": [
+        "Let me see.",
+        "We are open 9 to 5."
+      ]
+    },
+    {
+      "caller": "Put me through to notes.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "to_notes"
+            }
+          ]
+        },
+        {
+          "site": "summary",
+          "heard": [
+            "user: Hi.\nassistant: Orders here.\nuser: When are you open?\nassistant: Let me see.\nassistant: We are open 9 to 5.\nuser: Put me through to notes."
+          ],
+          "tools": [],
+          "text": "The caller asked the opening hours, 9 to 5."
+        },
+        {
+          "site": "",
+          "prompt": "You take notes.",
+          "heard": [],
+          "order": [
+            "assistant"
+          ],
+          "text": "Notes desk."
+        }
+      ],
+      "spoken": [
+        "Notes desk."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "hours"
+        }
+      }
+    ],
+    "events": [],
+    "agent": "notes"
+  }
+}

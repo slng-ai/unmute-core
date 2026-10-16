@@ -1,0 +1,34 @@
+{
+  "name": "model_fails",
+  "about": "When the model call fails for good, the agent says the failure line and hangs up.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [
+        {
+          "site": "",
+          "fail": true
+        }
+      ],
+      "spoken": [
+        "I'm sorry, something went wrong on our side. Please call back later. Goodbye."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "ended": true
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "float_state_renders_whole",
+  "about": "A whole number saved in a float field reads as 3, not 3.0, in the greeting and in the prompt.",
+  "instructions": "You help callers with their orders. Total: {{amount}}.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "greeting": "Your total is {{amount}}.",
+  "prefetch": {
+    "lookup_customer": {
+      "assign": {
+        "amount": "total"
+      }
+    }
+  },
+  "tool_results": {
+    "lookup_customer": [
+      {
+        "total": 3.0
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [
+        {
+          "site": "",
+          "text": "Yes, 3.",
+          "filled": "You help callers with their orders. Total: 3."
+        }
+      ],
+      "spoken": [
+        "Yes, 3."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": [],
+      "customer": null,
+      "amount": 3.0
+    },
+    "tool_calls": [],
+    "events": [],
+    "opening": [
+      "Your total is 3."
+    ],
+    "event_calls": [
+      {
+        "name": "lookup_customer"
+      }
+    ]
+  },
+  "shaped_state": true
+}

@@ -1,0 +1,39 @@
+[project]
+name = "kestrel"
+version = "0.1.0"
+description = "Kestrel Insurance: a motor-claim intake line, written once on unmute-core"
+requires-python = ">=3.12"
+dependencies = [
+    "unmute-core",
+    "voice-stack",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+unmute-core = { path = "../../..", editable = true }
+voice-stack = { path = "../../voice-stack", editable = true }
+
+[dependency-groups]
+dev = ["pytest>=9", "pytest-asyncio>=1", "ruff==0.15.7", "ty"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN"]
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D", "ANN"]
+
+[tool.ty.environment]
+python-version = "3.12"

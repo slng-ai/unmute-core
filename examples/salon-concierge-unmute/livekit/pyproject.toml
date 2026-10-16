@@ -1,0 +1,38 @@
+[project]
+name = "salon-concierge-unmute-livekit"
+version = "0.1.0"
+description = "The salon concierge on LiveKit Agents, built by hand on unmute-core"
+requires-python = ">=3.12"
+dependencies = [
+    "livekit-agents[google]==1.8.7",
+    "livekit-plugins-silero>=1.8.7",
+    "livekit-plugins-slng>=1.8.7",
+    "python-dotenv",
+    "salon",
+    "unmute-core[livekit]",
+]
+
+# llama-index-retrievers-bm25 pins pystemmer<3, which has no linux aarch64 wheel.
+[tool.uv]
+package = false
+override-dependencies = ["pystemmer>=3.1.0,<4"]
+
+[tool.uv.sources]
+salon = { path = "../salon", editable = true }
+unmute-core = { path = "../../..", editable = true }
+
+[dependency-groups]
+dev = ["ruff==0.15.7", "ty"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN"]
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty.environment]
+python-version = "3.12"

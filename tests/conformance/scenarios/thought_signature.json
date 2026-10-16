@@ -1,0 +1,63 @@
+{
+  "name": "thought_signature",
+  "about": "The model signs its tool calls, as Gemini 3 does. Each later request replays a signed call with its signature, so Gemini does not refuse it.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Find order {{order_id}}.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order", "id"], "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "order": {"id": "A-12"}, "status": "open"}]
+  },
+  "turns": [
+    {
+      "caller": "Where is order A-12?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {"name": "find_order", "extra": {"google": {"thought_signature": "sig-main"}}}
+          ]
+        },
+        {
+          "site": "task:find_order",
+          "calls": [
+            {
+              "name": "lookup_order",
+              "arguments": {"order_id": "A-12"},
+              "extra": {"google": {"thought_signature": "sig-step"}}
+            }
+          ]
+        },
+        {
+          "site": "",
+          "replayed": {"find_order": {"google": {"thought_signature": "sig-main"}}},
+          "text": "Order A-12 is open."
+        }
+      ],
+      "spoken": ["Order A-12 is open."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-12", "status": "open", "note": null, "tags": []},
+    "tool_calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}],
+    "events": [
+      "task.started task=find_order",
+      "task.ended_on_tool task=find_order saved=order_id,status",
+      "task.completed task=find_order saved=order_id,status"
+    ]
+  }
+}

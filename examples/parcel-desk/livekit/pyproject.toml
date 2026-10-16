@@ -1,0 +1,36 @@
+[project]
+name = "parcel-desk-livekit"
+version = "0.1.0"
+description = "Parcel Desk on LiveKit Agents, defined as data on unmute-core"
+requires-python = ">=3.12"
+dependencies = [
+    "desk",
+    "livekit-agents==1.8.7",
+    "livekit-plugins-silero>=1.8.7",
+    "livekit-plugins-slng>=1.8.7",
+    "python-dotenv",
+    "unmute-core[livekit,slng]",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+desk = { path = "../desk", editable = true }
+unmute-core = { path = "../../..", editable = true }
+
+[dependency-groups]
+dev = ["ruff==0.15.7", "ty"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PERF", "FURB", "RUF", "BLE", "D", "ANN"]
+ignore = ["E501", "ANN401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ty.environment]
+python-version = "3.12"

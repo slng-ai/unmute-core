@@ -1,0 +1,64 @@
+{
+  "name": "transfer_ends_the_call",
+  "about": "A transfer tool says its line, puts the caller through on the call's phone line, and ends the call with no model reply after it. The call ends as transferred.",
+  "instructions": "You help callers with their orders. Transfer them to billing when they ask.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "transfers": {
+    "send_to_billing": {}
+  },
+  "event_tools": {
+    "report": {
+      "on": [
+        "call_end"
+      ],
+      "locked": {
+        "reason": "{{call.end_reason}}"
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Put me through to billing, please.",
+      "model": [
+        {
+          "site": "",
+          "prompt": "You help callers with their orders. Transfer them to billing when they ask.",
+          "calls": [
+            {
+              "name": "send_to_billing"
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Putting you through now, one moment."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "send_to_billing"
+      }
+    ],
+    "events": [],
+    "ended": true,
+    "event_calls": [
+      {
+        "name": "report",
+        "arguments": {
+          "reason": "transferred"
+        }
+      }
+    ]
+  }
+}

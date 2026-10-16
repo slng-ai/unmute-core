@@ -1,0 +1,61 @@
+{
+  "name": "prefetch_background",
+  "about": "A fixed greeting plays at once. A slow lookup runs beside it and saves the caller's name, and the first model request waits for it and carries the name.",
+  "instructions": "You help callers with their orders. Caller: {{note}}.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "greeting": "Welcome.",
+  "prefetch": {
+    "lookup_customer": {
+      "assign": {
+        "note": "name"
+      },
+      "background": true,
+      "delay_s": 0.05
+    }
+  },
+  "tool_results": {
+    "lookup_customer": [
+      {
+        "name": "Ana"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [
+        {
+          "site": "",
+          "text": "Hello Ana.",
+          "variables": {
+            "note": "Ana"
+          }
+        }
+      ],
+      "spoken": [
+        "Hello Ana."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": "Ana",
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "opening": [
+      "Welcome."
+    ],
+    "event_calls": [
+      {
+        "name": "lookup_customer"
+      }
+    ]
+  }
+}

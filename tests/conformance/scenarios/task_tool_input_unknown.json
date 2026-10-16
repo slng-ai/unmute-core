@@ -1,0 +1,57 @@
+{
+  "name": "task_tool_input_unknown",
+  "about": "A task reads the output of a tool that no prefetch lookup runs, a misspelt name. Building the agent fails with a message that names the task and the input.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_note",
+        "when": "The caller wants to leave a note.",
+        "instructions": "Take the caller's note.",
+        "inputs": [
+          {
+            "kind": "tool",
+            "name": "load_customr"
+          }
+        ],
+        "assign": [
+          {
+            "variable": "note",
+            "path": [
+              "note"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "prefetch": {
+    "load_customer": {}
+  },
+  "turns": [
+    {
+      "caller": "Hi there",
+      "model": [
+        {
+          "site": "",
+          "text": "Hello."
+        }
+      ],
+      "spoken": [
+        "Hello."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": [],
+    "build_error": "task take_note reads the tool 'load_customr', which no prefetch Lookup runs"
+  }
+}
