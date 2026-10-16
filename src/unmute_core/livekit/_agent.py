@@ -62,7 +62,8 @@ from unmute_core.livekit._trace import SessionTrace, traced_tts
 from unmute_core.model import close_model
 from unmute_core.realtime import check_realtime_handoff
 from unmute_core.state import CallState
-from unmute_core.tasks import REFUSED_BUSY, TaskPlan, TaskSpec
+from unmute_core.tasks import REFUSED_BUSY, OpeningTool, TaskPlan, TaskSpec
+from unmute_core.tasks._opening import check_opening, open_agent
 from unmute_core.telemetry import Telemetry
 from unmute_core.tools import (
     LinePicker,
@@ -183,6 +184,7 @@ class UnmuteAgent(Agent):
         self._handoffs = spec.handoffs
         self._task_models = dict(spec.task_models)
         self._gate = HandoffGate(self._handoffs, armed=True)
+        self._opens_with: OpeningTool | None = None
         self._handed_off = False
         self._settles = False
         self._settling: asyncio.Task[list[str]] | None = None
@@ -336,6 +338,9 @@ class UnmuteAgent(Agent):
     async def on_enter(self) -> None:
         """Start the call's spans on the first entry. An agent handed the call speaks first.
 
+        With an opening tool, it runs the tool first. When its line fills, the call and its
+        result join the chat, the line is said, and no model request is made.
+
         Raises:
             ValueError: On a realtime model, if the agent has something it cannot run. The
                 session closes first: the agent would run without it.
@@ -363,8 +368,10 @@ class UnmuteAgent(Agent):
             self._guard.hold_job()
         if self._gate.opens:
             self._gate.opens = False
+            said = await self._open()
             self._gate.start_opening(self.chat_ctx)
-            self.session.generate_reply()
+            if not said:
+                self.session.generate_reply()
 
     def adopt_trace(self, trace: SessionTrace) -> None:
         """Record into another agent's trace from now on, and its task events too.
@@ -376,9 +383,47 @@ class UnmuteAgent(Agent):
         if self.tasks is not None:
             self.tasks.listen(trace.telemetry.event)
 
-    def open_on_enter(self) -> None:
-        """Speak first when the agent enters: it takes a call handed to it."""
+    def open_on_enter(self, opens_with: OpeningTool | None = None) -> None:
+        """Speak first when the agent enters: it takes a call handed to it.
+
+        Args:
+            opens_with: A tool of the agent's own, run in code before its first reply.
+        """
         self._gate.opens = True
+        self._opens_with = opens_with
+
+    async def _open(self) -> bool:
+        """Run the opening tool the handoff gave, and say its line. Return True when said."""
+        spec, self._opens_with = self._opens_with, None
+        if spec is None:
+            return False
+        opening = await open_agent(spec, self._registry, self.state, self._spoken, hooks=self._call)
+        if opening is None:
+            return False
+        result = tool_text(opening.result)
+        if self._trace is not None:
+            self._trace.tool_ran(
+                name=opening.tool,
+                call_id=opening.call_id,
+                arguments=opening.arguments,
+                result=result,
+            )
+        if opening.line is None:
+            return False
+        history = self.chat_ctx.copy()
+        history.insert(
+            [
+                llm.FunctionCall(
+                    call_id=opening.call_id, name=opening.tool, arguments=opening.arguments
+                ),
+                llm.FunctionCallOutput(
+                    call_id=opening.call_id, name=opening.tool, output=result, is_error=False
+                ),
+            ]
+        )
+        await self.update_chat_ctx(history, exclude_invalid_function_calls=False)
+        say(self.session, opening.line)
+        return True
 
     def _closed(self, _event: CloseEvent) -> None:
         """Settle the call's held saves. Its trace or its call's end settles them instead."""
@@ -422,6 +467,7 @@ class UnmuteAgent(Agent):
         *,
         announce: str | None = None,
         context: HandoffContext | None = None,
+        opens_with: OpeningTool | None = None,
     ) -> "UnmuteAgent | str":
         """Ready another main agent to take the call. Return the result from a tool.
 
@@ -435,13 +481,15 @@ class UnmuteAgent(Agent):
                 waits for it to play.
             context: What the agent hears. A summary is asked for while the line plays.
                 None keeps what was said, without tool calls.
+            opens_with: A tool of the agent's own it runs in code as it enters. When a line
+                fills from the result, the line is its first reply, with no model request.
 
         Returns:
             ``agent``, which LiveKit switches to, or a refusal while a task runs.
 
         Raises:
             TypeError: If ``agent`` is not an ``UnmuteAgent``.
-            ValueError: If ``agent`` holds another call state.
+            ValueError: If ``agent`` holds another call state, or cannot run ``opens_with``.
         """
         if not isinstance(agent, UnmuteAgent):  # own text: names the plain-agent way
             raise TypeError(
@@ -450,6 +498,9 @@ class UnmuteAgent(Agent):
             )
         if agent.state is not self.state:
             raise ValueError("hand_off needs an agent built on the same CallState.")
+        check_opening(
+            opens_with, agent._registry, realtime=realtime_model(self.session) is not None
+        )
         running = self._runner.step
         step = running if running is not None and running.handing_off else None
         if self.tasks is not None and self.tasks.active is not None and step is None:
@@ -488,7 +539,7 @@ class UnmuteAgent(Agent):
             self._trace.start_handoff()
         if step is not None:
             step.step.hand_off()
-        agent.open_on_enter()
+        agent.open_on_enter(opens_with)
         self._handed_off = True
         return agent
 

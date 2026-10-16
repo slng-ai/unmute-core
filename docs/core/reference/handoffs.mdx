@@ -72,6 +72,9 @@ LiveKit. Call it from a `@function_tool` method of an `UnmuteAgent`, and return 
 <ParamField path="context" type="HandoffContext | None" default="None">
   What the agent hears. `None` keeps what was said, without tool calls.
 </ParamField>
+<ParamField path="opens_with" type="OpeningTool | None" default="None">
+  A tool of the new agent's own, run in code as it takes the call. See [Open the next agent on a tool](/core/build/handoffs#open-the-next-agent-on-a-tool). A tool the agent lacks, or a realtime model, raises `ValueError`.
+</ParamField>
 
 It returns the new agent, which LiveKit switches to. It returns a refusal while a task runs.
 
@@ -97,10 +100,13 @@ Pipecat. Call it from the handoff tool's handler.
 <ParamField path="context" type="HandoffContext | None" default="None">
   What the new agent hears. `None` keeps what was said, without tool calls.
 </ParamField>
+<ParamField path="opens_with" type="OpeningTool | None" default="None">
+  A tool of the new agent's own, run in code as it takes the call. See [Open the next agent on a tool](/core/build/handoffs#open-the-next-agent-on-a-tool). A tool the agent lacks, or a realtime model, raises `ValueError`.
+</ParamField>
 
 The new spec's tools, tasks, `save_values` and `summarizer` replace the old agent's. They do not carry over. The line is said in the old voice, and a summary is written by the old agent's summarizer or model. The new model, voice and summarizer take over after both.
 
-`hand_off` raises `ValueError` when the spec lists a handoff that is not one of `native_tools`, a task names a model or transfers to an agent `then_targets` lacks, the spec has a model without a `ModelCallLLMService`, or `tts` is not one of the call's voices. The agent that holds the call keeps it.
+`hand_off` raises `ValueError` when the spec lists a handoff that is not one of `native_tools`, a task names a model or transfers to an agent `then_targets` lacks, the spec has a model without a `ModelCallLLMService`, `tts` is not one of the call's voices, or `opens_with` names a tool the spec lacks or the model is a realtime one. The agent that holds the call keeps it.
 
 ## History rules
 
