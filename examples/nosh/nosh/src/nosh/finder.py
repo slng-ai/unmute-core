@@ -29,11 +29,17 @@ SEARCH = TypeAdapter(list[Place])
 
 
 class FoundArea(BaseModel):
-    """What ``find_area`` returns. A new area takes back the offer and the details."""
+    """What ``find_area`` returns. A new area takes back the offer and the details.
+
+    ``ask_craving`` is code's next step: with no craving and no exact address, the read-back
+    asks what they are in the mood for, so the caller's yes never has to pick one.
+    """
 
     found: bool
     spot: Spot | None = None
     formatted_address: str = ""
+    ask_craving: bool = False
+    craving: str | None = None
     offer: Offer | None = None
     details: Details | None = None
 
@@ -91,14 +97,30 @@ class Finder:
             bool,
             Field(description="True only for an exact street address or a point they are at."),
         ],
+        craving: Annotated[
+            str | None,
+            Field(
+                description=(
+                    'What they said they are in the mood for along with the area, like "tapas". '
+                    "Leave it out if they have not said."
+                )
+            ),
+        ] = None,
     ) -> FoundArea:
         """Find where the caller wants to look. The application reads the place back to them."""
         try:
             located = Located.model_validate(self.places.post("resolve-location", {"query": area}))
         except NotFoundError:
             return FoundArea(found=False)
-        spot = Spot(**located.model_dump(), at_address=at_address)
-        return FoundArea(found=True, spot=spot, formatted_address=located.formatted_address)
+        wanted = (craving or "").strip() or None
+        spot = Spot(**located.model_dump(), at_address=at_address, craving=wanted)
+        return FoundArea(
+            found=True,
+            spot=spot,
+            formatted_address=located.formatted_address,
+            ask_craving=wanted is None and not at_address,
+            craving=wanted,
+        )
 
     def find_places(
         self,
@@ -108,13 +130,14 @@ class Finder:
             Field(
                 description=(
                     'What they are in the mood for: a cuisine, "bar", "restaurant", "cocktail '
-                    'bar", a venue by name, or "no preference". Leave it out if they have not said.'
+                    'bar", a venue by name, or "no preference". Leave it out to search for what '
+                    "they said with the area."
                 )
             ),
         ] = None,
     ) -> FoundPlaces:
         """Search places at the location the caller agreed to. The application says them."""
-        wanted = (craving or "").strip()
+        wanted = (craving or "").strip() or spot.craving or ""
         anything = wanted.lower() in ("", "no preference")
         if not wanted and not spot.at_address:
             return FoundPlaces(found=False, ask_craving=True)
