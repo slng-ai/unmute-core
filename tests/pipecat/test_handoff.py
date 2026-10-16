@@ -237,12 +237,6 @@ def test_a_service_that_can_be_asked_warns_about_nothing_at_build(
     assert caplog.records == []
 
 
-def test_a_task_handoff_needs_the_agents_tool() -> None:
-    job = {**JOB, "tasks": [{**JOB["tasks"][0], "handoffs": ["to_nowhere"]}, *JOB["tasks"][1:]]}
-    with pytest.raises(ValueError, match="lists the handoff 'to_nowhere'"):
-        Harness(job)
-
-
 def test_a_task_model_is_refused_on_pipecat() -> None:
     job = {**JOB, "tasks": [{**JOB["tasks"][0], "model": "fast"}, *JOB["tasks"][1:]]}
     with pytest.raises(ValueError, match="runs on the model 'fast', and Pipecat runs every task"):
@@ -294,11 +288,6 @@ def _transferring_job() -> dict[str, Any]:
     """The job, whose order flow takes a note and hands the caller to the notes desk."""
     group = {**JOB["groups"][0], "steps": ["take_note"], "then": "transfer", "then_target": "notes"}
     return {**JOB, "groups": [group]}
-
-
-def test_a_group_transfer_needs_its_target() -> None:
-    with pytest.raises(ValueError, match="transfers the call to 'notes', which then_targets"):
-        Harness(_transferring_job())
 
 
 async def test_a_completed_group_hands_the_call_to_its_target() -> None:

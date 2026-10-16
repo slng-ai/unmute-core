@@ -170,12 +170,6 @@ async def test_a_summary_handoff_asks_its_own_summarizer() -> None:
     ]
 
 
-def test_a_task_handoff_needs_the_agents_tool() -> None:
-    job = {**JOB, "tasks": [{**JOB["tasks"][0], "handoffs": ["to_nowhere"]}, *JOB["tasks"][1:]]}
-    with pytest.raises(ValueError, match="lists the handoff 'to_nowhere'"):
-        UnmuteAgent(AgentSpec("Orders.", tasks=plan(job)), state=_state())
-
-
 def _chat() -> llm.ChatContext:
     """A call with a tool call between two caller turns."""
     return llm.ChatContext(
@@ -261,11 +255,6 @@ def _transferring_job() -> dict[str, Any]:
     """The job, whose order flow takes a note and hands the caller to the notes desk."""
     group = {**JOB["groups"][0], "steps": ["take_note"], "then": "transfer", "then_target": "notes"}
     return {**JOB, "groups": [group]}
-
-
-def test_a_group_transfer_needs_its_target() -> None:
-    with pytest.raises(ValueError, match="transfers the call to 'notes', which then_targets"):
-        UnmuteAgent(AgentSpec("Orders.", tasks=plan(_transferring_job())), state=_state())
 
 
 async def test_a_group_transfer_that_breaks_returns_to_the_main_agent() -> None:

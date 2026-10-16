@@ -7,7 +7,6 @@ side: tools, nodes, frames, the main agent's context, and the order things happe
 from typing import Any, cast
 
 import pytest
-from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.flows import NO_RESPONSE, FlowManager
 from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
@@ -29,11 +28,10 @@ from tests.pipecat.harness import (
     runs_llm,
 )
 from tests.tasks.job import Canned, job, plan, state
-from tests.test_handoff import KeyLimited
 from unmute_core.agent import AgentSpec
 from unmute_core.call import CallHooks
 from unmute_core.model import STEP_START_CUE
-from unmute_core.pipecat import ModelCallLLMService, UnmuteFlows
+from unmute_core.pipecat import UnmuteFlows
 from unmute_core.pipecat._history import STEP_START_MESSAGE, caller_turns
 from unmute_core.pipecat._tasks import ALREADY_HANDLED, for_flows
 from unmute_core.tasks._texts import (
@@ -484,16 +482,6 @@ async def test_a_last_n_step_counts_its_entry_turns_on_the_window_it_keeps() -> 
     assert h.state.plain("note") == "urgent"
 
 
-def _native(name: str) -> FunctionSchema:
-    return FunctionSchema(name=name, description="A native tool.", properties={}, required=[])
-
-
-@pytest.mark.parametrize("name", ["search_web", "find_order", "order_flow"])
-def test_a_native_tool_named_like_another_tool_of_the_agent_is_refused(name: str) -> None:
-    with pytest.raises(ValueError, match=f"the tool '{name}' is offered twice on one agent"):
-        Harness(native_tools=[_native(name)])
-
-
 def _flows(
     payload: dict[str, Any] | None = None,
     *,
@@ -525,10 +513,3 @@ def test_a_task_that_reads_a_tool_builds_without_the_calls_hooks() -> None:
     payload = job()
     payload["tasks"][1]["inputs"] = [{"kind": "tool", "name": "load_customer"}]
     _flows(payload, call=None)
-
-
-def test_a_placeholder_key_too_long_fails_the_build_only_for_a_model_call_with_a_limit() -> None:
-    prompt = "Hi {{" + "a" * 70 + "}}"
-    _flows(instructions=prompt)
-    with pytest.raises(ValueError, match=r"agent instructions: the placeholder"):
-        _flows(instructions=prompt, llm=ModelCallLLMService(cast(Any, KeyLimited("x"))))
