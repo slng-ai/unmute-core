@@ -316,12 +316,12 @@ async def run_realtime(scenario: Scenario) -> dict[str, Any]:
         )
 
         async def answered() -> None:
-            """Wait until the server has answered, the client has gone quiet and read it all.
+            """Wait until the server has answered every scripted reply, and the client read it all.
 
             The client reads each ``response.done`` on its own task, so a busy machine can
-            still be behind the server after the quiet time.
+            still be behind the server once it is idle.
             """
-            await server.wait_idle(quiet=0.3)
+            await server.wait_idle(lambda: not run.model.pending)
             await _until(lambda: speaker.responses >= server.done)
 
         speaker = Speaker(realtime=True)
