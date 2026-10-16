@@ -86,6 +86,15 @@ def tool_items(session: AgentSession, name: str) -> list[tuple[str, str]]:
     ]
 
 
+def replies(session: AgentSession) -> list[str | None]:
+    """The agent's replies in the session's history, in order."""
+    return [
+        item.text_content
+        for item in session.history.items
+        if isinstance(item, llm.ChatMessage) and item.role == "assistant"
+    ]
+
+
 def slow_tool(
     gate: Gate,
     *,
@@ -137,18 +146,14 @@ async def test_a_tool_cut_off_for_longer_than_the_timeout_answers_the_model_once
         assert "still in progress" in released
 
         gate.release.set()
-        await until(lambda: len(model.requests) == 2)
+        await until(lambda: bool(replies(session)))
         await until(lambda: session.agent_state == "listening")
+        assert len(model.requests) == 2
         assert gate.runs == 1
         assert gate.cancelled == 0
         assert tool_items(session, "slow")[-1] == ("out", '{"done": true}')
         assert [text for role, text in model.requests[-1].texts if role == "assistant"] == []
-        replies = [
-            item.text_content
-            for item in session.history.items
-            if isinstance(item, llm.ChatMessage) and item.role == "assistant"
-        ]
-        assert replies == ["It is done."]
+        assert replies(session) == ["It is done."]
     assert agent._trace is not None and agent._trace.closing is not None
     await agent._trace.closing
     [span] = [s for s in sink.spans.get_finished_spans() if s.name == "llm_tool_call"]
