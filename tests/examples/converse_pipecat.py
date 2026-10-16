@@ -204,8 +204,11 @@ class AgentOutput(FrameProcessor):
             elif isinstance(frame, LLMFullResponseStartFrame | LLMFullResponseEndFrame):
                 self._texted = False
                 mark(type(frame).__name__)
-            elif isinstance(frame, FunctionCallInProgressFrame | FunctionCallResultFrame):
-                mark(f"{type(frame).__name__} {frame.function_name}")
+            elif isinstance(frame, FunctionCallInProgressFrame):
+                mark(f"call {frame.function_name} {frame.arguments}"[:300])
+            elif isinstance(frame, FunctionCallResultFrame):
+                run_llm = frame.properties.run_llm if frame.properties else None
+                mark(f"result {frame.function_name} run_llm={run_llm} {frame.result}"[:300])
             elif isinstance(frame, MetricsFrame):
                 for data in frame.data:
                     if isinstance(data, TTFBMetricsData) and "LLM" in data.processor:
