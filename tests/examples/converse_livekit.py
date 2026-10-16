@@ -187,6 +187,12 @@ class TextSession(AgentSession):
                 f"{call.name}({call.arguments})" if VERBOSE else call.name
                 for call in event.function_calls
             )
+            if os.getenv("CONVERSE_TIMING"):
+                for call, output in zip(
+                    event.function_calls, event.function_call_outputs, strict=False
+                ):
+                    result = output.output if output is not None else ""
+                    print(f"    call {call.name} {call.arguments} -> {result}"[:400], flush=True)
 
     def say(self, text: Any, **kwargs: Any) -> Any:
         """Note a line code says, whether or not it joins the chat, then say it."""

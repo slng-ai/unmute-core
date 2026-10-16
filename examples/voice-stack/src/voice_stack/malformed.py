@@ -14,6 +14,7 @@ from google import genai
 from google.genai import types
 
 logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler())
 
 TAIL_TURNS = 3
 """How many of the request's last turns the log shows."""
