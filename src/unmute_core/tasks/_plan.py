@@ -201,13 +201,18 @@ class TaskPlan:
         """
         reads = [
             *((rule.tool, rule.say, rule.success) for rule in task.finish),
-            *((reply.tool, reply.say, reply.when) for reply in task.replies),
+            *(
+                (reply.tool, reply.say, reply.when)
+                for reply in task.replies
+                if reply.tool is not None  # TaskSpec refuses a reply with no tool
+            ),
             *([(task.opens_with.tool, task.opens_with.say, {})] if task.opens_with else []),
         ]
         for name, lines, fields in reads:
             tool = self.tools.get(name)
-            for path in result_paths(lines) | {(field,) for field in fields}:
+            for path in result_paths(lines):
                 tool.check_result_path(path, where)
+            tool.check_match(fields, where)
 
     def _check_reads(self, task: TaskSpec, where: str, values: Mapping[str, str]) -> None:
         """Check every State value a task reads or takes exists."""

@@ -41,6 +41,7 @@ from unmute_core._pydantic import VALUE, original_errors
 from unmute_core.settings import env_value
 from unmute_core.state import CallState
 from unmute_core.tools._http import HardenedHttpError, check_destination, send_pinned_request
+from unmute_core.tools._lines import ToolReply
 from unmute_core.tools._spec import (
     ToolEffect,
     ToolError,
@@ -763,6 +764,7 @@ def local_tool(
     show_result: bool = True,
     result_instructions: str = "",
     hidden: Sequence[str] = (),
+    replies: Sequence[ToolReply] = (),
 ) -> ToolSpec:
     """Build a tool from a Python function. Works as a plain ``@local_tool`` decorator.
 
@@ -789,6 +791,8 @@ def local_tool(
         show_result: False hides a result that succeeded from the model. See ``ToolSpec``.
         result_instructions: How the model should use the result. See ``ToolSpec``.
         hidden: Result fields the model never reads. See ``ToolSpec``.
+        replies: The lines code speaks for the tool's results, each without ``tool``. See
+            ``ToolSpec``.
 
     Returns:
         The tool.
@@ -813,6 +817,7 @@ def local_tool(
         show_result=show_result,
         result_instructions=result_instructions,
         hidden=tuple(hidden),
+        replies=tuple(replies),
     )
 
 

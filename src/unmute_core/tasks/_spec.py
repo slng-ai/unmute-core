@@ -449,6 +449,11 @@ class TaskSpec(_Spec):
             )
         if self.opens_with is not None:
             self._check_opening(self.opens_with)
+        if any(reply.tool is None for reply in self.replies):
+            raise ValueError(
+                f"{name} has a reply with no tool. Name it, or put the reply on the tool's own "
+                "replies"
+            )
         if stray := [reply.tool for reply in self.replies if reply.tool not in self.tools]:
             raise ValueError(f"{name} replies to '{stray[0]}', which it does not list in tools")
         asked: dict[str, tuple[str, ...]] = {}

@@ -35,10 +35,13 @@
     },
     {
       "caller": "It happened next Friday.",
+      "expect": [
+        "That day hasn't happened yet"
+      ],
       "reject": [
         "Roughly what time"
       ],
-      "max_requests": 2
+      "max_requests": 1
     }
   ],
   "state": {
