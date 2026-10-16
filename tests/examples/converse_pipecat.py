@@ -61,10 +61,12 @@ from tests.examples import script, voices  # noqa: E402
 QUIET_S = 2.5
 """How long the agent must stay quiet before the caller's next line."""
 ANSWER_S = 15.0
-"""How long a tool result that asks for a model reply may wait for it before the turn ends.
+"""How long a model response may stay open, or a tool result that asks for one may wait for
+it, before the turn ends.
 
 A slow model would otherwise look quiet, and the caller's next line would cut off what
-the model says next, like a read-back."""
+the model says next, like a read-back. Gemini's first chunk can take over 3 s. LiveKit's
+runner waits the same way while the agent is ``thinking``."""
 TURN_TIMEOUT_S = 60
 VERBOSE = bool(os.getenv("CONVERSE_VERBOSE"))
 REAL_VOICE = bool(os.getenv("CONVERSE_REAL_VOICE"))
@@ -181,8 +183,10 @@ class AgentOutput(FrameProcessor):
             )
             self.answer_due = run is not False
         if isinstance(frame, LLMFullResponseStartFrame):
-            self.answer_due = False
+            self.answer_due = True
             self.requests += 1
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            self.answer_due = False
         elif isinstance(frame, FunctionCallInProgressFrame):
             name = frame.function_name
             self.tools.append(f"{name}({frame.arguments})" if VERBOSE else name)
