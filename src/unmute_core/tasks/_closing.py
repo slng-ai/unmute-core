@@ -24,7 +24,7 @@ from unmute_core.tasks._texts import (
     still_running,
 )
 from unmute_core.tasks._values import TaskValueRefused, success_matches
-from unmute_core.tools import ToolRegistry
+from unmute_core.tools import ArgumentsMissing, ToolRegistry
 from unmute_core.tools._spec import ToolStarted, tool_succeeded
 
 if TYPE_CHECKING:
@@ -152,9 +152,14 @@ class ClosingTools:
         if self._step.done:
             return None
         if lines := self._confirm.get(name):
-            if (outcome := self._tools.precheck(name, arguments, self._tasks.state)) is not None:
+            try:
+                outcome = self._tools.precheck(name, arguments, self._tasks.state)
+                confirmed = outcome is None and self._confirmed(name, arguments, lines)
+            except ArgumentsMissing as missing:
+                return missing.result
+            if outcome is not None:
                 return self._prechecked(name, outcome)
-            if not self._confirmed(name, arguments, lines):
+            if not confirmed:
                 return self._ask(name, lines)
         if self._record and self.running is not None:
             logger.info("closing tool refused: %s is still running", self.running)
