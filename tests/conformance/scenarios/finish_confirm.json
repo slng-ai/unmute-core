@@ -41,7 +41,7 @@
     {
       "caller": "Sorry, I meant B-7.",
       "model": [
-        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
+        {"site": "task:close_order", "result_holds": "not_run_yet", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
       ],
       "spoken": ["Shall I close order B-7?"]
     },

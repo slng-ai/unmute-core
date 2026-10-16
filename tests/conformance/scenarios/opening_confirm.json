@@ -47,7 +47,7 @@
     {
       "caller": "Yes.",
       "model": [
-        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]}
+        {"site": "task:close_order", "result_holds": "not_run_yet", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]}
       ],
       "spoken": ["Order A-12 is closed."]
     },

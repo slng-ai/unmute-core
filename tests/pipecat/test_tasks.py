@@ -36,13 +36,11 @@ from unmute_core.model import STEP_START_CUE
 from unmute_core.pipecat import ModelCallLLMService, UnmuteFlows
 from unmute_core.pipecat._history import STEP_START_MESSAGE, caller_turns
 from unmute_core.pipecat._tasks import ALREADY_HANDLED, for_flows
-from unmute_core.prefetch import Lookup, Prefetch
 from unmute_core.tasks._texts import (
     BEGIN_STEP,
     REFUSED_BUSY,
     REFUSED_RERUN,
     SAVE_BEFORE_CALLER,
-    STEP_BOUNDARY,
     finish_before_heard,
 )
 
@@ -119,40 +117,6 @@ async def test_two_delegates_in_one_reply_start_one_run() -> None:
     assert first == {"status": "running the find_order task"}
     assert second == dict(REFUSED_BUSY)
     assert not runs_llm(properties)
-
-
-async def test_a_closing_tool_that_succeeds_ends_the_step_without_a_model_reply() -> None:
-    h = Harness(lookup_order=Canned(FOUND))
-    await _in_step(h)
-    result, properties = await h.call("lookup_order", {"id": "A-12"})
-    assert result == {"status": "completed"}
-    assert runs_llm(properties)
-    assert h.state.plain("order_id") == "A-12"
-    assert h.main_reads()["status"] == "completed"
-
-
-async def test_a_group_runs_its_steps_in_order_then_returns_once() -> None:
-    h = Harness()
-    await _in_step(h, "order_flow")
-    h.user("A-12.")
-    result, _ = await h.call("finish", {"order_id": "A-12"}, said="Got it.")
-    assert result == {"status": "completed"}
-    assert h.tool_names() == ["finish", "go_back_to_step"]
-    assert STEP_BOUNDARY in h.system_instruction
-    assert not any(
-        call["function"]["name"] == "finish"
-        for m in h.messages()
-        for call in m.get("tool_calls") or []
-    )
-    await h.reply("What note should I take?")
-    assert STEP_BOUNDARY not in h.system_instruction
-    h.user("Say it is urgent.")
-    result, _ = await h.call("finish", {"note": "urgent"})
-    assert result == {"status": "completed"}
-    record = h.main_reads()
-    assert [row["step"] for row in record["steps"]] == ["find_order", "take_note"]
-    assert h.state.plain("note") == "urgent"
-    assert h.system_instruction == MAIN_PROMPT
 
 
 async def test_a_call_from_a_step_that_ended_does_nothing() -> None:
@@ -400,53 +364,6 @@ async def test_an_isolated_group_resets_every_step_and_its_cue_is_no_caller_turn
     ]
 
 
-async def test_going_back_reruns_the_named_step_then_resumes_the_one_after() -> None:
-    h = Harness()
-    await _in_step(h, "order_flow")
-    h.user("A-12.")
-    await h.call("finish", {"order_id": "A-12"})
-    result, properties = await h.call("go_back_to_step", {"steps": ["find_order"]})
-    assert "go_back_to_step" not in h.tool_names()
-    assert result == MISSING.format(function_name="go_back_to_step")
-    assert runs_llm(properties)
-    h.user("Wait, the order is A-13.")
-    h.spoken.clear()
-    result, properties = await h.call("go_back_to_step", {"steps": ["find_order"]})
-    assert result == {"status": "acknowledged"}
-    assert not runs_llm(properties)
-    assert h.tool_names() == ["lookup_order", "finish"]
-    assert h.spoken == []
-    assert {"role": "user", "content": "Wait, the order is A-13."} in h.messages()
-    h.user("Yes, A-13.")
-    result, _ = await h.call("finish", {"order_id": "A-13"})
-    assert result == {"status": "completed"}
-    assert h.tool_names() == ["finish", "go_back_to_step"]
-    h.user("Urgent.")
-    await h.call("finish", {"note": "urgent"})
-    assert h.state.plain("order_id") == "A-13"
-    assert [row["step"] for row in h.main_reads()["steps"]] == [
-        "find_order",
-        "find_order",
-        "take_note",
-    ]
-    assert h.stages() == [
-        "group.started",
-        "group.step_started",
-        "task.started",
-        "task.completed",
-        "group.step_started",
-        "task.started",
-        "group.went_back",
-        "group.step_started",
-        "task.started",
-        "task.completed",
-        "group.step_started",
-        "task.started",
-        "task.completed",
-        "group.completed",
-    ]
-
-
 async def test_an_isolated_step_entered_again_opens_on_the_callers_newest_turn() -> None:
     h = Harness(_isolated_job())
     await _in_step(h, "order_flow")
@@ -589,21 +506,6 @@ def _flows(
         state=state(task_plan),
         call=call,
     )
-
-
-def test_a_task_that_reads_a_tool_no_prefetch_lookup_runs_fails_the_build() -> None:
-    payload = job()
-    payload["tasks"][1]["inputs"] = [{"kind": "tool", "name": "load_customr"}]
-    task_plan = plan(payload)
-    call = CallHooks(
-        state=state(task_plan),
-        prefetch=Prefetch([Lookup("load_customer", lambda _s: {}, {"order_id": "id"})]),
-    )
-    with pytest.raises(ValueError, match=r"task take_note reads the tool 'load_customr'"):
-        _flows(payload, call=call)
-
-    payload["tasks"][1]["inputs"] = [{"kind": "tool", "name": "load_customer"}]
-    _flows(payload, call=call)
 
 
 def test_a_task_that_reads_a_tool_fails_the_build_when_the_call_has_no_prefetch() -> None:

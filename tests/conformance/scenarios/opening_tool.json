@@ -60,7 +60,7 @@
       "caller": "Now check order B-7.",
       "model": [
         {"site": "", "calls": [{"name": "order_flow", "arguments": {"order_id": "B-7"}}]},
-        {"site": "task:find_order", "text": "What would you like to know about it?"}
+        {"site": "task:find_order", "holds": "`search_web` already ran as this step opened, with {\"q\": \"B-7\"}", "text": "What would you like to know about it?"}
       ],
       "spoken": ["Let me look.", "What would you like to know about it?"]
     },

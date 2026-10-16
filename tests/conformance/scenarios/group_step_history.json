@@ -227,7 +227,13 @@
           "heard": [
             "I need help with my order."
           ],
-          "text": "Anything else?"
+          "text": "Anything else?",
+          "prompt": "You help callers with their orders.",
+          "tools": [
+            "search_web",
+            "normalize",
+            "order_flow"
+          ]
         }
       ],
       "spoken": [

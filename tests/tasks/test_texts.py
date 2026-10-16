@@ -7,6 +7,8 @@ unmute@4a738ad internal/generate/task_prompt.go, livekit_v1_build.go
 
 from typing import Any
 
+import pytest
+
 from tests.tasks.job import filled, job, plan, state
 from unmute_core.tasks import (
     EMPTY_REPLY_ATTEMPTS,
@@ -84,18 +86,21 @@ def test_status_delegate_reads_unmutes_docstring() -> None:
     )
 
 
-def test_a_transferring_group_says_it_does_not_return_with_unmutes_words() -> None:
-    # unmute@d70247b internal/generate/livekit_v1_build.go:1125
-    unmute = (
-        "Take the payment. This flow does not return to you: when it finishes the caller is "
-        "handed to the billing."
-    )
-    status = delegate_description(
-        "Take the payment.", record=False, carries_turn=False, transfers_to="billing"
-    )
-    record = delegate_description(
-        "Take the payment.", record=True, carries_turn=False, transfers_to="billing"
-    )
+@pytest.mark.parametrize(
+    ("then", "ending"),
+    [
+        # unmute@d70247b internal/generate/livekit_v1_build.go:1125
+        ({"transfers_to": "billing"}, "when it finishes the caller is handed to the billing."),
+        ({"ends_call": True}, "when it finishes the call ends."),
+    ],
+    ids=["transfer", "end"],
+)
+def test_a_group_that_ends_or_transfers_says_it_does_not_return_with_unmutes_words(
+    then: dict[str, Any], ending: str
+) -> None:
+    unmute = f"Take the payment. This flow does not return to you: {ending}"
+    status = delegate_description("Take the payment.", record=False, carries_turn=False, **then)
+    record = delegate_description("Take the payment.", record=True, carries_turn=False, **then)
     for text in (status, record):
         assert text.startswith(
             unmute + " Only a flow that hands the caller back, or fails, returns."

@@ -20,7 +20,6 @@ from tests.outputs import AnyResult
 from tests.tasks.job import Canned, State, job, plan, registry, state
 from unmute_core.state import CallInfo, CallState
 from unmute_core.tasks import (
-    NOT_YET_TOOL_NAME,
     AfterReply,
     CallTasks,
     DelegateRun,
@@ -140,34 +139,6 @@ async def test_a_refused_save_held_is_saved_unconfirmed_when_the_caller_hangs_up
     assert await tasks.state.settle_held() == ["take_note"]
     assert tasks.state.plain("note") == "read back"
     assert not tasks.state.is_confirmed("note")
-
-
-async def test_a_held_save_the_caller_spoke_after_is_asked_finish_or_not_yet() -> None:
-    tasks = _tasks()
-    step = _step(_start(tasks, "take_note"), turns=2)
-    await step.finish({"note": "a call back"}, caller_turns=2, spoke=True)
-    asked: list[FinishCheck] = []
-
-    async def decide(check: FinishCheck) -> dict[str, Any]:
-        asked.append(check)
-        return {"note": "an email"}
-
-    assert step.hold_save(caller_spoke_since=lambda: True, decide=decide)
-    assert await tasks.state.settle_held() == ["take_note"]
-    assert tasks.state.plain("note") == "an email"
-    [check] = asked
-    assert '{"note": "a call back"}' in check.instruction
-    assert [tool["name"] for tool in check.tools] == ["finish", NOT_YET_TOOL_NAME]
-
-
-async def test_a_later_finish_releases_the_held_save() -> None:
-    tasks = _tasks()
-    step = _step(_start(tasks, "take_note"), turns=2)
-    await step.finish({"note": "read back"}, caller_turns=2, spoke=True)
-    step.hold_save(caller_spoke_since=lambda: False)
-    assert await step.finish({"note": "said"}, caller_turns=3) is None
-    assert await tasks.state.settle_held() == []
-    assert tasks.state.plain("note") == "said"
 
 
 async def test_only_a_save_refused_before_the_caller_spoke_is_held() -> None:
@@ -632,22 +603,6 @@ def test_an_argument_that_does_not_fit_refuses_the_start() -> None:
     assert tasks.active is None
 
 
-async def test_a_step_opens_on_its_tool_and_says_the_line_without_its_announce() -> None:
-    search = Canned({"title": "order A-12"})
-    tasks = _opening_tasks(search_web=search)
-    step = _first_step(tasks, {"order_id": "A-12"})
-    assert step.announce == "Let me look."
-
-    opening = await step.open()
-
-    assert opening is not None
-    assert opening.line == "I found order A-12. Is that the one?"
-    assert (opening.tool, opening.arguments) == ("search_web", '{"q": "A-12"}')
-    assert search.calls == [{"q": "A-12"}]
-    assert step.listens and step.announce is None
-    assert await step.open() is None
-
-
 async def test_an_opening_line_reads_the_whole_result_of_a_tool_that_hides_it() -> None:
     task_plan = plan(_opening_job(), tools=registry(search_web=Canned({"title": "order A-12"})))
     hidden = task_plan.tools.get("search_web")
@@ -691,17 +646,6 @@ async def test_an_opening_leaves_out_an_unset_value_its_tool_does_not_require() 
     assert search.calls == [{"near": "open"}]
     no_status = _first_step(CallTasks(task_plan, state(task_plan)), {"order_id": "A-12"})
     assert await no_status.open() is None
-
-
-async def test_a_step_opens_as_before_when_no_line_fills() -> None:
-    step = _first_step(_opening_tasks(search_web=Canned({"nothing": "here"})), {"order_id": "A-12"})
-
-    opening = await step.open()
-
-    assert opening is not None and opening.line is None
-    assert opening.result == {"nothing": "here"}
-    assert not step.listens and step.announce == "Let me look."
-    assert '`search_web` already ran as this step opened, with {"q": "A-12"}' in step.instructions()
 
 
 def _first_step(tasks: CallTasks, arguments: dict[str, str]) -> StepRun:
@@ -785,20 +729,6 @@ def _confirm_step(
     task_plan = plan(payload, tools=tools)
     tasks = CallTasks(task_plan, state(task_plan), language=language, timezone=timezone)
     return _first_step(tasks, held or {})
-
-
-async def test_a_tool_with_confirm_lines_runs_once_the_caller_heard_its_input_asked() -> None:
-    lookup = Checked({"found": False})
-    step = _confirm_step(lookup)
-
-    asked = await step.call_tool("lookup_order", {"order_id": "a-12"})
-
-    assert isinstance(asked, dict) and asked["status"] == "not_run_yet"
-    assert step.reply == asked["asked"] == "Shall I close order A-12?"
-    assert lookup.calls == []
-    step.reply_played(asked["asked"], heard=True)
-    await step.call_tool("lookup_order", {"order_id": "A-12"})
-    assert lookup.calls == [{"order_id": "A-12"}]
 
 
 async def test_a_confirm_line_cut_off_or_a_changed_input_is_asked_again() -> None:
@@ -985,21 +915,6 @@ def _confirm_opening(
     return tasks, _first_step(tasks, held)
 
 
-async def test_a_step_can_open_by_asking_to_confirm_the_tool_it_ends_on() -> None:
-    lookup = Checked({"found": True, "order": {"id": "A-12"}, "status": "open"})
-    _, step = _confirm_opening(lookup, {"order_id": "a-12"})
-
-    opening = await step.open()
-
-    assert opening is not None and opening.line == "Shall I close order A-12?"
-    assert isinstance(opening.result, dict) and opening.result["status"] == "not_run_yet"
-    assert lookup.calls == []
-    assert step.listens and step.announce is None
-    step.reply_played(opening.line, heard=True)
-    assert await step.call_tool("lookup_order", {"order_id": "A-12"}) is None
-    assert step.done and lookup.calls == [{"order_id": "A-12"}]
-
-
 async def test_an_opening_question_cut_off_is_asked_again_before_anything_runs() -> None:
     lookup = Checked({"found": True, "order": {"id": "A-12"}, "status": "open"})
     _, step = _confirm_opening(lookup, {"order_id": "A-12"})
@@ -1149,41 +1064,10 @@ def _ending_group() -> dict[str, Any]:
     return payload
 
 
-async def test_a_group_whose_then_is_end_ends_the_call_once_it_completes() -> None:
-    tasks = _tasks(_ending_group())
-    [tool] = [t for t in tasks.delegate_tools() if t["name"] == "order_flow"]
-    assert "when it finishes the call ends" in tool["description"]
-    run = _start(tasks, "order_flow")
-    step = _step(run)
-    assert await step.finish({"note": "bye"}, caller_turns=2) is None
-    run.ended(step)
-    assert run.next_step() is None
-    run.result(caller_turns=2)
-    assert run.ends_call
-
-
 def _transferring_group() -> dict[str, Any]:
     payload = job()
     payload["groups"][0] |= {"steps": ["take_note"], "then": "transfer", "then_target": "billing"}
     return payload
-
-
-async def test_a_group_whose_then_is_transfer_names_its_target_once_it_completes() -> None:
-    tasks = _tasks(_transferring_group())
-    [tool] = [t for t in tasks.delegate_tools() if t["name"] == "order_flow"]
-    assert (
-        "This flow does not return to you: when it finishes the caller is handed to the billing."
-        in tool["description"]
-    )
-    run = _start(tasks, "order_flow")
-    step = _step(run)
-    assert await step.finish({"note": "bye"}, caller_turns=2) is None
-    run.ended(step)
-    assert run.next_step() is None
-    assert run.transfers_to is None
-    run.result(caller_turns=2)
-    assert run.transfers_to == "billing"
-    assert not run.ends_call
 
 
 @pytest.mark.parametrize("group", [_ending_group, _transferring_group], ids=["end", "transfer"])

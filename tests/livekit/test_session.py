@@ -64,15 +64,6 @@ def _outputs(request: Any, name: str) -> list[Any]:
     return [json.loads(output) if output.startswith(("{", "[")) else output for output in outputs]
 
 
-async def test_the_main_agent_loses_task_only_tools_and_a_step_sees_its_own() -> None:
-    model = ScriptedLLM(call("order_flow"), "Which order?")
-    await _talk(_plan(), model, "Where is my order?")
-
-    main, step = model.requests[0], model.requests[1]
-    assert main.tools == ["search_web", "normalize", "find_order", "take_note", "order_flow"]
-    assert step.tools == ["lookup_order", "finish"]
-
-
 async def test_a_step_reads_only_its_own_prompt_filled_and_no_running_call() -> None:
     task_plan = _plan()
     model = ScriptedLLM(call("order_flow"), "Which order?")
@@ -88,15 +79,6 @@ async def test_a_step_reads_only_its_own_prompt_filled_and_no_running_call() -> 
     assert "Find order B-7." in step.prompt
     assert "You help with orders." not in step.prompt
     assert step.calls == []
-
-
-async def test_a_step_ending_on_its_tool_asks_for_no_reply_from_the_step() -> None:
-    model = ScriptedLLM(call("find_order"), call("lookup_order"), "It is open.")
-    call_state, _ = await _talk(_plan(), model, "Where is order A-12?")
-
-    assert call_state.plain("status") == "open"
-    assert len(model.requests) == 3
-    assert model.requests[-1].tools[-1] == "order_flow"
 
 
 async def test_a_listening_step_says_its_line_and_waits_for_the_caller() -> None:

@@ -13,15 +13,11 @@ from tests.livekit.fake import ScriptedLLM, call
 from tests.tasks.job import Canned, job, plan, registry, state
 from tests.test_handoff import KeyLimited
 from unmute_core.agent import AgentSpec
-from unmute_core.call import (
-    CallHooks,
-)
 from unmute_core.livekit import (
     ModelCallLLM,
     UnmuteAgent,
 )
 from unmute_core.model import ModelEvent, ModelRequest, TextDelta
-from unmute_core.prefetch import Lookup, Prefetch
 
 FOUND = {"found": True, "order": {"id": "A-12"}, "status": "open"}
 
@@ -99,16 +95,6 @@ async def test_the_llm_closes_its_model_call() -> None:
     model = Scripted()
     await ModelCallLLM(model).aclose()
     assert model.closed == 1
-
-
-def test_a_task_input_naming_no_prefetch_lookup_fails_at_build() -> None:
-    payload = job()
-    payload["tasks"][1]["inputs"] = [{"kind": "tool", "name": "load_customr"}]
-    tasks = plan(payload)
-    lookup = Lookup("load_customer", registry().get("search_web"), assign={})
-    hooks = CallHooks(state(tasks), prefetch=Prefetch([lookup], state=tasks.state))
-    with pytest.raises(ValueError, match="'load_customr', which no prefetch Lookup runs"):
-        UnmuteAgent(AgentSpec("Orders.", tasks=tasks), state=state(tasks), call=hooks)
 
 
 def test_a_placeholder_key_too_long_fails_at_build_only_for_a_model_call_with_a_limit() -> None:

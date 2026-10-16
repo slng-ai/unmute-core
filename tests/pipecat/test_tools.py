@@ -5,14 +5,13 @@ from datetime import date
 from types import SimpleNamespace
 from typing import Any, cast
 
-import pytest
 from pipecat.frames.frames import BotStoppedSpeakingFrame, TTSSpeakFrame
 from pydantic import BaseModel
 
 from tests.outputs import AnyResult
 from tests.pipecat.test_realtime import live, realtime
 from tests.tasks.job import Canned, Sending
-from unmute_core.call import AGENT_ENDED, CallHooks
+from unmute_core.call import CallHooks
 from unmute_core.pipecat import tools_schema
 from unmute_core.tools import ToolRegistry, ToolReply, ToolSpec
 
@@ -45,40 +44,6 @@ def _handler(registry: ToolRegistry, name: str) -> Any:
     schema = next(s for s in tools_schema(registry).standard_tools if s.name == name)
     assert schema.handler is not None
     return schema.handler
-
-
-async def test_a_tool_says_its_announce_line_before_its_result() -> None:
-    registry = ToolRegistry(
-        [ToolSpec("look", "Look.", OPEN, AnyResult, Canned({"ok": 1}), announce="Hm.")]
-    )
-    params = Params()
-    await _handler(registry, "look")(cast(Any, params))
-    assert [frame.text for frame in params.pushed if isinstance(frame, TTSSpeakFrame)] == ["Hm."]
-    assert params.results == [({"ok": 1}, None)]
-
-
-async def test_a_tool_that_ends_the_conversation_asks_for_no_reply_and_ends() -> None:
-    tool = ToolSpec(
-        "bye", "Bye.", OPEN, AnyResult, Canned({"ok": True}), effect="ends_conversation"
-    )
-    params = Params()
-    await _handler(ToolRegistry([tool]), "bye")(cast(Any, params))
-    [(result, properties)] = params.results
-    assert result == {"ok": True} and properties.run_llm is False
-    assert params.ended
-
-
-async def test_a_tool_that_ends_the_conversation_notes_the_end_as_the_agents() -> None:
-    tool = ToolSpec(
-        "bye", "Bye.", OPEN, AnyResult, Canned({"ok": True}), effect="ends_conversation"
-    )
-    call = CallHooks()
-    schema = next(
-        s for s in tools_schema(ToolRegistry([tool]), hooks=call).standard_tools if s.name == "bye"
-    )
-    assert schema.handler is not None
-    await schema.handler(cast(Any, Params()))
-    assert (await call.end("ended")).reason == AGENT_ENDED
 
 
 class Arrival(BaseModel):
@@ -185,21 +150,6 @@ def _ending_and_plain() -> ToolRegistry:
             ToolSpec("look", "Look.", OPEN, AnyResult, Canned({"ok": 1})),
         ]
     )
-
-
-@pytest.mark.parametrize("ends_first", [True, False], ids=["end first", "end last"])
-async def test_a_result_beside_a_tool_that_ends_the_call_asks_for_no_reply(
-    ends_first: bool,
-) -> None:
-    worker = Params()
-    registry = _ending_and_plain()
-    names = ["bye", "look"] if ends_first else ["look", "bye"]
-    calls = {name: Together(worker, name) for name in names}
-    for name in names:
-        await _handler(registry, name)(cast(Any, calls[name]))
-    assert calls["bye"].results[0][1].run_llm is False
-    plain = calls["look"].results[0][1]
-    assert plain is not None and plain.run_llm is False if ends_first else plain is None
 
 
 async def test_a_realtime_service_is_not_sent_the_result_of_a_tool_that_ends_the_call() -> None:

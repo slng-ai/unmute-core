@@ -32,7 +32,7 @@
     }
   ],
   "at_end": [
-    {"site": "task:take_note", "tool_choice": "required", "tools": ["finish", "not_yet"], "calls": [{"name": "finish", "arguments": {"note": "an email"}}]}
+    {"site": "task:take_note", "tool_choice": "required", "tools": ["finish", "not_yet"], "holds": "{\"note\": \"a call back\"}", "calls": [{"name": "finish", "arguments": {"note": "an email"}}]}
   ],
   "expect": {
     "state": {"order_id": null, "status": null, "note": "an email", "tags": []},
