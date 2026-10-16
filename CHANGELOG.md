@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### New
+
+- `hand_off(opens_with=OpeningTool(...))` on LiveKit and Pipecat runs a tool of the next agent in code as it takes the call. The registry saves what the result names. When a reply line fills, that line is the agent's first reply, with no model request. When none fills, the model replies as before. A realtime model refuses it.
+
 ## 0.14.0
 
 This is the first release since 0.10.0. Versions 0.11, 0.12 and 0.13 were never released, so their changes are listed here too.

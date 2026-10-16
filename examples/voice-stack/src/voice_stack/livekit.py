@@ -203,7 +203,9 @@ def handoff_tool(
         if not isinstance(current, UnmuteAgent):
             raise TypeError("a handoff runs only from an UnmuteAgent")
         target = unmute_agent(app, every[handoff.to], state, every)
-        return await current.hand_off(target, announce=handoff.announce)
+        return await current.hand_off(
+            target, announce=handoff.announce, opens_with=handoff.opens_with
+        )
 
     return function_tool(hand_off, name=handoff.tool, description=handoff.description)
 

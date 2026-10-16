@@ -2,6 +2,7 @@
 
 ``StepOpening`` is the part of a ``StepRun`` that decides how the step begins. The adapter
 reads what it decided through the step's ``announce``, ``listens`` and ``opening_message``.
+``open_agent`` runs the same opening tool for a main agent handed the call.
 """
 
 import json
@@ -12,11 +13,13 @@ from pydantic.dataclasses import dataclass
 from pydantic_core import to_jsonable_python
 
 from unmute_core._pydantic import VALUE, original_errors
+from unmute_core.state import CallState
 from unmute_core.tasks._progress import GroupProgress
 from unmute_core.tasks._record import new_run_id
-from unmute_core.tasks._spec import TaskSpec
+from unmute_core.tasks._spec import OpeningTool, TaskSpec
 from unmute_core.tasks._texts import BEGIN_STEP, STEP_BOUNDARY, WAIT_FOR_CALLER, opening_ran
-from unmute_core.tools import ToolError, ToolRegistry
+from unmute_core.tools import SpokenLines, ToolError, ToolHooks, ToolRegistry
+from unmute_core.tools._lines import state_words
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -122,18 +125,9 @@ class StepOpening:
         if spec is None:
             return None
         state = self._tasks.state
-        given = {
-            parameter: to_jsonable_python(state.plain(name))
-            for parameter, name in spec.arguments.items()
-        }
-        schema = self._tools.get(spec.tool).model_parameters
-        optional = schema.get("properties", {}).keys() - set(schema.get("required", ()))
-        empty = {parameter for parameter, value in given.items() if value in (None, "", [])}
-        if empty - optional:
+        arguments = _arguments(spec, self._tools, state)
+        if arguments is None:
             return None
-        arguments = {
-            parameter: value for parameter, value in given.items() if parameter not in empty
-        }
         asks = spec.tool in self._confirm
         if (
             asks
@@ -168,4 +162,108 @@ class StepOpening:
             arguments=text,
             result=result,
             line=line,
+        )
+
+
+def _arguments(
+    spec: OpeningTool, tools: ToolRegistry, state: CallState | None
+) -> dict[str, object] | None:
+    """Return the opening tool's arguments from the State, or None while one it needs is unset.
+
+    An unset value for a parameter the tool's schema declares and does not require is left
+    out of the call.
+    """
+    given = {
+        parameter: to_jsonable_python(state.plain(name) if state is not None else None)
+        for parameter, name in spec.arguments.items()
+    }
+    schema = tools.get(spec.tool).model_parameters
+    optional = schema.get("properties", {}).keys() - set(schema.get("required", ()))
+    empty = {parameter for parameter, value in given.items() if value in (None, "", [])}
+    if empty - optional:
+        return None
+    return {parameter: value for parameter, value in given.items() if parameter not in empty}
+
+
+async def open_agent(
+    spec: OpeningTool,
+    tools: ToolRegistry,
+    state: CallState | None,
+    lines: SpokenLines,
+    *,
+    hooks: ToolHooks | None = None,
+) -> Opening | None:
+    """Run the tool a main agent opens with, in code, as it takes a call handed to it.
+
+    The registry runs the tool and saves what its ``assign`` rows name. The line is the
+    first of the opening's ``say`` lines that fills, else the registry's ``ToolReply`` for
+    the result. When a line fills, the adapter puts the call and its result in the history,
+    says the line, and asks the model nothing. When none fills, the model replies as it
+    would without an opening, and the adapter only traces the call.
+
+    Args:
+        spec: The opening. Its tool is one of the agent's own.
+        tools: The agent's tools.
+        state: The call state, which the arguments read.
+        lines: The call's spoken lines.
+        hooks: The call's hooks, run around the tool.
+
+    Returns:
+        The opening, or None when the tool did not run: a value it needs is unset, or it
+        failed.
+    """
+    arguments = _arguments(spec, tools, state)
+    if arguments is None:
+        return None
+    try:
+        result = await tools.call(spec.tool, arguments, state, hooks=hooks)
+    except ToolError as error:
+        logger.info("opening %s of a handed-off agent failed: %s", spec.tool, error.message)
+        return None
+    line = None
+    if tools.save_result(spec.tool, result, state, hooks=hooks):
+        tool = tools.get(spec.tool)
+        line = (
+            lines.line(
+                f"opening:{spec.tool}",
+                spec.say,
+                result,
+                tool.result_form,
+                state_words(state, "", spec.say),
+            )
+            if spec.say
+            else lines.reply(tool, tools.replies, result, state)
+        )
+    return Opening(
+        call_id=f"opening_{new_run_id()}",
+        tool=spec.tool,
+        arguments=json.dumps(arguments),
+        result=result,
+        line=line,
+    )
+
+
+def check_opening(spec: OpeningTool | None, tools: ToolRegistry, *, realtime: bool) -> None:
+    """Refuse a handoff's opening tool the agent taking the call cannot run.
+
+    Args:
+        spec: The opening, or None.
+        tools: The tools of the agent taking the call.
+        realtime: The call runs on a realtime model.
+
+    Raises:
+        ValueError: When the agent lacks the tool, or the model is a realtime one, which
+            keeps the history on its server. The message names the fix.
+    """
+    if spec is None:
+        return
+    if realtime:  # the session's model: runtime state
+        raise ValueError(
+            "hand_off(opens_with=...) needs a text model: a realtime model keeps the "
+            "history on its server. Leave opens_with out on a realtime call"
+        )
+    if spec.tool not in tools:  # the agent's tools: another object
+        raise ValueError(
+            f"hand_off opens with '{spec.tool}', which the agent taking the call does not "
+            "have. Add it to that agent's tools"
         )

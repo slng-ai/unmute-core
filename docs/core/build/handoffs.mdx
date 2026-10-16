@@ -183,6 +183,25 @@ async def to_billing(params: FunctionCallParams) -> None:
 2. An agent whose spec has no `model` runs on the call's first model. The same holds for the voice.
 3. On Pipecat, a spec with a `model` needs a `ModelCallLLMService`, and the voices go through a `VoiceSwitcher`.
 
+## Open the next agent on a tool
+
+The next agent's first reply comes from the model. When it must start with something code
+already knows, run a tool in code instead. Pass `opens_with`:
+
+```python
+from unmute_core.tasks import OpeningTool
+
+await self.hand_off(tutor, opens_with=OpeningTool(tool="continue_lesson"))  # LiveKit
+await flows.hand_off(params, tutor_spec, opens_with=OpeningTool(tool="continue_lesson"))  # Pipecat
+```
+
+1. The tool runs through the next agent's `ToolRegistry`, so its `assign` rows save values.
+2. Its line is the first of the opening's `say` lines that fills, else the registry's `ToolReply` for the result.
+3. When a line fills, it is the agent's first reply. The tool call and its result join the history, and no model request is made.
+4. When no line fills, or the tool is refused or fails, the model replies first as before.
+5. `arguments` maps tool parameters to State values, as on a [task step's opening](/core/reference/tasks#openingtool). The tool does not run while one of them is unset.
+6. A realtime model refuses `opens_with`: it keeps the history on its server.
+
 ## A handoff from a task step
 
 A task can offer the agent's handoff tools to its steps:

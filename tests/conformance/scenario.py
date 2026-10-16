@@ -38,7 +38,7 @@ from unmute_core.model import (
 )
 from unmute_core.prefetch import Lookup, Prefetch
 from unmute_core.state import CallState, StateSchema
-from unmute_core.tasks import NOT_YET_TOOL_NAME, TaskPlan, TasksSpec
+from unmute_core.tasks import NOT_YET_TOOL_NAME, OpeningTool, TaskPlan, TasksSpec
 from unmute_core.telemetry import STT_SPAN, TOOL_SPAN, TTS_SPAN, Telemetry
 from unmute_core.telephony import (
     NoPhoneCaller,
@@ -276,11 +276,12 @@ class Context(_Strict):
 
 
 class Handoff(_Strict):
-    """A handoff tool: the agent it gives the call to, its line, and what that agent hears."""
+    """A handoff tool: its agent, its line, what that agent hears, the tool it opens with."""
 
     to: str
     announce: str | None = None
     context: Context = Context()
+    opens_with: OpeningTool | None = None
 
 
 class Agent(_Strict):
