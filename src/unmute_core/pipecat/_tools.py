@@ -176,7 +176,14 @@ async def answer_ending(params: FunctionCallParams, result: object) -> None:
     On a realtime service the result stays local too, so it does not ask for a reply.
     Pipecat still records the result: the tool span, the transcript and the dev record
     show the tool.
+
+    A realtime service runs each call as soon as its arguments are done, while the model
+    still writes the reply's later calls. So it waits for the reply to end first: an end
+    now would close the session before those calls arrive. They run meanwhile, and their
+    results are held back, since this call still runs.
     """
+    if can_hold(params.llm):
+        await reply_ended(params.llm)
     _ENDING.add(params.pipeline_worker)
     withhold_result(params.llm, params.tool_call_id)
     await params.result_callback(result, properties=FunctionCallResultProperties(run_llm=False))
