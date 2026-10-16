@@ -61,6 +61,11 @@ def test_the_realtime_service_still_has_its_private_context_and_setup_flag() -> 
     assert isinstance(llm._llm_needs_conversation_setup, bool)
 
 
+def test_the_realtime_service_still_notes_when_its_session_is_ready() -> None:
+    """The conformance driver opens a realtime call once ``_api_session_ready`` is set."""
+    assert OpenAIRealtimeLLMService(api_key="test")._api_session_ready is False
+
+
 def test_an_llm_service_still_has_a_base_system_instruction_and_update_settings() -> None:
     """``RequestHooks`` reads ``_base_system_instruction`` and calls ``_update_settings`` to lend a prompt."""
     assert inspect.iscoroutinefunction(LLMService._update_settings)
