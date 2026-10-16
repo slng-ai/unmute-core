@@ -7,7 +7,7 @@ would, and ``calls`` plays one model reply: its text, its tool calls, and their 
 import asyncio
 import itertools
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from types import SimpleNamespace
 from typing import Any, cast
 
@@ -326,3 +326,10 @@ class Harness:
 def runs_llm(properties: Any) -> bool:
     """Whether a result asks for a model reply."""
     return properties is None or properties.run_llm is not False
+
+
+async def until(done: Callable[[], object]) -> None:
+    """Wait until ``done()`` is true, or fail the test after 3 s."""
+    async with asyncio.timeout(3):
+        while not done():
+            await asyncio.sleep(0)

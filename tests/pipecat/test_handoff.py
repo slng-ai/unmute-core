@@ -5,7 +5,6 @@ cases cover the Pipecat side: how the handoff call is answered, and the prompt f
 the native path.
 """
 
-import asyncio
 import importlib
 from types import SimpleNamespace
 from typing import Any, cast
@@ -16,7 +15,14 @@ from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.services.llm_service import FunctionCallParams
 
-from tests.pipecat.harness import MAIN_PROMPT, FakeAggregators, FakeLLM, Harness, runs_llm
+from tests.pipecat.harness import (
+    MAIN_PROMPT,
+    FakeAggregators,
+    FakeLLM,
+    Harness,
+    runs_llm,
+    until,
+)
 from tests.tasks.job import JOB, Canned, specialist_plan
 from tests.test_handoff import KeyLimited, Summarizer
 from unmute_core.agent import AgentSpec
@@ -170,7 +176,7 @@ async def test_a_service_that_cannot_be_asked_runs_the_finish_check_on_the_summa
     await h.reply("What is your note?")
     h.user("Please call me back.")
     await h.reply("Noted: please call me back.")
-    await asyncio.sleep(0.05)
+    await until(lambda: summarizer.requests)
     assert [request.tool_choice for request in summarizer.requests] == ["required"]
 
 
@@ -213,7 +219,7 @@ async def test_a_google_service_runs_the_finish_check_on_its_own_client(
     await h.reply("What is your note?")
     h.user("Please call me back.")
     await h.reply("Noted: please call me back.")
-    await asyncio.sleep(0.05)
+    await until(lambda: finishes)
 
     [sent] = models.sent
     assert sent["model"] == "gemini-x"

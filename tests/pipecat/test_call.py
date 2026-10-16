@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from tests.hooks.helpers import checks, on_end
 from tests.outputs import AnyResult
+from tests.pipecat.harness import until
 from unmute_core.agent import AgentSpec
 from unmute_core.call import (
     AGENT_ENDED,
@@ -133,12 +134,12 @@ class Worker:
 async def test_max_duration_ends_the_pipeline_unless_it_finished_first():
     worker = Worker()
     max_duration(cast(Any, worker), 0.01)
-    await asyncio.sleep(0.05)
+    await until(lambda: worker.queued)
     assert [type(frame) for frame in worker.queued] == [EndFrame]
     finished = Worker()
     max_duration(cast(Any, finished), 0.01)
     await finished.handlers["on_pipeline_finished"](finished, None)
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.05)  # past the 0.01 s limit, which would end the pipeline
     assert finished.queued == []
 
 
@@ -148,7 +149,7 @@ async def test_max_duration_notes_the_end_so_the_call_ends_with_that_reason():
     call = CallHooks(hooks=on_end(ended.append))
     attach_call(cast(Any, worker), call, LLMContext())
     max_duration(cast(Any, worker), 0.01, call=call)
-    await asyncio.sleep(0.05)
+    await until(lambda: worker.queued)
     assert [type(frame) for frame in worker.queued] == [EndFrame]
     await worker.emit("on_pipeline_finished", worker, EndFrame())
     assert ended[0].reason == MAX_DURATION
@@ -163,7 +164,7 @@ async def test_a_failure_after_the_end_was_asked_keeps_the_asked_reason():
     llm = OpenAILLMService(api_key="k", settings=OpenAILLMService.Settings(model="m"))
     await llm.set_usable(False)
     await worker.emit("on_pipeline_error", worker, ErrorFrame("down", processor=llm))
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.01)  # time for a wrong failure line to start
     assert worker.queued == []
     await worker.emit("on_pipeline_finished", worker, EndFrame())
     assert ended[0].reason == AGENT_ENDED
@@ -303,7 +304,7 @@ async def test_an_unusable_service_fails_the_call_and_a_usable_one_does_not():
     llm = OpenAILLMService(api_key="k", settings=OpenAILLMService.Settings(model="m"))
     await llm.set_usable(False)
     await worker.emit("on_pipeline_error", worker, ErrorFrame("down", processor=llm))
-    await asyncio.sleep(0.01)
+    await until(lambda: len(worker.queued) == 2)
     assert [type(frame) for frame in worker.queued] == [TTSSpeakFrame, EndFrame]
 
 

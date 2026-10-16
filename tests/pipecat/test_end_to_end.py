@@ -39,7 +39,7 @@ class BySite:
 async def _until(check: Callable[[], bool]) -> None:
     async with asyncio.timeout(5):
         while not check():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
 
 
 async def test_a_two_step_group_runs_end_to_end_on_a_real_pipeline() -> None:
