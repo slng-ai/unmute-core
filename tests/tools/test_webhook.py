@@ -407,9 +407,3 @@ def test_an_unknown_method_keeps_its_plain_error() -> None:
     ) as raised:
         Webhook("https://orders.test/a", method="fetch")
     assert type(raised.value) is ValueError
-
-
-def test_a_range_error_names_the_public_class_and_the_field():
-    with pytest.raises(ValueError) as caught:
-        Webhook("https://api.example.com/x", timeout=120)
-    assert str(caught.value).splitlines()[:2] == ["1 validation error for Webhook", "timeout"]

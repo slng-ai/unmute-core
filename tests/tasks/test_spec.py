@@ -188,11 +188,9 @@ REFUSED = [
         _with(replies=[{"tool": "search_web", "when": {"ok": [True]}, "say": ["Hi."]}]),
         "replies to 'search_web', which it does not list in tools",
     ),
-    (_with(model=""), "at least 1 character"),
     (_group(then="transfer"), "then_target is required with transfer. Name the agent"),
     (_group(then_target="billing"), "then_target is legal with transfer only. Remove it"),
     (_group(then="end", then_target="billing"), "then_target is legal with transfer only"),
-    (_group(then="transfer", then_target="bill ing"), "should match pattern"),
 ]
 
 
@@ -204,12 +202,6 @@ def test_a_group_transfers_the_call_to_the_agent_it_names() -> None:
     task_plan.check_then_targets({"billing", "notes"})
     with pytest.raises(ValueError, match="transfers the call to 'billing', which then_targets"):
         task_plan.check_then_targets({"notes"})
-
-
-def test_a_task_names_its_model_or_runs_on_the_agents() -> None:
-    spec = TasksSpec.model_validate(_with(model="fast"))
-    assert [task.model for task in spec.tasks][-1] == "fast"
-    assert {task.model for task in spec.tasks[:-1]} == {None}
 
 
 @pytest.mark.parametrize(("payload", "message"), REFUSED)

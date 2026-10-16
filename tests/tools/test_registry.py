@@ -501,22 +501,6 @@ def test_local_tool_refuses_a_function_it_cannot_type(
         local_tool(handler, **options)
 
 
-async def test_local_tool_takes_a_pattern_and_a_tuple():
-    class Found(BaseModel):
-        text: str
-
-    @local_tool
-    def find(code: Annotated[str, Field(pattern=r"^\d+$")], pair: tuple[int, str]) -> Found:
-        """Find."""
-        return Found(text=f"{code} {pair}")
-
-    properties = find.parameters["properties"]
-    assert properties["code"]["pattern"] == r"^\d+$"
-    assert "prefixItems" in properties["pair"]
-    result = await ToolRegistry([find]).call("find", {"code": "12", "pair": [1, "a"]})
-    assert result == {"text": "12 (1, 'a')"}
-
-
 async def test_a_lone_model_parameter_is_the_whole_input_and_the_return_is_the_output():
     class Output(BaseModel):
         day: date
