@@ -71,7 +71,7 @@ from unmute_core.tools._lines import (
     result_paths,
     success_word,
 )
-from unmute_core.tools._schema import check_parameters, model_schema
+from unmute_core.tools._schema import check_parameters, model_schema, model_shape
 from unmute_core.tools._spoken import form_at
 
 logger = logging.getLogger(__name__)
@@ -681,9 +681,14 @@ class ToolSpec:
         return "context" in inspect.signature(self.executor.run).parameters
 
     @cached_property
-    def model_parameters(self) -> dict[str, Any]:
-        """The parameters without the locked arguments, as the model sees them."""
+    def shown_parameters(self) -> dict[str, Any]:
+        """The parameters without the locked arguments: what the model's arguments are checked against."""
         return model_schema(self.parameters, self.locked.keys())
+
+    @cached_property
+    def model_parameters(self) -> dict[str, Any]:
+        """The parameters as the model sees them: ``shown_parameters``, shaped by ``model_shape``."""
+        return model_shape(self.shown_parameters)
 
     @cached_property
     def _named_arguments(self) -> frozenset[str] | None:
@@ -691,7 +696,7 @@ class ToolSpec:
 
         None too when the executor names stray arguments itself, in its own words.
         """
-        schema = self.model_parameters
+        schema = self.shown_parameters
         additional = schema.get("additionalProperties")
         if (
             getattr(self.executor, "checks_extra_arguments", False)
@@ -705,7 +710,7 @@ class ToolSpec:
     @cached_property
     def _validator(self) -> Validator:
         """The validator for the model's arguments."""
-        return Draft202012Validator(self.model_parameters)
+        return Draft202012Validator(self.shown_parameters)
 
     def check_arguments(self, arguments: dict[str, Any]) -> None:
         """Check the model's own arguments against the schema it was shown.
