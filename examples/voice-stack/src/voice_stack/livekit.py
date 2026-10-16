@@ -112,7 +112,12 @@ class VertexLLM(google.LLM):
 
 
 def build_llm(settings: StackSettings, state: CallState) -> llm.LLM:
-    """Return the stack's model on LiveKit: Gemini on Vertex, or a ``gpt-`` model on OpenAI."""
+    """Return the stack's model on LiveKit: Gemini on Vertex, or a ``gpt-`` model on OpenAI.
+
+    Args:
+        settings: Which model, with which thinking level and keys.
+        state: The call state. A model call reads each request's values from it.
+    """
     if settings.on_openai:
         return ModelCallLLM(settings.openai_model(), state=state)
     return VertexLLM(

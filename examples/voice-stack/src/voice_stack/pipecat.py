@@ -126,8 +126,13 @@ class VertexLLM(GoogleLLMService):
         self._client = vertex_client(self._api_key, self._vertex_location)
 
 
-def build_llm(settings: StackSettings, state: CallState) -> LLMService:
-    """Return Gemini on Vertex, or a ``gpt-`` model on OpenAI. ``UnmuteFlows`` sets its prompt."""
+def build_llm(settings: StackSettings, state: CallState) -> LLMService[Any]:
+    """Return Gemini on Vertex, or a ``gpt-`` model on OpenAI. ``UnmuteFlows`` sets its prompt.
+
+    Args:
+        settings: Which model, with which thinking level and keys.
+        state: The call state. A model call reads each request's values from it.
+    """
     if settings.on_openai:
         return ModelCallLLMService(
             settings.openai_model(),
