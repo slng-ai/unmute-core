@@ -3,12 +3,12 @@
 import asyncio
 
 import pytest
-from livekit.agents import AgentSession, APIConnectOptions, APIStatusError, llm, tts
+from livekit.agents import AgentSession, APIConnectOptions, APIStatusError, tts
 from livekit.agents.voice.agent_session import SessionConnectOptions
 
 from tests.conformance.livekit_driver import Lines, Silence
 from tests.hooks.helpers import on_end
-from tests.livekit.fake import ScriptedLLM, call
+from tests.livekit.fake import ScriptedLLM, call, replies
 from tests.livekit.test_dev import Records
 from tests.tasks.job import Canned, job, plan, registry, state
 from unmute_core.agent import AgentSpec
@@ -57,15 +57,6 @@ class FailingVoice(tts.TTS):
         return _Sentence(tts=self, input_text=text, conn_options=conn_options)
 
 
-def assistant(session: AgentSession) -> list[llm.ChatMessage]:
-    """The agent's messages in the session's history."""
-    return [
-        item
-        for item in session.history.items
-        if isinstance(item, llm.ChatMessage) and item.role == "assistant"
-    ]
-
-
 async def test_a_voice_that_fails_leaves_the_call_open_and_answers_the_next_turn() -> None:
     voice = FailingVoice(speaks=1)
     ends: list[CallEnd] = []
@@ -87,7 +78,7 @@ async def test_a_voice_that_fails_leaves_the_call_open_and_answers_the_next_turn
         assert not closed.is_set()
         assert session.agent_state == "listening"
         assert len(model.requests) == 2
-        cut, silent = assistant(session)[0], assistant(session)[1:]
+        cut, *silent = replies(session)
         assert cut.text_content and cut.text_content.startswith("Your order is on its way.")
         assert cut.interrupted
         assert silent == []

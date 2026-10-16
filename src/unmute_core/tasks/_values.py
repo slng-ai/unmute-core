@@ -9,7 +9,6 @@ saves them in one batch, into ``CallState``.
 import json
 import logging
 from collections.abc import Collection, Iterator, Mapping, Sequence
-from types import MappingProxyType
 from typing import Annotated, Any, Literal, TypedDict, get_args, get_origin
 
 from pydantic import (
@@ -30,20 +29,9 @@ from unmute_core.state._types import json_text
 from unmute_core.tasks._spec import UNSERVED_FIELD, Assign, FinishRule, TaskSpec, read_path
 from unmute_core.tasks._texts import UNSERVED_DESCRIPTION, UNSERVED_DESCRIPTION_RECORD
 from unmute_core.tools._lines import result_matches
+from unmute_core.tools._schema import model_shape
 
 logger = logging.getLogger(__name__)
-
-_FORMAT_WORDS = MappingProxyType(
-    {
-        "date": "a date written YYYY-MM-DD",
-        "date-time": "a date and time written YYYY-MM-DDTHH:MM",
-        "email": "an email address",
-        "id": "an identifier: letters, digits, and then any of dot, dash, underscore or colon",
-        "name-email": "a name and an email address, written Jo Bloggs <jo@example.com>",
-        "phone": "a phone number with its country code: a plus, the country code, then the number",
-        "time": "a time of day written HH:MM on the 24-hour clock",
-    }
-)
 
 
 def _is_empty(value: object) -> bool:
@@ -183,54 +171,6 @@ def result_model(task: TaskSpec, state: type[BaseModel]) -> type[StepResult]:
     return create_model(title, __base__=StepResult, **definitions)
 
 
-_LITERAL_KEYWORDS = frozenset({"enum", "const", "default", "examples", "example"})
-_SCHEMA_MAPS = frozenset({"properties", "patternProperties"})
-
-
-def _tool_schema(node: object, defs: dict[str, Any]) -> object:
-    """Shape one schema node for a provider: refs inlined, format and pattern as words.
-
-    A nested ``$ref`` the model cannot resolve makes it invent field names, so every ref is
-    inlined. Some providers refuse ``format`` and ``pattern``, so they travel as words.
-    """
-    if isinstance(node, list):
-        return [_tool_schema(item, defs) for item in node]
-    if not isinstance(node, dict):
-        return node
-    target = node.get("$ref")
-    if isinstance(target, str) and target.startswith("#/$defs/"):
-        found = _tool_schema(defs.get(target.rsplit("/", 1)[1], {}), defs)
-        siblings = {key: _tool_schema(value, defs) for key, value in node.items() if key != "$ref"}
-        return {**found, **siblings} if isinstance(found, dict) else found
-    out = {
-        key: _schema_value(key, value, defs)
-        for key, value in node.items()
-        if key not in ("format", "pattern", "$defs", "title")
-    }
-    words = []
-    if node.get("format") in _FORMAT_WORDS:
-        words.append(_FORMAT_WORDS[node["format"]])
-    if isinstance(node.get("pattern"), str):
-        words.append("text matching " + node["pattern"])
-    if words:
-        sentences = [str(out.get("description", "")), "Expected " + "; ".join(words) + "."]
-        out["description"] = " ".join(sentence for sentence in sentences if sentence)
-    return out
-
-
-def _schema_value(keyword: str, value: object, defs: dict[str, Any]) -> object:
-    """Shape the value of one schema keyword.
-
-    A ``properties`` map holds field names, so its keys are never filtered as keywords.
-    Literal values (``enum``, ``const``, ``default``, ``examples``) are kept as they are.
-    """
-    if keyword in _LITERAL_KEYWORDS:
-        return value
-    if keyword in _SCHEMA_MAPS and isinstance(value, dict):
-        return {name: _tool_schema(child, defs) for name, child in value.items()}
-    return _tool_schema(value, defs)
-
-
 def finish_parameters(
     model: type[StepResult], *, record: bool, derived: Collection[str] = ()
 ) -> dict[str, Any]:
@@ -257,15 +197,15 @@ def finish_parameters(
 def _optional_parameters(model: type[BaseModel]) -> dict[str, Any]:
     """Return a tool's parameters from a model: one optional property per field, refs inlined."""
     schema = model.model_json_schema(by_alias=True)
-    defs = schema.get("$defs", {})
-    return {
-        "type": "object",
-        "properties": {
-            name: _tool_schema(node, defs) for name, node in schema.get("properties", {}).items()
-        },
-        "required": [],
-        "additionalProperties": False,
-    }
+    return model_shape(
+        {
+            "type": "object",
+            "properties": schema.get("properties", {}),
+            "required": [],
+            "additionalProperties": False,
+            "$defs": schema.get("$defs", {}),
+        }
+    )
 
 
 def argument_parameters(names: Sequence[str], state: type[BaseModel]) -> dict[str, Any]:

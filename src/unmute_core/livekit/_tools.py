@@ -13,7 +13,14 @@ from livekit.agents import llm
 from livekit.agents.voice import RunContext
 
 from unmute_core.call import AGENT_ENDED, CallHooks
-from unmute_core.livekit._calls import announce, end_call_now, raw_tool, say, tool_text
+from unmute_core.livekit._calls import (
+    announce,
+    asks_no_reply,
+    end_call_now,
+    raw_tool,
+    say,
+    tool_text,
+)
 from unmute_core.state import CallState
 from unmute_core.tools import LinePicker, SpokenLines, ToolHooks, ToolRegistry, ToolSpec
 
@@ -51,7 +58,10 @@ def function_tools(
     lines = SpokenLines(language, timezone)
 
     async def handler(arguments: dict[str, Any], context: RunContext) -> object:
-        """Run one call. A tool that ends the call, or one a reply line answers, asks for no reply."""
+        """Run one call. A tool that ends the call, or one a reply line answers, asks for no reply.
+
+        So does a refusal for a missing argument the reply already asked for.
+        """
         session = context.session
 
         def started(tool: ToolSpec) -> Awaitable[None] | None:
@@ -67,6 +77,8 @@ def function_tools(
             if isinstance(hooks, CallHooks):
                 hooks.end_requested(AGENT_ENDED)
             end_call_now(session)
+            return llm.ToolResult(shown, reply_required=False)
+        if await asks_no_reply(result, context):
             return llm.ToolResult(shown, reply_required=False)
         if (line := registry.use_result(name, result, state, lines, hooks=hooks)) is not None:
             say(session, line)

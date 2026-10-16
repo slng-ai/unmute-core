@@ -27,6 +27,11 @@ SAY_MARKER = SAY_LINE.partition("{line}")[0]
 """The text that comes before a fixed line in a ``say_line`` instruction."""
 THINK_SECONDS = 0.2
 """How long the model takes to answer the caller: long enough for a client to take the turn."""
+ITEM_SECONDS = 0.1
+"""How long the model takes to write a tool call after the reply's previous item.
+
+A client runs a call as soon as its arguments are done, so it acts before the next call.
+"""
 ROUTES = ("/v1/realtime", "/realtime")
 """The paths that accept the websocket: LiveKit and Pipecat both end up on the first."""
 
@@ -66,6 +71,7 @@ class FakeRealtimeServer:
         received: Every event the client sent, as parsed JSON.
         refused: How many ``response.create`` came while a response ran. The server
             refuses them, as OpenAI's does, and the client never gets that reply.
+        done: How many ``response.done`` the server has sent: one per response.
     """
 
     def __init__(self, model: ModelCall) -> None:
@@ -74,6 +80,7 @@ class FakeRealtimeServer:
         self.requests: list[ModelRequest] = []
         self.received: list[dict[str, Any]] = []
         self.refused = 0
+        self.done = 0
         self._runner: web.AppRunner | None = None
         self._port = 0
         self._connections: list[_Connection] = []
@@ -351,6 +358,8 @@ class FakeRealtimeServer:
         if "".join(text):
             output.append(await self._send_text(conn, response_id, text, modality, len(output)))
         for call in calls:
+            if output:
+                await asyncio.sleep(ITEM_SECONDS)
             output.append(await self._send_call(conn, response_id, call, len(output)))
         await self._finish(conn, response_id, params, output, usage, "completed")
 
@@ -517,6 +526,7 @@ class FakeRealtimeServer:
                 "error": {"type": "server_error", "code": "model_failed", "message": error},
             }
         await self._send(conn, "response.done", response=response)
+        self.done += 1
 
     def _response(
         self,

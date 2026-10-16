@@ -17,7 +17,7 @@ from livekit.agents.voice import SpeechHandle, speech_handle
 
 from tests.conformance.livekit_driver import Silence
 from tests.hooks.helpers import on_end
-from tests.livekit.fake import ScriptedLLM, call
+from tests.livekit.fake import ScriptedLLM, call, replies
 from tests.livekit.test_agent_lifecycle import Scripted
 from tests.livekit.test_trace import Memory
 from tests.outputs import AnyResult
@@ -137,18 +137,14 @@ async def test_a_tool_cut_off_for_longer_than_the_timeout_answers_the_model_once
         assert "still in progress" in released
 
         gate.release.set()
-        await until(lambda: len(model.requests) == 2)
+        await until(lambda: bool(replies(session)))
         await until(lambda: session.agent_state == "listening")
+        assert len(model.requests) == 2
         assert gate.runs == 1
         assert gate.cancelled == 0
         assert tool_items(session, "slow")[-1] == ("out", '{"done": true}')
         assert [text for role, text in model.requests[-1].texts if role == "assistant"] == []
-        replies = [
-            item.text_content
-            for item in session.history.items
-            if isinstance(item, llm.ChatMessage) and item.role == "assistant"
-        ]
-        assert replies == ["It is done."]
+        assert [m.text_content for m in replies(session)] == ["It is done."]
     assert agent._trace is not None and agent._trace.closing is not None
     await agent._trace.closing
     [span] = [s for s in sink.spans.get_finished_spans() if s.name == "llm_tool_call"]

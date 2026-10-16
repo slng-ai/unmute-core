@@ -32,6 +32,7 @@ from unmute_core.pipecat._realtime import (
     hold_result,
     is_realtime,
     reply_ended,
+    send_quietly,
     speaks_itself,
     withhold_result,
 )
@@ -176,7 +177,14 @@ async def answer_ending(params: FunctionCallParams, result: object) -> None:
     On a realtime service the result stays local too, so it does not ask for a reply.
     Pipecat still records the result: the tool span, the transcript and the dev record
     show the tool.
+
+    A realtime service runs each call as soon as its arguments are done, while the model
+    still writes the reply's later calls. So it waits for the reply to end first: an end
+    now would close the session before those calls arrive. They run meanwhile, and their
+    results are held back, since this call still runs.
     """
+    if can_hold(params.llm):
+        await reply_ended(params.llm)
     _ENDING.add(params.pipeline_worker)
     withhold_result(params.llm, params.tool_call_id)
     await params.result_callback(result, properties=FunctionCallResultProperties(run_llm=False))
@@ -204,6 +212,7 @@ async def report(
     ends_call: bool,
     hooks: object | None = None,
     line: str | None = None,
+    reply: bool = True,
 ) -> None:
     """Give Pipecat a tool's result. A tool that ends the call ends it, with no reply first.
 
@@ -223,6 +232,8 @@ async def report(
         line: A reply line code speaks in place of the model's reply. A realtime model
             replies in its own words instead: its result starts a reply of its own, which
             a second spoken line would talk over.
+        reply: False asks for no model reply, as ``replies_to`` decides. A realtime
+            service that cannot read a result without replying still replies.
     """
     if can_hold(params.llm) and not ends_call and not _ender_running(params):
         await reply_ended(params.llm)
@@ -230,6 +241,10 @@ async def report(
         await end_with(params, result, hooks)
     elif ending(params.pipeline_worker):
         withhold_result(params.llm, params.tool_call_id)
+        await params.result_callback(result, properties=FunctionCallResultProperties(run_llm=False))
+    elif not reply and (
+        not is_realtime(params.llm) or await send_quietly(params.llm, params.tool_call_id, result)
+    ):
         await params.result_callback(result, properties=FunctionCallResultProperties(run_llm=False))
     elif line is not None and not is_realtime(params.llm):
         joins_context(params.llm)
