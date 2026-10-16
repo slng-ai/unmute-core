@@ -9,7 +9,7 @@ from decimal import Decimal
 import pytest
 from unmute_core.call import CallStartError
 from unmute_core.state import call_info
-from unmute_core.tools import ToolError
+from unmute_core.tools import SpokenLines, ToolError
 
 from wasla import ledger as ledger_module
 from wasla.agent import AGENT_ID, GREETING, WASLA, Wasla
@@ -85,12 +85,26 @@ async def test_three_wrong_dates_lock_the_account() -> None:
     assert right["status"] == "locked"
 
 
-async def test_a_day_past_the_deadline_is_refused_with_words_for_the_holder() -> None:
-    state = await Wasla().new_call(CALL, LAYLA)
-    with pytest.raises(ToolError, match="I can only note a day up to Sunday the 11th of October"):
-        await WASLA.plan.tools.call("record_promise", {"day": "2026-10-20"}, state)
-    with pytest.raises(ToolError, match="That day has already gone"):
-        await WASLA.plan.tools.call("record_promise", {"day": "2026-09-30"}, state)
+@pytest.mark.parametrize(
+    ("tool", "given", "line"),
+    [
+        ("record_promise", {"day": "2026-10-20"}, "a day up to Sunday the 11th of October."),
+        ("record_promise", {"day": "2026-09-30"}, "That day has already gone."),
+        ("schedule_callback", {"day": "2026-10-20", "at": "17:00"}, "a day up to Sunday"),
+    ],
+)
+async def test_a_day_outside_the_window_is_answered_in_code_before_the_read_back(
+    tool: str, given: dict[str, str], line: str
+) -> None:
+    books = Ledger()
+    wasla = Wasla(books)
+    state = await wasla.new_call(CALL, LAYLA)
+    tools = wasla.plan.tools
+    outcome = tools.precheck(tool, given, state)
+    said = tools.use_result(tool, outcome, state, SpokenLines())
+    assert said is not None and line in said
+    assert await tools.call(tool, given, state) == outcome
+    assert books.records == {}
 
 
 async def test_a_promise_is_recorded_once_per_call() -> None:

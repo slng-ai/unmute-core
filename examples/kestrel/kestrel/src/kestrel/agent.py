@@ -28,7 +28,7 @@ from unmute_core.tasks import TaskPlan, TasksSpec
 from unmute_core.tools import Assign, ToolRegistry, ToolReply, local_tool
 from voice_stack import VoiceApp
 
-from kestrel.claims import TIMEZONE, ClaimsDesk, coverage_guide
+from kestrel.claims import TIMEZONE, ClaimsDesk, coverage_guide, not_a_policy_number
 from kestrel.state import State
 
 AGENT_ID = "kestrel-claims"
@@ -88,7 +88,20 @@ def tools(desk: ClaimsDesk) -> ToolRegistry:
     """
     return ToolRegistry(
         [
-            local_tool(desk.lookup_policy, announce=["Let me find that.", "One moment."]),
+            local_tool(
+                desk.lookup_policy,
+                announce=["Let me find that.", "One moment."],
+                precheck=not_a_policy_number,
+                replies=[
+                    ToolReply(
+                        when={"status": ["not_a_number"]},
+                        say=[
+                            "A policy number is KP and six digits. Could you read me yours "
+                            "again?"
+                        ],
+                    )
+                ],
+            ),
             local_tool(
                 desk.note_facts,
                 locked={"report": "{{report}}", "policy": "{{policy}}"},
@@ -144,7 +157,7 @@ TASKS = TasksSpec.model_validate(
                 "replies": [
                     {
                         "tool": "lookup_policy",
-                        "when": {"found": [False]},
+                        "when": {"found": [False], "status": ["looked_up"]},
                         "say": [
                             "I'm sorry, I can't find a policy with that number and date of "
                             "birth. Could you check the number on your policy documents?"

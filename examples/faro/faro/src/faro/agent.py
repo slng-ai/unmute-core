@@ -31,7 +31,7 @@ from unmute_core.tasks import OpeningTool, TaskPlan, TasksSpec
 from unmute_core.tools import Assign, ToolRegistry, ToolReply, local_tool
 from voice_stack import Handoff, VoiceApp
 
-from faro.desk import Desk
+from faro.desk import Desk, foreign_number
 from faro.state import Lang, State
 from faro.store import Store
 
@@ -113,7 +113,12 @@ def tools(desk: Desk) -> ToolRegistry:
                 desk.use_this_number,
                 locked={"phone": "{{phone}}", "explanation": "{{explanation}}"},
             ),
-            local_tool(desk.check_number, locked={"explanation": "{{explanation}}"}),
+            local_tool(
+                desk.check_number,
+                locked={"explanation": "{{explanation}}"},
+                precheck=foreign_number,
+                replies=[ToolReply(when={"status": ["foreign"]}, say=SAID)],
+            ),
             local_tool(
                 desk.create_profile,
                 locked={"phone": "{{phone}}", "explanation": "{{explanation}}"},

@@ -622,7 +622,11 @@ class LocalHandler:
     """
 
     def __init__(
-        self, handler: Callable[..., Any], *, output: type[BaseModel] | None = None
+        self,
+        handler: Callable[..., Any],
+        *,
+        output: type[BaseModel] | None = None,
+        precheck: Callable[..., BaseModel | None] | None = None,
     ) -> None:
         """Read the function's input and output from its signature.
 
@@ -631,10 +635,12 @@ class LocalHandler:
                 parameter typed as a Pydantic model is the whole input.
             output: The output model, for a function that returns a dict. By default its
                 return annotation.
+            precheck: A plain function run before the tool. See ``local_tool``.
 
         Raises:
             TypeError: If a parameter has no type hint, the function takes ``*args`` or
-                ``**kwargs``, or it names no output model.
+                ``**kwargs``, it names no output model, or the precheck is async or takes
+                a parameter the function does not.
         """
         self.name: str = getattr(handler, "__name__", "handler")
         hints = get_type_hints(handler, include_extras=True)
@@ -651,10 +657,41 @@ class LocalHandler:
                 for parameter in parameters
             }
             self.arguments = create_model(f"{self.name}_arguments", **fields)
+        self._precheck = precheck
+        self._precheck_names = self._checked_precheck(precheck)
+
+    def _checked_precheck(self, precheck: Callable[..., object] | None) -> tuple[str, ...]:
+        """Return the arguments a precheck takes by name, or () for the whole input.
+
+        Raises:
+            TypeError: If it is async, or takes a parameter the function does not.
+        """
+        if precheck is None:
+            return ()
+        if inspect.iscoroutinefunction(precheck):
+            raise TypeError(f"{self.name}: the precheck runs before the read-back: make it sync")
+        if self._whole:
+            return ()
+        names = tuple(inspect.signature(precheck).parameters)
+        if stray := [name for name in names if name not in self.arguments.model_fields]:
+            raise TypeError(
+                f"{self.name}: the precheck takes {stray[0]!r}, which {self.name} does not. "
+                "Name only the tool's own parameters"
+            )
+        return names
 
     def validate(self, arguments: dict[str, Any]) -> dict[str, Any]:
         """Return the arguments as the function reads them, as JSON data."""
         return _validated(self.arguments, arguments).model_dump(mode="json")
+
+    def precheck(self, arguments: dict[str, Any]) -> BaseModel | None:
+        """Return the precheck's outcome for these arguments, or None to run the tool."""
+        if self._precheck is None:
+            return None
+        values = _validated(self.arguments, arguments)
+        if self._whole:
+            return self._precheck(values)
+        return self._precheck(**{name: getattr(values, name) for name in self._precheck_names})
 
     async def run(self, arguments: dict[str, Any], state: CallState | None) -> object:
         """Validate the arguments into their Python types and call the function."""
@@ -765,6 +802,7 @@ def local_tool(
     result_instructions: str = "",
     hidden: Sequence[str] = (),
     replies: Sequence[ToolReply] = (),
+    precheck: Callable[..., BaseModel | None] | None = None,
 ) -> ToolSpec:
     """Build a tool from a Python function. Works as a plain ``@local_tool`` decorator.
 
@@ -793,14 +831,20 @@ def local_tool(
         hidden: Result fields the model never reads. See ``ToolSpec``.
         replies: The lines code speaks for the tool's results, each without ``tool``. See
             ``ToolSpec``.
+        precheck: A plain function that checks a business rule before the tool runs, and
+            before a step reads its input back for a yes. It takes some of the tool's
+            parameters by name, typed the same, or the whole input model. It returns an
+            instance of the output model, the outcome, or None to go ahead. An outcome is
+            the tool's result and the tool does not run: its ``replies`` speak it.
 
     Returns:
         The tool.
 
     Raises:
-        TypeError: If a parameter has no type, or the function names no output model.
+        TypeError: If a parameter has no type, the function names no output model, or the
+            precheck is async or takes a parameter the function does not.
     """
-    executor = LocalHandler(handler, output=output)
+    executor = LocalHandler(handler, output=output, precheck=precheck)
     if description is None:
         description = _DOC_SECTION.split(inspect.getdoc(handler) or "")[0].strip()
     return ToolSpec(

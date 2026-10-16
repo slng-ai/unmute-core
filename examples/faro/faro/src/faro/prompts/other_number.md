@@ -5,4 +5,3 @@ number, with its country code: Faro only takes Spanish numbers, starting with +3
   application reads it back and waits.
 - A clear yes to the number just read back: call check_number again with the same number.
   A different number: call check_number with the number they said.
-- If a number is refused, tell them why in one short sentence and ask again.
