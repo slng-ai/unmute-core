@@ -32,7 +32,7 @@ A 13-turn call costs 15 model requests on both frameworks.
 
 | unmute-core | Used for |
 |---|---|
-| `CallState` on a Pydantic `State` | Every value typed: `PolicyNumber` (a `Spelled` code, KP and six digits), `BirthDate`, `Policy`, `Report`, the claim number |
+| `CallState` on a Pydantic `State` | Every value typed: `PolicyNumber` (a `Spelled` code in one spelling), `BirthDate`, `Policy`, `Report`, the claim number |
 | `TasksSpec` in `record` mode, one group | `claim` = `find_policy` then `take_report`, sharing context |
 | Group `arguments` + `OpeningTool` | The main agent passes the number and date it heard. When both are known, `find_policy` opens on `lookup_policy` and code reads them back with no model request |
 | `FinishRule.confirm` and `say` | The read-backs, and the lines after a lookup and a filing |
@@ -41,7 +41,7 @@ A 13-turn call costs 15 model requests on both frameworks.
 | `local_tool` with `locked` | The model never sends the call id, the report or the policy number to `file_claim` |
 | `ToolRegistry(assign=...)` on a step's tool | `note_facts` saves the report and its read-back as soon as it returns |
 | `Spelled` and `BirthDate` | The policy and claim numbers said a character at a time, and the date of birth with its year, by code |
-| Pydantic validators on tool arguments | A policy number that is not KP and six digits is refused before it is read back |
+| `local_tool(precheck=...)` | A policy number that is not KP and six digits is asked again in code, before it is read back |
 | `Prefetch` with a `Clock` | Today and the weekday on the London clock, so "yesterday" and "on Monday" become dates |
 | `IdleNudges` | A patient nudge for a shaken caller who goes quiet |
 | `AgentSpec(language="en-GB", timezone="Europe/London")` | Dates in code's lines named from London's today |

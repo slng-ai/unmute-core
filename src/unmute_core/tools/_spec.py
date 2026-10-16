@@ -254,6 +254,15 @@ class ReadyChecking(Protocol):
 
 
 @runtime_checkable
+class Prechecking(Protocol):
+    """An executor that may answer a call with an outcome before the tool runs."""
+
+    def precheck(self, arguments: dict[str, Any]) -> BaseModel | Mapping[str, Any] | None:
+        """Return the outcome that stands in for the tool's result, or None to run it."""
+        ...
+
+
+@runtime_checkable
 class InputValidating(Protocol):
     """An executor that checks its arguments in Python, before a step asks to confirm them."""
 
@@ -570,6 +579,20 @@ class ToolSpec:
                 event_text="the result does not fit the output model",
             ) from None
         return checked.model_dump(mode="json")
+
+    def precheck(self, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        """Return the executor's precheck outcome as the output model reads it, or None.
+
+        Args:
+            arguments: The arguments, locked values filled.
+
+        Raises:
+            ToolError: If the arguments or the outcome do not fit.
+        """
+        if not isinstance(self.executor, Prechecking):
+            return None
+        outcome = self.executor.precheck(arguments)
+        return None if outcome is None else self.checked_output(outcome)
 
     @cached_property
     def _output_schema(self) -> dict[str, Any]:
@@ -1173,8 +1196,9 @@ class ToolRegistry:
         """Run one tool call from the model.
 
         The order is: read the arguments, the ``before_tool`` hooks, the checks and the
-        locked values, ``started``, the ``wrap_tool`` hooks around the tool, then the
-        ``after_tool`` hooks.
+        locked values, the precheck, ``started``, the ``wrap_tool`` hooks around the tool,
+        then the ``after_tool`` hooks. A precheck outcome is the result: the tool does not
+        run and ``started`` is not called.
 
         Args:
             name: The tool the model called.
@@ -1227,6 +1251,8 @@ class ToolRegistry:
             if current is not run:
                 tool.check_arguments(current.arguments)
             given = filled if current is run else tool.filled(current.arguments, state, context)
+            if (found := outcome if current is run else tool.precheck(given)) is not None:
+                return found
             if tool.takes_context:
                 result = await tool.executor.run(given, state, context=context)  # ty: ignore[unknown-argument]
             else:
@@ -1236,8 +1262,14 @@ class ToolRegistry:
             return result
 
         begin = time.monotonic()
+        outcome: dict[str, Any] | None = None
         try:
-            if started is not None and inspect.isawaitable(begun := started(spoken)):
+            outcome = tool.precheck(filled)
+            if (
+                outcome is None
+                and started is not None
+                and inspect.isawaitable(begun := started(spoken))
+            ):
                 await begun
             begin = time.monotonic()
             if hooks is None:
@@ -1302,6 +1334,27 @@ class ToolRegistry:
             return own
         checked = tool.executor.validate(tool.filled(own, state, context))
         return {key: checked[key] for key in own if key in checked}
+
+    def precheck(
+        self, name: str, arguments: str | Mapping[str, Any], state: CallState | None = None
+    ) -> dict[str, Any] | None:
+        """Return a tool's precheck outcome for a call, without running the tool.
+
+        A step runs it before it reads a closing tool's input back for a yes.
+
+        Args:
+            name: The tool the model called.
+            arguments: The arguments, as JSON text or already parsed.
+            state: The call state, for the locked values the precheck reads.
+
+        Returns:
+            The outcome as JSON data, or None when the tool may run.
+
+        Raises:
+            ToolError: If the input is refused, worded as ``call`` words it.
+        """
+        tool, own = self._own(name, arguments)
+        return tool.precheck(tool.filled(own, state))
 
     def _own(
         self, name: str, arguments: str | Mapping[str, Any]

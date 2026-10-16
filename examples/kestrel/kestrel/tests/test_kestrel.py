@@ -80,9 +80,14 @@ def test_a_policy_number_is_kp_and_six_digits(said: str, spelling: str) -> None:
 
 
 @pytest.mark.parametrize("said", ["KP48291", "KP4829133", "KX482913", "KP48291A"])
-def test_anything_else_is_refused(said: str) -> None:
-    with pytest.raises(ValueError, match="is not a policy number"):
-        policy_number(said)
+async def test_anything_else_is_asked_again_in_code_before_the_read_back(said: str) -> None:
+    state = await KESTREL.new_call(CALL)
+    tools = KESTREL.plan.tools
+    given = {"policy_number": said, "birth_date": "1979-06-05"}
+    outcome = tools.precheck("lookup_policy", given, state)
+    assert tools.use_result("lookup_policy", outcome, state, SpokenLines()) == (
+        "A policy number is KP and six digits. Could you read me yours again?"
+    )
 
 
 async def test_a_wrong_birth_date_finds_nothing() -> None:

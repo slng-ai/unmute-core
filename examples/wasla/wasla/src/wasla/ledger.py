@@ -85,27 +85,8 @@ def today() -> date:
     return datetime.now(ZONE).date()
 
 
-def in_window(value: date) -> date:
-    """Refuse a day in the past or after the deadline, with words for the holder.
-
-    Raises:
-        ValueError: When the day is outside today to today plus ten days.
-    """
-    if value < today():
-        raise ValueError("Say: That day has already gone. Which other day would suit you?")
-    deadline = today() + timedelta(days=WINDOW_DAYS)
-    if value > deadline:
-        raise ValueError(
-            f"{value.isoformat()} is after the deadline, {deadline.isoformat()}. Say: I can "
-            f"only note a day up to {words.day(deadline)}. Which day by then works for you?"
-        )
-    return value
-
-
 WindowDay = Annotated[
-    date,
-    AfterValidator(in_window),
-    Field(description="The day, as YYYY-MM-DD, from today up to the deadline."),
+    date, Field(description="The day, as YYYY-MM-DD, from today up to the deadline.")
 ]
 
 
@@ -137,12 +118,31 @@ class GoodTime(BaseModel):
 
 
 class Recorded(BaseModel):
-    """What every write returns: the outcome code, its reference, and the words for it."""
+    """What every write returns: the outcome code, its reference, and the words for it.
 
-    status: Literal["PTP", "CB", "WN", "HARDSHIP", "LEGAL", "DISPUTE", "RTP"]
-    reference: str
+    ``past_day`` and ``after_deadline`` are the outcomes of ``outside_window``: nothing is
+    written, and ``when`` says the deadline.
+    """
+
+    status: Literal[
+        "PTP", "CB", "WN", "HARDSHIP", "LEGAL", "DISPUTE", "RTP", "past_day", "after_deadline"
+    ]
+    reference: str = ""
     kind: ConcernKind | None = None
     when: str = ""
+
+
+def outside_window(day: date) -> Recorded | None:
+    """Refuse a day in the past or after the deadline, before it is read back for a yes.
+
+    The precheck of ``record_promise`` and ``schedule_callback``. Their replies say why.
+    """
+    if day < today():
+        return Recorded(status="past_day")
+    deadline = today() + timedelta(days=WINDOW_DAYS)
+    if day > deadline:
+        return Recorded(status="after_deadline", when=words.day(deadline))
+    return None
 
 
 class Guide(BaseModel):

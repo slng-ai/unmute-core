@@ -11,6 +11,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 - A tool carries its own replies: `local_tool(fn, replies=[ToolReply(when=..., say=...)])`. They play wherever the tool runs, after the place's own replies. A tool's own reply leaves out `tool`.
 - A `when` value on a `Literal`, `bool` or `Enum` result field must be one the field holds. A typo fails when the registry or the plan is built, with the values it can hold. This holds for `ToolReply.when` and `FinishRule.success`.
 - Code that speaks a reply line tells the sinks and hooks `tool.replied`.
+- A tool can check a business rule before it runs: `local_tool(fn, precheck=check, replies=[...])`. `check` is a plain function that takes some of the tool's parameters and returns an instance of the output model, or None to go ahead. An outcome is the tool's result: the tool does not run, no announce plays, and its replies say it. On a closing tool with `confirm`, the precheck runs before the read-back, so a wrong value is never read back and the refusal costs no model request.
 
 ### Changes that can break you
 
@@ -20,6 +21,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Examples
 
 - kestrel: a future incident day is the tool's rule, not the argument's. `note_facts` returns `status: "future_day"`, and its own reply asks again. The turn costs one model request instead of up to three.
+- No example validator carries caller text now. kestrel's "KP and six digits", faro's "Spanish numbers only" and wasla's ten-day window are prechecks of `lookup_policy`, `check_number`, `record_promise` and `schedule_callback`. Each outcome is a `Literal` value its tool's reply says, before the read-back.
 
 ## 0.14.0
 

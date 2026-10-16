@@ -8,4 +8,3 @@ details can only be discussed with the account holder.
   them back. If one is missing, ask for it.
 - A clear yes to the callback just read back: call schedule_callback again with the same
   values. A clear no: ask when suits them instead.
-- If a day is refused, say the words it gives you.

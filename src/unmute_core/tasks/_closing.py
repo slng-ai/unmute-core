@@ -151,8 +151,11 @@ class ClosingTools:
             return already_succeeded(name)
         if self._step.done:
             return None
-        if (lines := self._confirm.get(name)) and not self._confirmed(name, arguments, lines):
-            return self._ask(name, lines)
+        if lines := self._confirm.get(name):
+            if (outcome := self._tools.precheck(name, arguments, self._tasks.state)) is not None:
+                return self._prechecked(name, outcome)
+            if not self._confirmed(name, arguments, lines):
+                return self._ask(name, lines)
         if self._record and self.running is not None:
             logger.info("closing tool refused: %s is still running", self.running)
             return still_running(self.running, name)
@@ -188,6 +191,18 @@ class ClosingTools:
         self.result = result
         self.ends_call = self._tools.ends_call(name, result)
         return result
+
+    def _prechecked(self, name: str, outcome: dict[str, Any]) -> object:
+        """Answer a closing tool's precheck outcome before its input is read back.
+
+        Nothing is asked and the tool does not run. The replies speak the outcome.
+        """
+        logger.info("%s: the precheck answered before the read-back", name)
+        self._asked = None
+        self.result = outcome
+        self._returned(outcome)
+        self.reply = self._reply_to(name, outcome)
+        return self._tools.for_model(name, outcome)
 
     def _returned(self, result: object) -> None:
         """Note that one of the step's own tools returned, and whether it succeeded."""

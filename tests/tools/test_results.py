@@ -163,6 +163,54 @@ async def test_a_tools_own_reply_follows_the_registrys(status: str, line: str):
 
 
 @pytest.mark.parametrize(
+    ("order_id", "result", "ran"),
+    [("A-1", {**GOOD, "status": "held"}, []), ("A-12", GOOD, ["A-12"])],
+)
+async def test_a_precheck_outcome_is_the_result_and_the_tool_does_not_run(
+    order_id: str, result: dict[str, Any], ran: list[str]
+):
+    runs: list[str] = []
+    started: list[str] = []
+
+    def find_order(order_id: str) -> Order:
+        """Find an order."""
+        runs.append(order_id)
+        return Order.model_validate(GOOD)
+
+    def too_old(order_id: str) -> Order | None:
+        return Order.model_validate({**GOOD, "status": "held"}) if order_id == "A-1" else None
+
+    registry = ToolRegistry([local_tool(find_order, precheck=too_old, announce="One moment.")])
+    called = await registry.call(
+        "find_order", {"order_id": order_id}, None, started=lambda tool: started.append(tool.name)
+    )
+    assert (called, runs, bool(started)) == (result, ran, bool(ran))
+    assert registry.precheck("find_order", {"order_id": order_id}) == (None if ran else result)
+
+
+async def _async_check(order_id: str) -> None:
+    return None
+
+
+@pytest.mark.parametrize(
+    ("precheck", "message"),
+    [
+        (_async_check, "make it sync"),
+        (lambda colour: None, "the precheck takes 'colour', which find_order does not"),
+    ],
+)
+def test_a_precheck_that_cannot_run_before_the_read_back_is_refused_when_built(
+    precheck: Any, message: str
+):
+    def find_order(order_id: str) -> Order:
+        """Find an order."""
+        return Order.model_validate(GOOD)
+
+    with pytest.raises(TypeError, match=message):
+        local_tool(find_order, precheck=precheck)
+
+
+@pytest.mark.parametrize(
     ("row", "saved"),
     [
         (Assign(variable="order", path=()), {"order": GOOD}),

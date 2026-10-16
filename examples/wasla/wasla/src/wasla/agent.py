@@ -25,10 +25,10 @@ from unmute_core.greeting import Greeting
 from unmute_core.prefetch import Clock, Lookup, Prefetch
 from unmute_core.state import CallInfo, CallStartRule, CallState
 from unmute_core.tasks import TaskPlan, TasksSpec
-from unmute_core.tools import ToolRegistry, local_tool
+from unmute_core.tools import ToolRegistry, ToolReply, local_tool
 from voice_stack import VoiceApp
 
-from wasla.ledger import SUPPORT, TIMEZONE, Ledger, payment_policy
+from wasla.ledger import SUPPORT, TIMEZONE, Ledger, outside_window, payment_policy
 from wasla.state import State
 
 AGENT_ID = "wasla-reminders"
@@ -65,6 +65,17 @@ CONCERN_SAID = {
     ),
 }
 """What code says once each kind of concern is noted."""
+OUTSIDE_WINDOW = [
+    ToolReply(
+        when={"status": ["past_day"]},
+        say=["That day has already gone. Which other day would suit you?"],
+    ),
+    ToolReply(
+        when={"status": ["after_deadline"]},
+        say=["I can only note a day up to {{result.when}}. Which day by then works for you?"],
+    ),
+]
+"""What code says when ``outside_window`` refuses a day, before anything is read back."""
 
 
 def prompt(name: str) -> str:
@@ -95,8 +106,16 @@ def tools(ledger: Ledger) -> ToolRegistry:
                     "merchant": "{{merchant}}",
                 },
             ),
-            local_tool(ledger.record_promise, locked=LOCKED, interruption="continue"),
-            local_tool(ledger.schedule_callback, locked=LOCKED, interruption="continue"),
+            *(
+                local_tool(
+                    write,
+                    locked=LOCKED,
+                    interruption="continue",
+                    precheck=outside_window,
+                    replies=OUTSIDE_WINDOW,
+                )
+                for write in (ledger.record_promise, ledger.schedule_callback)
+            ),
             local_tool(ledger.mark_wrong_number, locked=LOCKED, interruption="continue"),
             local_tool(ledger.note_concern, locked=LOCKED, interruption="continue"),
             local_tool(payment_policy),

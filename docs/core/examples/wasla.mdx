@@ -107,23 +107,27 @@ def concern_rule(kind: str) -> dict[str, Any]:
     }
 ```
 
-## The rules are types
+## The window is the tool's rule
 
 ```python wasla/ledger.py
-WindowDay = Annotated[
-    date,
-    AfterValidator(in_window),
-    Field(description="The day, as YYYY-MM-DD, from today up to the deadline."),
-]
-
-def record_promise(self, day: WindowDay, account_id: str, call: str) -> Recorded: ...
+def outside_window(day: date) -> Recorded | None:
+    if day < today():
+        return Recorded(status="past_day")
+    deadline = today() + timedelta(days=WINDOW_DAYS)
+    if day > deadline:
+        return Recorded(status="after_deadline", when=words.day(deadline))
+    return None
 ```
 
-A day outside the ten-day window is refused by the argument's type, with the
-words to say: "I can only note a day up to Sunday the 25th of October." A
-concern is a `Literal` of four kinds. The amount is said by code as "four
-hundred thirty-four dirhams and fifty fils". The model never turns a number
-into speech.
+```python wasla/agent.py
+local_tool(ledger.record_promise, locked=LOCKED, precheck=outside_window, replies=OUTSIDE_WINDOW)
+```
+
+A day outside the ten-day window is answered by the tool's `precheck`, before
+the promise is read back. Its reply says "I can only note a day up to Sunday
+the 25th of October", with no model request. A concern is a `Literal` of four
+kinds. The amount is said by code as "four hundred thirty-four dirhams and fifty
+fils". The model never turns a number into speech.
 
 ## Three groups
 

@@ -205,6 +205,13 @@ class TransferCase(_Strict):
     no_caller: bool = False
 
 
+class Precheck(_Strict):
+    """A tool's precheck outcome for the calls whose arguments hold these values."""
+
+    arguments: dict[str, Any]
+    outcome: dict[str, Any]
+
+
 class ToolOptions(_Strict):
     """How one of the job's tools behaves beyond its result: ``ToolSpec`` fields."""
 
@@ -340,6 +347,7 @@ class Scenario(_Strict):
     task offers through its ``native_tools``.
 
     ``event_tools`` are tools on events, by name. Their results come from ``tool_results``.
+    ``prechecks`` are the outcomes a test tool's precheck gives, by tool, before it runs.
     ``greeting`` is the fixed line the call opens with. ``worded_greeting`` has the model
     word it instead, with the ``opening`` replies. Neither waits for the caller.
     ``ready_fails`` makes the check before the greeting fail.
@@ -367,6 +375,7 @@ class Scenario(_Strict):
     handoffs: dict[str, str | Handoff] = {}
     agents: dict[str, Agent] = {}
     tool_results: dict[str, list[Any]] = {}
+    prechecks: dict[str, list[Precheck]] = {}
     tool_options: dict[str, ToolOptions] = {}
     call_start: dict[str, Any] = {}
     prefetch: dict[str, PrefetchOptions] = {}
@@ -639,11 +648,24 @@ class RecordingTool:
         results: list[Any],
         log: list[Call],
         returned: list[tuple[Call, Any]] | None = None,
+        prechecks: list[Precheck] | None = None,
     ) -> None:
         self.name = name
         self.results = list(results)
         self.log = log
         self.returned = returned if returned is not None else []
+        self.prechecks = prechecks or []
+
+    def precheck(self, arguments: dict[str, Any]) -> dict[str, Any] | None:
+        """Return the outcome of the first precheck whose arguments the call holds."""
+        return next(
+            (
+                case.outcome
+                for case in self.prechecks
+                if all(arguments.get(key) == value for key, value in case.arguments.items())
+            ),
+            None,
+        )
 
     async def run(self, arguments: dict[str, Any], state: CallState | None) -> object:
         """Log the run and return the next result, or ``{"ok": true}`` when none is left."""
@@ -1207,7 +1229,13 @@ def new_run(scenario: Scenario, *, realtime: bool = False) -> Run:
     returned: list[tuple[Call, Any]] = []
     recorded = registry(
         **{
-            name: RecordingTool(name, scenario.tool_results.get(name, []), log, returned)
+            name: RecordingTool(
+                name,
+                scenario.tool_results.get(name, []),
+                log,
+                returned,
+                scenario.prechecks.get(name, []),
+            )
             for name in ("lookup_order", "search_web", "normalize")
         }
     )

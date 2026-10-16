@@ -19,20 +19,17 @@ from unmute_core.state import BirthDate, Spelled
 
 
 def policy_number(value: str) -> str:
-    """Return a policy number in its one spelling: KP and six digits, upper case.
+    """Return a policy number in its one spelling, upper case.
 
-    Spaces, dashes and dots are dropped, as speech to text writes "KP-482913".
-
-    Raises:
-        ValueError: When it is not KP and six digits.
+    Spaces, dashes and dots are dropped, as speech to text writes "KP-482913". Whether it
+    is KP and six digits is ``lookup_policy``'s precheck, so code asks again in its words.
     """
-    value = "".join(character for character in value if character.isalnum()).upper()
-    if len(value) != 8 or not value.startswith("KP") or not value[2:].isdigit():
-        raise ValueError(
-            f"{value} is not a policy number: it is KP and six digits, like KP482913. "
-            "Ask for it again."
-        )
-    return value
+    return "".join(character for character in value if character.isalnum()).upper()
+
+
+def is_policy_number(value: str) -> bool:
+    """Return True when a policy number in its one spelling is KP and six digits."""
+    return len(value) == 8 and value.startswith("KP") and value[2:].isdigit()
 
 
 PolicyNumber = Annotated[

@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field
 from unmute_core.state import BirthDate, Spelled
 from unmute_core.tools import ToolError
 
-from kestrel.state import DayPart, Policy, PolicyNumber, Report, Vehicle
+from kestrel.state import DayPart, Policy, PolicyNumber, Report, Vehicle, is_policy_number
 from kestrel.words import spoken_day, spoken_when
 
 TIMEZONE = "Europe/London"
@@ -84,9 +84,15 @@ IncidentDay = Annotated[
 
 
 class PolicyFound(BaseModel):
-    """What ``lookup_policy`` returns."""
+    """What ``lookup_policy`` returns.
+
+    Attributes:
+        status: ``looked_up``, or ``not_a_number`` when the number is not KP and six
+            digits. Then nothing is looked up or read back, and the tool's reply asks again.
+    """
 
     found: bool
+    status: Literal["looked_up", "not_a_number"] = "looked_up"
     policy: Policy | None = None
     first_name: str = ""
     hint: str = ""
@@ -155,6 +161,16 @@ def read_back(report: Report, vehicles: list[Vehicle]) -> str:
             "Is that all right?",
         ]
     )
+
+
+def not_a_policy_number(policy_number: PolicyNumber) -> PolicyFound | None:
+    """Refuse a number that is not KP and six digits, before it is read back for a yes.
+
+    The precheck of ``lookup_policy``.
+    """
+    if is_policy_number(policy_number):
+        return None
+    return PolicyFound(found=False, status="not_a_number")
 
 
 @dataclass

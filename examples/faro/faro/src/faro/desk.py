@@ -13,7 +13,7 @@ complete a lesson by saying so: only graded answers move progress.
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import BaseModel, Field
 from unmute_core.state import Phone
 from unmute_core.tools import ToolError
 
@@ -31,22 +31,8 @@ RESULTS: dict[str, Outcome] = {
 """What each grade records. A correct answer after a hint records ``assisted`` instead."""
 
 
-def spanish(phone: str) -> str:
-    """Accept only a Spanish number: Faro's learners are in Spain.
-
-    Raises:
-        ValueError: For a number from another country.
-    """
-    if not phone.startswith("+34"):
-        raise ValueError(
-            "It is not a Spanish number. Faro only takes Spanish numbers (+34). Ask again."
-        )
-    return phone
-
-
-SpanishPhone = Annotated[
+NumberSaid = Annotated[
     Phone,
-    AfterValidator(spanish),
     Field(
         description="The whole number the caller said, with its country code, like +34 600 111 222."
     ),
@@ -56,13 +42,28 @@ SpanishPhone = Annotated[
 class Identified(BaseModel):
     """What finding or creating a learner returns: who they are, and code's next line."""
 
-    status: Literal["known", "new", "created"]
+    status: Literal["known", "new", "created", "foreign"]
     said: str
     phone: str
     explanation: Lang
     learner_id: int | None = None
     learner_name: str | None = None
     notes: str | None = None
+
+
+def foreign_number(phone: str, explanation: Lang) -> Identified | None:
+    """Refuse a number from outside Spain before it is read back: Faro's learners are in Spain.
+
+    The precheck of ``check_number``. Its reply says ``said``.
+    """
+    if phone.startswith("+34"):
+        return None
+    return Identified(
+        status="foreign",
+        said=curriculum.foreign_number(explanation),
+        phone=phone,
+        explanation=explanation,
+    )
 
 
 class Language(BaseModel):
@@ -189,7 +190,7 @@ class Desk:
         """The caller said yes to the number read back in the greeting: look them up."""
         return self._identify(phone, explanation)
 
-    def check_number(self, phone: SpanishPhone, explanation: Lang) -> Identified:
+    def check_number(self, phone: NumberSaid, explanation: Lang) -> Identified:
         """Look the caller up by the number they said. It first reads the number back.
 
         Call it again with the same number after their yes.

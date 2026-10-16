@@ -332,6 +332,32 @@ local_tool(
 2. The place's replies are tried first: the registry's on the main agent, the `TaskSpec`'s in a step. Then the tool's own, in order.
 3. A reply on a `ToolRegistry` or a `TaskSpec` still names its tool.
 
+### Check a rule before the tool runs
+
+A closing tool with `confirm` reads its input back before it runs. A rule about
+the request, like "a day within ten days", must answer before that read-back.
+Give the tool a `precheck`:
+
+```python
+def outside_window(day: date) -> Recorded | None:
+    if day < today():
+        return Recorded(status="past_day")
+    return None
+
+
+local_tool(
+    ledger.record_promise,
+    precheck=outside_window,
+    replies=[ToolReply(when={"status": ["past_day"]}, say=["That day has already gone. Which other day would suit you?"])],
+)
+```
+
+1. The precheck is a plain function, not async. It takes some of the tool's parameters by name, with the same types, or the whole input model when the tool takes one. Locked values are filled.
+2. It returns an instance of the tool's output model, the outcome, or None to go ahead. An outcome is the tool's result: the tool does not run, and no announce plays.
+3. The tool's replies say the outcome, like any result. A `when` value is checked against the output's `Literal` at build time.
+4. On a closing tool with `confirm`, the precheck runs before the read-back. A wrong value is never read back, and the turn costs one model request: the call. It runs again on the caller's yes, since the state may have changed.
+5. An outcome must not match the tool's `finish` rule. It is a refusal, not a success.
+
 **Why it works this way.** A model that reads a booking back to the caller
 words it a little differently each time, and sometimes gets the day wrong. A
 line spoken by code says the same words every time, from the checked result. The

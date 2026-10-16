@@ -337,6 +337,13 @@ def read_back(phone: str, explanation: Lang) -> str:
     return f"A ver si lo tengo bien: ¿tu número es {spaced(phone)}?"
 
 
+def foreign_number(explanation: Lang) -> str:
+    """Ask again for a number from outside Spain."""
+    if explanation == "EN":
+        return "Faro only takes Spanish numbers, starting with plus thirty-four. What is your Spanish number?"
+    return "Faro solo acepta números españoles, que empiezan por más treinta y cuatro. ¿Cuál es tu número español?"
+
+
 def signup_offer(explanation: Lang) -> str:
     """Offer a profile to a number that has none."""
     if explanation == "EN":

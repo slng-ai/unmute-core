@@ -5,7 +5,7 @@ The whole calls run live, on both frameworks, from ``../scenarios`` (see the REA
 
 import pytest
 from unmute_core.state import call_info
-from unmute_core.tools import ToolError
+from unmute_core.tools import SpokenLines, ToolError
 
 from faro import curriculum
 from faro.agent import GREETING, Faro
@@ -57,11 +57,19 @@ def test_an_unknown_number_is_offered_a_profile_and_learns_nothing() -> None:
     assert found.said.startswith("I can't find a profile with that number.")
 
 
-def test_only_a_spanish_number_is_taken() -> None:
-    with pytest.raises(ValueError, match="not a Spanish number"):
-        from faro.desk import spanish
-
-        spanish("+33612345678")
+@pytest.mark.parametrize(
+    ("phone", "said"),
+    [("+33612345678", curriculum.foreign_number("EN")), (NEW, None)],
+)
+async def test_a_number_from_outside_spain_is_answered_in_code_before_the_read_back(
+    phone: str, said: str | None
+) -> None:
+    faro = Faro(Store(":memory:"))
+    state = await faro.new_call()
+    tools = faro.plans["EN"].tools
+    outcome = tools.precheck("check_number", {"phone": phone}, state)
+    line = tools.use_result("check_number", outcome, state, SpokenLines()) if outcome else None
+    assert line == said
 
 
 def test_a_lesson_moves_only_on_graded_answers() -> None:
