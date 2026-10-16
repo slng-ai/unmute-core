@@ -6,15 +6,14 @@ the native path.
 """
 
 import asyncio
+import importlib
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from google.genai import types
 from pipecat.adapters.schemas.function_schema import FunctionSchema
 from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.services.google.llm import GoogleLLMService
 from pipecat.services.llm_service import FunctionCallParams
 
 from tests.pipecat.harness import MAIN_PROMPT, FakeAggregators, FakeLLM, Harness, runs_llm
@@ -181,8 +180,9 @@ class _GoogleModels:
     def __init__(self) -> None:
         self.sent: list[dict[str, Any]] = []
 
-    async def generate_content(self, **kwargs: Any) -> types.GenerateContentResponse:
+    async def generate_content(self, **kwargs: Any) -> Any:
         self.sent.append(kwargs)
+        types = pytest.importorskip("google.genai.types")
         finish = types.FunctionCall(name="finish", args={"note": "Please call me back."})
         content = types.Content(role="model", parts=[types.Part(function_call=finish)])
         return types.GenerateContentResponse(candidates=[types.Candidate(content=content)])
@@ -191,7 +191,10 @@ class _GoogleModels:
 async def test_a_google_service_runs_the_finish_check_on_its_own_client(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    llm = GoogleLLMService(api_key="test", settings=GoogleLLMService.Settings(model="gemini-x"))
+    pytest.importorskip("google.genai")
+    google = importlib.import_module("pipecat.services.google.llm")
+    settings = google.GoogleLLMService.Settings(model="gemini-x")
+    llm = google.GoogleLLMService(api_key="test", settings=settings)
     models = _GoogleModels()
     llm._client = cast(Any, SimpleNamespace(aio=SimpleNamespace(models=models)))
     finishes: list[Any] = []

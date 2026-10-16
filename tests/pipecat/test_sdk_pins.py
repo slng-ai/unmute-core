@@ -4,6 +4,7 @@ Each test names the adapter code that relies on it, and says why.
 """
 
 import dataclasses
+import importlib
 import inspect
 from typing import Any, cast
 
@@ -20,7 +21,6 @@ from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.serializers.plivo import PlivoFrameSerializer
 from pipecat.serializers.telnyx import TelnyxFrameSerializer
 from pipecat.serializers.twilio import TwilioFrameSerializer
-from pipecat.services.google.llm import GoogleLLMService
 from pipecat.services.llm_service import (
     FunctionCallParams,
     FunctionCallRegistryItem,
@@ -76,7 +76,10 @@ def test_the_public_settings_property_is_the_services_own_settings_object() -> N
 
 def test_a_google_service_still_has_its_client_and_request_builders() -> None:
     """``SideRequests.google_ask`` builds a request as the service does, and sends it on its client."""
-    llm = GoogleLLMService(api_key="test", settings=GoogleLLMService.Settings(model="gemini-x"))
+    pytest.importorskip("google.genai")
+    google = importlib.import_module("pipecat.services.google.llm")
+    settings = google.GoogleLLMService.Settings(model="gemini-x")
+    llm = google.GoogleLLMService(api_key="test", settings=settings)
     assert llm._client is not None
     assert inspect.iscoroutinefunction(llm._client.aio.models.generate_content)
     assert isinstance(llm._should_inject_trailing_user_message(), bool)
