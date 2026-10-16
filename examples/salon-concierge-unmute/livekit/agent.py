@@ -45,7 +45,7 @@ from unmute_core.livekit import (
 )
 from unmute_core.slng import tracking_ids
 from unmute_core.state import CallState, call_phone_region, use_phone_region
-from unmute_core.telemetry import Langfuse, Telemetry
+from unmute_core.telemetry import Langfuse, Telemetry, coval_simulation_id
 from unmute_core.turn import turn_window
 
 from vertex import VertexLLM
@@ -188,7 +188,7 @@ async def entrypoint(ctx: JobContext) -> None:
         telemetry = Telemetry(
             Langfuse.from_env(),
             agent=salon.AGENT_ID,
-            call_id=participant.attributes.get("coval.simulation_id") or state.call.session_id,
+            call_id=coval_simulation_id(participant.attributes) or state.call.session_id,
             resource={"deployment.environment.name": os.getenv("ENVIRONMENT", "development")},
         )
 

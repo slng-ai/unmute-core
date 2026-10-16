@@ -3,6 +3,7 @@
 import json
 import logging
 from typing import Any, cast
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -46,6 +47,7 @@ def shaped(
     [
         (None, None),
         ({}, None),
+        (MagicMock(), None),
         ({"coval.simulation_id": "sim-1"}, "sim-1"),
         ({"sip.h.X-Coval-Simulation-Id": "sim-2"}, "sim-2"),
         ({"x-coval-simulation-id": "sim-3"}, "sim-3"),

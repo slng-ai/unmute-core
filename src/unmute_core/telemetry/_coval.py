@@ -66,11 +66,13 @@ def coval_simulation_id(values: Mapping[str, object] | None) -> str | None:
     The ``coval.simulation_id`` key wins. Then any key that ends in ``x-coval-simulation-id``,
     in any case, like ``sip.h.x-coval-simulation-id``. An operator can map the SIP header to
     any attribute name, so the header's own name is the safe match. Empty values are skipped.
+    Anything but a mapping reads as no ID: LiveKit's console mode hands the agent a mock
+    participant, whose attributes answer every lookup with another mock.
 
     Args:
         values: Participant attributes, dispatch metadata, SIP headers or a request body.
     """
-    if not values:
+    if not isinstance(values, Mapping) or not values:
         return None
     exact = values.get(SIMULATION_KEY)
     if exact:
