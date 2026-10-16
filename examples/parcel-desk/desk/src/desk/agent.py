@@ -29,13 +29,13 @@ from desk.tools import Depot, end_call
 class RouterSettings(SlngSettings):
     """The router settings, with this desk's defaults. ``SLNG_*`` variables override them.
 
+    The model stays the library's ``slng/auto``: the router config picks it.
+
     Attributes:
         router_url: The SLNG Context Router in the EU.
-        model: The model the router config expects.
     """
 
     router_url: str = "https://eu-north.context-router.slng.ai/v1"
-    model: str = "gpt-5.6-luna"
 
 
 def prefetch(rows: list[dict[str, Any]], state: type[BaseModel]) -> Prefetch:

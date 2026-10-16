@@ -25,10 +25,12 @@ from openai import AsyncOpenAI  # noqa: E402
 from pipecat.frames.frames import (  # noqa: E402
     EndWorkerFrame,
     Frame,
+    FunctionCallResultFrame,
     LLMFullResponseEndFrame,
     LLMMessagesAppendFrame,
     LLMTextFrame,
     StartFrame,
+    TTSSpeakFrame,
 )
 from pipecat.processors.filters.identity_filter import IdentityFilter  # noqa: E402
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  # noqa: E402
@@ -104,13 +106,18 @@ class CallerInput(FrameProcessor):
 
 
 class AgentOutput(FrameProcessor):
-    """Keeps what the model says, and ends the call after its first full reply."""
+    """Keeps what the agent says, and ends the call after its first full reply.
+
+    A reply is the model's text, or a line code speaks after a tool, like the opening
+    line of a step that listens. A line spoken before any tool, like a greeting, is not.
+    """
 
     def __init__(self) -> None:
         """Start with nothing said."""
         super().__init__()
         self.replies: list[str] = []
         self._text = ""
+        self._tool_answered = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Pass every frame on. Collect reply text and end once a reply is complete."""
@@ -118,7 +125,17 @@ class AgentOutput(FrameProcessor):
         await self.push_frame(frame, direction)
         if isinstance(frame, LLMTextFrame):
             self._text += frame.text
-        elif isinstance(frame, LLMFullResponseEndFrame) and self._text.strip():
+        elif isinstance(frame, FunctionCallResultFrame):
+            self._tool_answered = True
+        elif isinstance(frame, TTSSpeakFrame) and self._tool_answered:
+            self._text += frame.text
+            await self._reply()
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            await self._reply()
+
+    async def _reply(self) -> None:
+        """Keep the reply so far and end the call, when there is one."""
+        if self._text.strip():
             self.replies.append(self._text)
             self._text = ""
             await self.push_frame(EndWorkerFrame(reason="smoke test done"))

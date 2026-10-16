@@ -127,9 +127,9 @@ for project in "$@"; do
   [[ -n "$values" ]] && start=("UNMUTE_CALL_START=$values")
   for module in $modules; do
     if [[ -n "$live" ]]; then
-      (cd "$project" && env "${start[@]}" .venv/bin/python -I "$repo/tests/examples/smoke_$framework.py" "$module" --live)
+      (cd "$project" && env ${start[@]+"${start[@]}"} .venv/bin/python -I "$repo/tests/examples/smoke_$framework.py" "$module" --live)
     else
-      (cd "$project" && env -i "${start[@]}" .venv/bin/python -I "$repo/tests/examples/smoke_$framework.py" "$module")
+      (cd "$project" && env -i ${start[@]+"${start[@]}"} .venv/bin/python -I "$repo/tests/examples/smoke_$framework.py" "$module")
     fi
   done
 done
