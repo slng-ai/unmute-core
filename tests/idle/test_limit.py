@@ -13,7 +13,9 @@ async def test_the_limit_ends_the_call_once_its_time_is_up():
     limit.start()
     limit.start()
     assert limit.running
-    await asyncio.sleep(0.05)
+    async with asyncio.timeout(1):
+        while not ended:
+            await asyncio.sleep(0)
     assert ended == [True]
     assert not limit.running
 
@@ -33,7 +35,7 @@ async def test_a_call_that_ends_first_cancels_the_limit():
     limit = CallLimit(0.02, lambda: ended.append(True))
     limit.start()
     limit.cancel()
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.05)  # past the 0.02 s limit, which would end the call
     assert ended == []
 
 
