@@ -236,6 +236,7 @@ Tool replies:
 - Pipecat: a task step in `record` mode runs its finish check, and a `summary` history gets its summary, when the call's LLM is a `GoogleLLMService`. Before, both were skipped, unlike on LiveKit.
 - Pipecat realtime: a tool that ends the call waits for the reply to end first. Before, the session could close before the reply's later tool calls arrived, and they were lost.
 - Pipecat dev records: a caller who speaks as the agent's line ends keeps one input, and the reply links to it. Before, the dev page showed an empty second caller line and linked the reply to that.
+- `coval_simulation_id` reads anything but a mapping as no ID. LiveKit's console mode hands the agent a mock participant, so a console call got a mock as its Coval ID, and salon-concierge-unmute crashed at its first turn when Langfuse keys were set.
 
 ### Examples
 
