@@ -128,8 +128,6 @@ class FakeRealtimeServer:
         It returns when the events are sent, not when the response is done: use
         ``wait_idle`` for that.
         """
-        async with asyncio.timeout(timeout):
-            await self._connected.wait()
         await self.wait_idle(timeout=timeout, quiet=0.05)
         conn = self._connections[-1]
         item_id = self._next("item")
@@ -165,15 +163,18 @@ class FakeRealtimeServer:
         self._start_response(conn, {})
 
     async def wait_idle(self, *, timeout: float = 5.0, quiet: float = 0.1) -> None:
-        """Wait until no response has run, and the client has been quiet, for ``quiet`` s.
+        """Wait until a client has connected, no response runs, and it is quiet for ``quiet`` s.
 
         The quiet time lets a client follow up on a tool call, which it does by sending
-        the output and a new ``response.create``.
+        the output and a new ``response.create``. It counts from the connection at the
+        earliest: before that, the client has not sent its greeting yet.
 
         Raises:
-            TimeoutError: When the server is still busy after ``timeout`` seconds.
+            TimeoutError: When no client connects, or the server is still busy, after
+                ``timeout`` seconds.
         """
         async with asyncio.timeout(timeout):
+            await self._connected.wait()
             while self._active or time.monotonic() - self._last_event < quiet:
                 await asyncio.sleep(0.01)
 
@@ -200,6 +201,7 @@ class FakeRealtimeServer:
         await ws.prepare(request)
         conn = _Connection(ws=ws, session={"model": request.query.get("model", "fake-realtime")})
         self._connections.append(conn)
+        self._last_event = time.monotonic()
         self._connected.set()
         await self._send(conn, "session.created", session=self._session_view(conn))
         async for message in ws:
