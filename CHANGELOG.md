@@ -4,6 +4,23 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### New
+
+- A tool carries its own replies: `local_tool(fn, replies=[ToolReply(when=..., say=...)])`. They play wherever the tool runs, after the place's own replies. A tool's own reply leaves out `tool`.
+- A `when` value on a `Literal`, `bool` or `Enum` result field must be one the field holds. A typo fails when the registry or the plan is built, with the values it can hold. This holds for `ToolReply.when` and `FinishRule.success`.
+- Code that speaks a reply line tells the sinks and hooks `tool.replied`.
+
+### Changes that can break you
+
+- A `when` or `success` value the field can never hold now fails at build time. Before, the rule silently never matched.
+- `ToolReply.tool` is optional. A `ToolReply` on a `ToolRegistry` or a `TaskSpec` without it is refused.
+
+### Examples
+
+- kestrel: a future incident day is the tool's rule, not the argument's. `note_facts` returns `status: "future_day"`, and its own reply asks again. The turn costs one model request instead of up to three.
+
 ## 0.14.0
 
 This is the first release since 0.10.0. Versions 0.11, 0.12 and 0.13 were never released, so their changes are listed here too.

@@ -11,17 +11,19 @@ arguments and typed results:
 - ``file_claim`` files the report once per call.
 
 Nothing the caller hears from these tools is worded by the model: each result carries the
-line code says. The library checks each argument against its type before a method runs,
-and each result against its model when it returns.
+line code says, or a typed ``status`` its replies turn into a line. The library checks each
+argument against its type before a method runs, and each result against its model when it
+returns. A rule about the claim, like "not in the future", is the tool's: an argument type
+only says what the caller meant.
 """
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
 from threading import Lock
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import BaseModel, Field
 from unmute_core.state import BirthDate, Spelled
 from unmute_core.tools import ToolError
 
@@ -70,24 +72,14 @@ def today() -> date:
     return datetime.now(ZONE).date()
 
 
-def not_future(value: date | None) -> date | None:
-    """Refuse a day after today, in words the agent can say to the caller.
-
-    Raises:
-        ValueError: When the day has not happened yet.
-    """
-    if value is not None and value > today():
-        raise ValueError(
-            f"{value.isoformat()} has not happened yet: today is {today().isoformat()}. "
-            "Say: That day hasn't happened yet. On which day did it happen?"
-        )
-    return value
-
-
 IncidentDay = Annotated[
     date | None,
-    AfterValidator(not_future),
-    Field(description="The day it happened, as YYYY-MM-DD. Work it out from today's date."),
+    Field(
+        description=(
+            "The day it happened, as YYYY-MM-DD. Work it out from today's date. Pass it even "
+            "when it is in the future: the application checks it."
+        )
+    ),
 ]
 
 
@@ -105,12 +97,15 @@ class Noted(BaseModel):
 
     Attributes:
         report: Every fact so far, the new ones merged in.
+        status: ``noted``, or ``future_day`` when the day given has not happened yet. That
+            day is left out of the report, and the tool's reply asks for it again.
         complete: True once every fact and the car are known.
         next_question: The question for the first missing fact, while one is missing.
         read_back: The whole claim in code's words, once it is complete.
     """
 
     report: Report
+    status: Literal["noted", "future_day"] = "noted"
     complete: bool
     next_question: str = ""
     read_back: str | None = None
@@ -227,8 +222,9 @@ class ClaimsDesk:
         answers complete, call file_claim at once.
         """
         known = report
+        future = incident_day is not None and incident_day > today()
         given: dict[str, object] = {
-            "incident_day": incident_day,
+            "incident_day": None if future else incident_day,
             "incident_time": incident_time,
             "place": place,
             "what_happened": what_happened,
@@ -248,6 +244,8 @@ class ClaimsDesk:
         noted = next_step(report, policy.vehicles, newly_hurt)
         if noted.complete:
             noted.read_back = read_back(report, policy.vehicles)
+        if future:
+            noted.status = "future_day"
         return noted
 
     def file_claim(self, report: Report, policy_number: str, call: str) -> Filed:

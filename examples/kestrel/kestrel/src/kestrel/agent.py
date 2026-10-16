@@ -25,7 +25,7 @@ from unmute_core.idle import IdleNudges
 from unmute_core.prefetch import Clock, Prefetch
 from unmute_core.state import CallInfo, CallState
 from unmute_core.tasks import TaskPlan, TasksSpec
-from unmute_core.tools import Assign, ToolRegistry, local_tool
+from unmute_core.tools import Assign, ToolRegistry, ToolReply, local_tool
 from voice_stack import VoiceApp
 
 from kestrel.claims import TIMEZONE, ClaimsDesk, coverage_guide
@@ -51,6 +51,15 @@ FILED = (
     "Your claim is filed. Your claim number is {{result.claim_number}}. A claims handler "
     "will call you within one working day. Is there anything else I can help with?"
 )
+NOTED = (
+    ToolReply(
+        when={"status": ["future_day"]},
+        say=["That day hasn't happened yet. On which day did it happen?"],
+    ),
+    ToolReply(when={"complete": [False]}, say=["{{result.next_question}}"]),
+)
+"""What code says after ``note_facts``, wherever it runs: a future day asked again, else
+the next question. The first that matches is said."""
 
 
 def prompt(name: str) -> str:
@@ -84,6 +93,7 @@ def tools(desk: ClaimsDesk) -> ToolRegistry:
                 desk.note_facts,
                 locked={"report": "{{report}}", "policy": "{{policy}}"},
                 hidden=("report", "read_back"),
+                replies=NOTED,
             ),
             local_tool(
                 desk.file_claim,
@@ -151,13 +161,6 @@ TASKS = TasksSpec.model_validate(
                 "instructions": prompt("take_report"),
                 "tools": ["note_facts", "file_claim"],
                 "opens_with": {"tool": "note_facts", "say": ["{{result.next_question}}"]},
-                "replies": [
-                    {
-                        "tool": "note_facts",
-                        "when": {"complete": [False]},
-                        "say": ["{{result.next_question}}"],
-                    }
-                ],
                 "finish": [
                     {
                         "tool": "file_claim",

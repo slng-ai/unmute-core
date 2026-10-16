@@ -3,7 +3,8 @@ Take the report of what happened to {{policy.first_name}}'s car. Today is {{week
 
 - Call note_facts with every fact the caller just gave, all in one call, and say nothing
   yourself: the application asks the next question.
-  - The day goes in incident_day as YYYY-MM-DD, worked out from today's date. The time goes
+  - The day goes in incident_day as YYYY-MM-DD, worked out from today's date, even when it
+    is in the future: the application checks it and asks again. The time goes
     in incident_time: HH:MM, or morning, afternoon, evening or night.
   - Where it happened goes in place, and what happened in what_happened, each in the
     caller's own words.

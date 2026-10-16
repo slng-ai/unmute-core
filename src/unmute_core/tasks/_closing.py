@@ -195,16 +195,24 @@ class ClosingTools:
         self.tool_succeeded = self.tool_succeeded or tool_succeeded(result)
 
     def _reply_to(self, name: str, result: object) -> str | None:
-        """Return the ``replies`` line code speaks for this result of a tool, or None."""
+        """Return the line code speaks for this result of a tool, or None.
+
+        The step's ``replies`` are tried first, then the tool's own.
+        """
         rule = next(
             (
                 reply
-                for reply in self._task.replies
+                for reply in (*self._task.replies, *self._tools.get(name).replies)
                 if reply.tool == name and reply.matches(result, self._tasks.state)
             ),
             None,
         )
-        return self._tasks.spoken_line(self._task, name, rule.say, result) if rule else None
+        if rule is None:
+            return None
+        line = self._tasks.spoken_line(self._task, name, rule.say, result)
+        if line is not None:
+            self._tools.replied(name, hooks=self._tasks.hooks)
+        return line
 
     def reply_played(self, line: str, *, heard: bool, played: str = "") -> None:
         """Note how a ``reply`` line played. ``StepRun.reply_played`` documents it."""

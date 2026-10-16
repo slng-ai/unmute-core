@@ -149,7 +149,7 @@ def _field_infos(model: type[BaseModel]) -> dict[str, Any]:
     return {info.alias or name: info for name, info in model.model_fields.items()}
 
 
-def _unwrapped(annotation: Any) -> Any:
+def unwrapped(annotation: Any) -> Any:
     """Strip ``Annotated`` and ``| None`` off an annotation."""
     while True:
         if get_origin(annotation) is Annotated:
@@ -165,13 +165,13 @@ def _unwrapped(annotation: Any) -> Any:
 
 def _model_class(annotation: Any) -> type[BaseModel] | None:
     """Return the Pydantic model an annotation holds, or None."""
-    found = _unwrapped(annotation)
+    found = unwrapped(annotation)
     return found if isinstance(found, type) and issubclass(found, BaseModel) else None
 
 
 def is_list(annotation: Any) -> bool:
     """Return True when an annotation holds a list."""
-    return get_origin(_unwrapped(annotation)) is list
+    return get_origin(unwrapped(annotation)) is list
 
 
 def is_single_value(annotation: Any) -> bool:
@@ -232,5 +232,5 @@ def literal_choices(annotation: Any) -> tuple[object, ...]:
 
 def _type_name(annotation: Any) -> str:
     """Name an annotation for an error message."""
-    found = _unwrapped(annotation)
+    found = unwrapped(annotation)
     return getattr(found, "__name__", None) or str(found)
