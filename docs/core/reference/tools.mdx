@@ -277,7 +277,12 @@ The model reads a plainer copy of each tool's parameters. The tool still checks 
 2. `format` and `pattern` become words in the description. Some providers refuse them, and a format only this library knows, like `spelled`, tells a model nothing.
 3. Local `$ref`s are inlined.
 
-**Why it works this way.** Small models, like Gemini 3.5 Flash-Lite, answered the full schemas with an empty reply (`MALFORMED_FUNCTION_CALL`) about three times as often. A model that still sends `null` for an optional value is accepted.
+**Why it works this way.** Voice agents run small, fast models. Each extra branch or unknown keyword in a schema is one more thing such a model can get wrong:
+1. A `null` branch on every optional value makes the model choose between leaving a value out, sending `null` and guessing. Small models often guess.
+2. A keyword the provider does not support can make it refuse the call, or return no call at all. The caller then hears silence.
+3. A format name the model has never seen, like `spelled`, tells it nothing. Plain words do.
+
+The full schema still checks every call, so nothing the model could send before is refused now.
 
 ## A required argument left out or empty
 
