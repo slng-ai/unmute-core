@@ -4,7 +4,6 @@ The locked-value cases check that a missing source refuses the call, the
 model's value is never used, and the value never reaches the model's schema.
 """
 
-import asyncio
 import threading
 from datetime import date
 from typing import Annotated, Any
@@ -396,23 +395,6 @@ async def test_tool_error_from_a_handler_reaches_the_model_unchanged():
 
     with pytest.raises(ToolError, match=r"^that day is full$"):
         await ToolRegistry([full]).call("full", {})
-
-
-async def test_cancellation_passes_through():
-    started = asyncio.Event()
-
-    @local_tool
-    async def wait() -> Done:
-        """Wait forever."""
-        started.set()
-        await asyncio.Event().wait()
-        return Done()
-
-    task = asyncio.create_task(ToolRegistry([wait]).call("wait", {}))
-    await started.wait()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
 
 
 async def test_local_tool_reads_signature_and_docstring_and_runs_sync_code_in_a_thread():

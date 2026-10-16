@@ -277,14 +277,6 @@ async def test_auth_reads_its_token_from_the_environment_at_each_call(server, mo
     assert (await _call(bearer, {"order_id": "A1"}))["headers"]["authorization"] == "Bearer t2"
 
 
-async def test_an_unset_token_refuses_the_call_and_logs_the_variable(server, monkeypatch, caplog):
-    monkeypatch.delenv("ORDERS_TOKEN", raising=False)
-    tool = _tool(f"{server}/echo", auth=WebhookAuth.bearer("ORDERS_TOKEN"))
-    with pytest.raises(ToolError, match="could not authenticate"):
-        await _call(tool, {"order_id": "A1"})
-    assert "ORDERS_TOKEN is not set" in caplog.text
-
-
 async def test_a_token_provider_gives_the_token_at_each_call(server):
     tokens = iter(["t1", "t2"])
 
@@ -298,20 +290,27 @@ async def test_a_token_provider_gives_the_token_at_each_call(server):
     assert (await _call(key, {"order_id": "A1"}))["headers"]["x-key"] == "k1"
 
 
-@pytest.mark.parametrize("token", [lambda: "", lambda: 1 / 0])
-async def test_a_provider_without_a_token_refuses_the_call(server, token, caplog):
-    tool = _tool(f"{server}/echo", auth=WebhookAuth.bearer(token=token))
-    with pytest.raises(ToolError, match="could not authenticate"):
-        await _call(tool, {"order_id": "A1"})
-    assert "token provider" in caplog.text
+def _vault_down() -> str:
+    raise ConnectionError("the vault is down")
 
 
 @pytest.mark.parametrize(
-    "build", [lambda: WebhookAuth("bearer"), lambda: WebhookAuth.bearer("T", token=lambda: "x")]
+    ("auth", "logged"),
+    [
+        (WebhookAuth.bearer("ORDERS_TOKEN"), "ORDERS_TOKEN is not set"),
+        (WebhookAuth.bearer(token=lambda: ""), "token provider"),
+        (WebhookAuth.bearer(token=_vault_down), "token provider"),
+    ],
+    ids=["unset-variable", "empty-token", "failing-provider"],
 )
-def test_auth_needs_exactly_one_token_source(build):
-    with pytest.raises(ValueError, match="exactly one of token_env and token"):
-        build()
+async def test_auth_without_a_token_refuses_the_call_and_logs_why(
+    server, auth, logged, monkeypatch, caplog
+):
+    monkeypatch.delenv("ORDERS_TOKEN", raising=False)
+    tool = _tool(f"{server}/echo", auth=auth)
+    with pytest.raises(ToolError, match="could not authenticate"):
+        await _call(tool, {"order_id": "A1"})
+    assert logged in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -320,6 +319,11 @@ def test_auth_needs_exactly_one_token_source(build):
         (lambda: WebhookAuth.bearer("sk-live-123"), "UPPER_SNAKE"),
         (lambda: WebhookAuth("bearer", "TOKEN", "X-Key"), "bearer always sends Authorization"),
         (lambda: WebhookAuth.api_key("TOKEN", "Host"), "cannot be used"),
+        (lambda: WebhookAuth("bearer"), "exactly one of token_env and token"),
+        (
+            lambda: WebhookAuth.bearer("T", token=lambda: "x"),
+            "exactly one of token_env and token",
+        ),
     ],
 )
 def test_bad_auth_fails_at_start(build, message):
