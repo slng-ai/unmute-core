@@ -27,6 +27,11 @@ SAY_MARKER = SAY_LINE.partition("{line}")[0]
 """The text that comes before a fixed line in a ``say_line`` instruction."""
 THINK_SECONDS = 0.2
 """How long the model takes to answer the caller: long enough for a client to take the turn."""
+ITEM_SECONDS = 0.1
+"""How long the model takes to write a tool call after the reply's previous item.
+
+A client runs a call as soon as its arguments are done, so it acts before the next call.
+"""
 ROUTES = ("/v1/realtime", "/realtime")
 """The paths that accept the websocket: LiveKit and Pipecat both end up on the first."""
 
@@ -351,6 +356,8 @@ class FakeRealtimeServer:
         if "".join(text):
             output.append(await self._send_text(conn, response_id, text, modality, len(output)))
         for call in calls:
+            if output:
+                await asyncio.sleep(ITEM_SECONDS)
             output.append(await self._send_call(conn, response_id, call, len(output)))
         await self._finish(conn, response_id, params, output, usage, "completed")
 
