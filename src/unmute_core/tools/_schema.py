@@ -460,7 +460,7 @@ def _format_words(node: dict[str, Any]) -> str:
 
 def _defaults_to_null(node: object) -> bool:
     """Return True when a property's ``default`` is null: sending null equals leaving it out."""
-    return isinstance(node, dict) and "default" in node and node["default"] is None
+    return False  # trial only: keep null, test the format words alone
 
 
 def _optional(node: dict[str, Any]) -> dict[str, Any]:
