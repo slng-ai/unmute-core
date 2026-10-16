@@ -51,6 +51,7 @@ Look for an existing test first. Add a row or a scenario turn before you add a n
 - **The same behaviour once per adapter.** Write one scenario instead.
 - **Exact bytes**, unless a reader depends on them: text the model reads, what a signature covers, what the dev page parses.
 - **Constructors and plumbing** that a smoke turn or a scenario already runs.
+- **A case no real call meets.** Before you add an edge case, name the call where it happens: what the caller says or does, and what the provider sends. Put that in the scenario's `about` or the test's name. If you cannot name it, do not add the test. A test for a made-up case blocks later changes and protects no caller.
 
 ## How to add a scenario
 
@@ -73,7 +74,25 @@ A new knob goes into `Scenario` or `Reply` in `tests/conformance/scenario.py`, a
 - The name says the behaviour in plain words: `test_a_refused_tool_says_nothing`.
 - Arrange, act, assert, with no comments. Shared setup lives in `tests/tasks/job.py`, `tests/livekit/fake.py` and `tests/pipecat/harness.py`. Reuse them before you write a fake.
 - Assert what the caller or the model gets, not how the code got there.
-- No sleeps. Wait on a condition with a short timeout.
+- No sleeps. Wait on a condition with a short timeout. See "Keep a test stable".
+
+## Keep a test stable
+
+A test that fails once in a hundred runs blocks every pull request. It also teaches people to rerun CI and ignore real failures.
+
+1. **Wait for the thing itself.** Wait until the reply is in the history, the marker came back, the call ended. Never wait for time to pass or for things to go quiet: on a slow runner the wait passes before the thing has even started.
+2. **A wait must not pass before the action starts.** "The server is idle" is also true before the client has connected. Check that the action began, then that it ended.
+3. **Wait for what the caller would wait for.** A caller answers after the agent's line has played, not when the last text frame left the model. The Pipecat scenario driver sends its turn marker down the pipeline, up, and down again for this reason. Then everything the line caused, like its commit to the context, is done.
+4. **Poll on every loop step.** A wait helper uses `await asyncio.sleep(0)`, not `sleep(0.01)`. A wait that can pass too early then fails on every run, so you see it before you push.
+5. **Run it many times before you push** a test that waits on anything:
+   ```bash
+   uv run --with pytest-repeat pytest tests/conformance -k <name> --count 200 -x
+   ```
+6. **A test that failed once in CI has a race.** Do not rerun and move on. Find the race in this order:
+   - Diff what the test saw against what it expected. Note which side is early.
+   - Make the early side faster on purpose (a tight poll) or the late side slower (a delay in a scratch plugin), until it fails every time.
+   - Fix the wait in the test harness when no caller can meet that timing. Fix the library when a caller can.
+   - If the test checks a case no real call meets, delete it.
 
 ## How to prune
 

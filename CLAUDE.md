@@ -73,6 +73,8 @@ Read the `unmute-tests` skill before you add, change or delete a test. In short:
 - Core logic gets a row in an existing table test, through the public API.
 - Each hand-written example answers one scripted turn in CI. Real keys run only in the `Nightly` workflow and before a release tag (`pytest -m live`).
 - Never re-test what Pydantic does, a private name, or one behaviour once per adapter.
+- Test only what a real call can meet. Name that call in the scenario's `about`.
+- A wait waits for the thing itself, never for time or quiet. A test that failed once in CI has a race: find it, do not rerun.
 
 ## Porting code
 - Port the tests with the code. A port without its tests is not done.
