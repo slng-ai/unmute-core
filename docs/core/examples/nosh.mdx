@@ -13,6 +13,7 @@ a yes. The code is in `examples/nosh`.
 flowchart LR
     G[Greeting asks where] --> A[find_area]
     A -->|"code: So that's Barri Gòtic, right?"| P[find_places]
+    A -->|"code: no craving yet, asks for one"| P
     P -->|"code: I found A, B and C"| D[place_details]
     D -->|"code: address, price, hours"| D
     D --> E[end_call: code says goodbye]
@@ -60,7 +61,8 @@ ToolRegistry(
         "place_details": [Assign(variable="details", path=("details",))],
     },
     replies=[
-        ToolReply(tool="find_area", when={"found": [True]}, say=["So that's {{result.formatted_address}}, right?"]),
+        ToolReply(tool="find_area", when={"found": [True], "ask_craving": [False]}, say=["So that's {{result.formatted_address}}, right?"]),
+        ToolReply(tool="find_area", when={"found": [True], "ask_craving": [True]}, say=["So that's {{result.formatted_address}}. What are you in the mood for? ..."]),
         ToolReply(tool="find_places", when={"found": [True]}, say=["I found {{result.listed}}. Do any of those sound good?"]),
         ToolReply(tool="place_details", when={"found": [True]}, say=["{{result.spoken}}"]),
     ],
@@ -80,6 +82,11 @@ one that picks the tool.
 back to the caller: `find_places` locks `{{spot}}`. The model cannot search
 somewhere else by mistake. A new area replaces the spot, and its result clears
 the old offer.
+
+**The read-back carries the next step.** With no craving and no exact address,
+`find_area` returns `ask_craving: true`, and its line asks for one. A "yes" to
+the read-back never makes the model invent a craving. A craving said with the
+area rides on the spot, so `find_places` needs no craving on the caller's yes.
 
 **A pick must have been offered.** `place_details` locks `{{offer}}` and takes
 only an id like `p1`. An id that was never offered raises `ToolError`, with the

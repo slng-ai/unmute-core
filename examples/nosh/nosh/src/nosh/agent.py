@@ -3,7 +3,8 @@
 Nosh has no tasks. It is one agent with three tools, and the tool registry does the rest:
 each tool's checked result saves typed values (``Assign``) and code speaks the next line
 (``ToolReply``), so a caller turn costs one model request. The greeting asks where; the
-location is read back; the places are listed; a place's details are said; the goodbye is
+location is read back, with the craving asked in the same line when there is none; the
+places are listed; a place's details are said; the goodbye is
 the end tool's own line.
 
 ``APP`` is the ``VoiceApp`` the ``livekit`` and ``pipecat`` projects run.
@@ -34,6 +35,7 @@ GREETING = Greeting(
 CALL_START: dict[str, CallStartRule] = {"customer_name": "required"}
 """What a dispatch must carry: who asked for the call."""
 GREETING.check(None, CALL_START)
+ASK_CRAVING = "What are you in the mood for? A cuisine, a bar, or no preference?"
 GOODBYE = "Enjoy your meal! Bye for now."
 PROMPT = (files("nosh") / "prompts" / "main.md").read_text(encoding="utf-8")
 
@@ -58,14 +60,16 @@ def tools(finder: Finder) -> ToolRegistry:
                 finder.find_places,
                 locked={"spot": "{{spot}}"},
                 announce=["Let me have a look.", "One sec, let me see what's around."],
+                hidden=["listed"],
             ),
-            local_tool(finder.place_details, locked={"offer": "{{offer}}"}),
+            local_tool(finder.place_details, locked={"offer": "{{offer}}"}, hidden=["spoken"]),
             local_tool(end_call, effect="ends_conversation", announce=GOODBYE, announce_wait=True),
         ],
         state=State,
         assign={
             "find_area": [
                 Assign(variable="spot", path=("spot",)),
+                Assign(variable="craving", path=("craving",)),
                 Assign(variable="offer", path=("offer",)),
                 Assign(variable="details", path=("details",)),
             ],
@@ -79,8 +83,13 @@ def tools(finder: Finder) -> ToolRegistry:
         replies=[
             ToolReply(
                 tool="find_area",
-                when={"found": [True]},
+                when={"found": [True], "ask_craving": [False]},
                 say=["So that's {{result.formatted_address}}, right?"],
+            ),
+            ToolReply(
+                tool="find_area",
+                when={"found": [True], "ask_craving": [True]},
+                say=[f"So that's {{{{result.formatted_address}}}}. {ASK_CRAVING}"],
             ),
             ToolReply(
                 tool="find_area",
@@ -93,7 +102,7 @@ def tools(finder: Finder) -> ToolRegistry:
             ToolReply(
                 tool="find_places",
                 when={"ask_craving": [True]},
-                say=["What are you in the mood for? A cuisine, a bar, or no preference?"],
+                say=[ASK_CRAVING],
             ),
             ToolReply(
                 tool="find_places",

@@ -75,14 +75,23 @@ def test_a_whole_search_is_said_by_code() -> None:
 def test_an_area_with_no_craving_asks_first_and_an_address_searches_nearby() -> None:
     tools, demo = finder()
     area = tools.find_area("Gràcia, Barcelona", at_address=False)
-    assert area.spot is not None
+    assert area.ask_craving and area.spot is not None
     assert tools.find_places(area.spot).ask_craving
     assert not demo.routes("search-text")
     street = tools.find_area("Passeig de Sant Joan 55, Barcelona", at_address=True)
-    assert street.spot is not None
+    assert not street.ask_craving and street.spot is not None
     nearby = tools.find_places(street.spot)
     assert nearby.listed == "Bar Snack 55, a bar with a 4 out of five from 600 reviews"
     assert len(demo.routes("search-nearby")) == 1
+
+
+def test_the_craving_said_with_the_area_is_searched_on_the_callers_yes() -> None:
+    tools, demo = finder()
+    area = tools.find_area("Gothic Quarter, Barcelona", at_address=False, craving=" tapas ")
+    assert not area.ask_craving and area.craving == "tapas" and area.spot is not None
+    places = tools.find_places(area.spot)
+    assert places.craving == "tapas" and places.listed.startswith("Bar Cañete")
+    assert demo.routes("search-text")
 
 
 def test_a_new_area_takes_back_the_offer_and_the_details() -> None:

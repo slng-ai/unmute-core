@@ -8,6 +8,7 @@ It is a port of `use-cases/nosh` from [unmute-beat](https://github.com/slng-ai/u
 flowchart LR
     G[Greeting asks where] --> A[find_area]
     A -->|"code: So that's Barri Gòtic, right?"| P[find_places]
+    A -->|"code: no craving yet, asks for one"| P
     P -->|"code: I found A; B; and C"| D[place_details]
     D -->|"code: the address, price, today's hours"| D
     D --> E[end_call: code says goodbye]
@@ -19,9 +20,10 @@ Nosh is the smallest shape unmute-core supports: **one agent, three tools, no ta
 
 1. Each tool's result is a Pydantic model. The registry checks it, then **saves** typed values from it into the call's state (`Assign`): the spot read back, the places on offer, the details said.
 2. Each result carries **code's next line**, and the registry speaks it (`ToolReply`). The model is asked for no reply, so every caller turn costs **one model request**: the one that picks the tool.
-3. Two rules hold in code, not in the prompt. A search runs only on the spot that was read back (`find_places` locks `{{spot}}`). A pick counts only if it was offered (`place_details` locks `{{offer}}` and refuses any other id).
-4. Prices and hours are never worded by the model. `speech.py` turns the place service's own fields into words, so nothing is said that the service did not return.
-5. The goodbye is the end tool's own line (`announce` with `announce_wait`), said by code.
+3. The read-back carries the next step. With no craving and no exact address, `find_area` returns `ask_craving`, and its line asks what they are in the mood for. The caller's yes never makes the model pick a craving. A craving said with the area is saved on the spot, and `find_places` searches for it.
+4. Two rules hold in code, not in the prompt. A search runs only on the spot that was read back (`find_places` locks `{{spot}}`). A pick counts only if it was offered (`place_details` locks `{{offer}}` and refuses any other id).
+5. Prices and hours are never worded by the model. `speech.py` turns the place service's own fields into words, so nothing is said that the service did not return.
+6. The goodbye is the end tool's own line (`announce` with `announce_wait`), said by code.
 
 | Turn | Who speaks | Model requests |
 |---|---|---|
