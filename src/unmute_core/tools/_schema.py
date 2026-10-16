@@ -3,12 +3,17 @@
 The subset is JSON Schema 2020-12 with a fixed list of keywords and limits on size, depth
 and branches. A schema outside it fails when the tool is built, with a message that names
 what to fix.
+
+The model sees a plainer copy (``model_shape``): refs inlined, ``format`` and ``pattern``
+as words, and no null branch on an optional value. Small models fill a plain schema more
+reliably; Gemini Flash-Lite answers a complex one with a malformed function call.
 """
 
 import functools
 import json
 import math
 from collections.abc import Collection
+from types import MappingProxyType
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -361,3 +366,121 @@ def model_schema(parameters: dict[str, Any], hidden: Collection[str]) -> dict[st
     if "required" in shown:
         shown["required"] = [name for name in shown["required"] if name not in hidden]
     return shown
+
+
+FORMAT_WORDS = MappingProxyType(
+    {
+        "birth-date": "a date of birth written YYYY-MM-DD",
+        "date": "a date written YYYY-MM-DD",
+        "date-time": "a date and time written YYYY-MM-DDTHH:MM",
+        "email": "an email address",
+        "id": "an identifier: letters, digits, and then any of dot, dash, underscore or colon",
+        "name-email": "a name and an email address, written Jo Bloggs <jo@example.com>",
+        "phone": "a phone number with its country code: a plus, the country code, then the number",
+        "spelled": "the code as one word of letters and digits, like KP482913",
+        "time": "a time of day written HH:MM on the 24-hour clock",
+    }
+)
+"""What each ``format`` the library knows asks for, in the words the model reads."""
+_LOCAL_REF = "#/$defs/"
+_LITERAL_KEYWORDS = frozenset({"enum", "const", "default", "examples", "example"})
+_SCHEMA_MAPS = frozenset({"properties", "patternProperties"})
+_DROPPED_KEYWORDS = frozenset({"format", "pattern", "$defs", "title"})
+_NULL = MappingProxyType({"type": "null"})
+
+
+def model_shape(schema: dict[str, Any]) -> dict[str, Any]:
+    """Return a tool's parameters as the model sees them: plain, with nothing it must decode.
+
+    - Every local ``$ref`` is inlined, and ``$defs`` and ``title`` go: a ref the model cannot
+      resolve makes it invent field names.
+    - ``format`` and ``pattern`` become words in the description: some providers refuse
+      them, and a format only this library knows, like ``spelled``, tells a model nothing.
+    - A property its object does not require, whose ``default`` is null, loses its null
+      branch and that default: leaving it out already says "no value". Any other property
+      keeps null, which is then a real answer, like "clear this value".
+
+    The arguments are still checked against the full schema, so a model that sends null
+    for an optional value is accepted.
+
+    Args:
+        schema: The parameters, a schema the library accepts.
+    """
+    shaped = _shape(schema, schema.get("$defs", {}))
+    assert isinstance(shaped, dict)  # ponytail: a dict shapes to a dict, for the type checker
+    return shaped
+
+
+def _shape(node: object, defs: dict[str, Any]) -> object:
+    """Shape one schema node. See ``model_shape``."""
+    if isinstance(node, list):
+        return [_shape(item, defs) for item in node]
+    if not isinstance(node, dict):
+        return node
+    target = node.get("$ref")
+    if isinstance(target, str) and target.startswith(_LOCAL_REF):
+        found = _shape(defs.get(target.removeprefix(_LOCAL_REF), {}), defs)
+        siblings = {key: _keyword(key, value, defs) for key, value in node.items() if key != "$ref"}
+        return {**found, **siblings} if isinstance(found, dict) else found
+    shaped = {
+        key: _keyword(key, value, defs)
+        for key, value in node.items()
+        if key not in _DROPPED_KEYWORDS
+    }
+    if words := _format_words(node):
+        shaped["description"] = _joined(shaped.get("description"), words)
+    if isinstance(properties := shaped.get("properties"), dict):
+        listed = shaped.get("required")
+        required = set(listed) if isinstance(listed, list) else set()
+        shaped["properties"] = {
+            name: _optional(child) if name not in required and _defaults_to_null(child) else child
+            for name, child in properties.items()
+        }
+    return shaped
+
+
+def _keyword(keyword: str, value: object, defs: dict[str, Any]) -> object:
+    """Shape the value of one keyword: literals stay, a property map keeps its names."""
+    if keyword in _LITERAL_KEYWORDS:
+        return value
+    if keyword in _SCHEMA_MAPS and isinstance(value, dict):
+        return {name: _shape(child, defs) for name, child in value.items()}
+    return _shape(value, defs)
+
+
+def _format_words(node: dict[str, Any]) -> str:
+    """Return what a node's ``format`` and ``pattern`` ask for as a sentence, or ""."""
+    words = []
+    if node.get("format") in FORMAT_WORDS:
+        words.append(FORMAT_WORDS[node["format"]])
+    if isinstance(node.get("pattern"), str):
+        words.append("text matching " + node["pattern"])
+    return f"Expected {'; '.join(words)}." if words else ""
+
+
+def _defaults_to_null(node: object) -> bool:
+    """Return True when a property's ``default`` is null: sending null equals leaving it out."""
+    return isinstance(node, dict) and "default" in node and node["default"] is None
+
+
+def _optional(node: dict[str, Any]) -> dict[str, Any]:
+    """Return an optional property without its null branch and its ``default: null``."""
+    shaped = {key: value for key, value in node.items() if key != "default"}
+    if isinstance(types := shaped.get("type"), list) and "null" in types:
+        left = [kind for kind in types if kind != "null"]
+        shaped["type"] = left[0] if len(left) == 1 else left
+    branches = shaped.get("anyOf")
+    if not isinstance(branches, list) or _NULL not in branches:
+        return shaped
+    kept = [branch for branch in branches if branch != _NULL]
+    if len(kept) != 1 or not isinstance(kept[0], dict):
+        return {**shaped, "anyOf": kept} if kept else shaped
+    rest = {key: value for key, value in shaped.items() if key != "anyOf"}
+    description = _joined(rest.get("description"), kept[0].get("description"))
+    merged = {**kept[0], **rest}
+    return {**merged, "description": description} if description else merged
+
+
+def _joined(first: object, second: object) -> str:
+    """Return two descriptions as one text, either one left out when empty."""
+    return " ".join(str(part) for part in (first, second) if part)
