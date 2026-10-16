@@ -145,6 +145,7 @@ async def run_on(
                     build(spec.to),
                     announce=spec.announce,
                     context=HandoffContext(**spec.context.model_dump()),
+                    opens_with=spec.opens_with,
                 )
 
             return hand_off

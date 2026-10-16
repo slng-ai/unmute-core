@@ -12,6 +12,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 - A `when` value on a `Literal`, `bool` or `Enum` result field must be one the field holds. A typo fails when the registry or the plan is built, with the values it can hold. This holds for `ToolReply.when` and `FinishRule.success`.
 - Code that speaks a reply line tells the sinks and hooks `tool.replied`.
 - A tool can check a business rule before it runs: `local_tool(fn, precheck=check, replies=[...])`. `check` is a plain function that takes some of the tool's parameters and returns an instance of the output model, or None to go ahead. An outcome is the tool's result: the tool does not run, no announce plays, and its replies say it. On a closing tool with `confirm`, the precheck runs before the read-back, so a wrong value is never read back and the refusal costs no model request.
+- `hand_off(opens_with=OpeningTool(...))` on LiveKit and Pipecat runs a tool of the next agent in code as it takes the call. The registry saves what the result names. When a reply line fills, that line is the agent's first reply, with no model request. When none fills, the model replies as before. A realtime model refuses it.
 
 ### Changes that can break you
 

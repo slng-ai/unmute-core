@@ -27,7 +27,7 @@ from unmute_core.call import save_call_start
 from unmute_core.greeting import Greeting
 from unmute_core.prefetch import CallValue, Lookup, Prefetch
 from unmute_core.state import CallInfo, CallState
-from unmute_core.tasks import TaskPlan, TasksSpec
+from unmute_core.tasks import OpeningTool, TaskPlan, TasksSpec
 from unmute_core.tools import Assign, ToolRegistry, ToolReply, local_tool
 from voice_stack import Handoff, VoiceApp
 
@@ -80,6 +80,8 @@ LESSON = [
     Assign(variable="helped", path=("helped",)),
 ]
 PROMPT = (files("faro") / "prompts" / "main.md").read_text(encoding="utf-8")
+REREAD = OpeningTool(tool="continue_lesson")
+"""After a switch, code reads the exercise waiting again, in the new language."""
 
 
 def prompt(name: str) -> str:
@@ -297,6 +299,7 @@ APP = VoiceApp(
                 description=LINES["EN"]["switch"],
                 to="faro_es",
                 saves={"explanation": "ES"},
+                opens_with=REREAD,
             ),
         ),
         "faro_es": (
@@ -305,6 +308,7 @@ APP = VoiceApp(
                 description=LINES["ES"]["switch"],
                 to="faro_en",
                 saves={"explanation": "EN"},
+                opens_with=REREAD,
             ),
         ),
     },

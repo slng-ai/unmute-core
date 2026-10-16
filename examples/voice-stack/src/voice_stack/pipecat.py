@@ -203,7 +203,11 @@ def build_pipeline(
                 state.save(dict(handoff.saves))
             target = every[handoff.to]
             await flows.hand_off(
-                params, target, native_tools=tools_of(target.name), announce=handoff.announce
+                params,
+                target,
+                native_tools=tools_of(target.name),
+                announce=handoff.announce,
+                opens_with=handoff.opens_with,
             )
 
         return FunctionSchema(handoff.tool, handoff.description, {}, [], handler=handler)

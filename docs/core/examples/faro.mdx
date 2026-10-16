@@ -145,9 +145,9 @@ caller, who gets a profile read back and then the first lesson.
 
 ### After a switch, the model says the exercise in its own words
 
-The prompt lets the model put the exercise itself. **Fix:** tell it to call
-`continue_lesson` after a switch and say nothing else. The application puts the
-exercise again in the new language.
+The model wrote the first reply after the switch. **Fix:** give each `Handoff`
+`opens_with=OpeningTool(tool="continue_lesson")`. Code then puts the exercise again
+in the new language, with no model request.
 
 ### A hint is said twice
 

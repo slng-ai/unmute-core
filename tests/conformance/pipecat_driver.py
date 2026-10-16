@@ -322,6 +322,7 @@ def _run_on(
                 native_tools=native(spec.to),
                 announce=spec.announce,
                 context=HandoffContext(**spec.context.model_dump()),
+                opens_with=spec.opens_with,
             )
 
         return hand_off
