@@ -6,8 +6,6 @@ the native path.
 """
 
 import asyncio
-import importlib
-from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
@@ -172,54 +170,6 @@ async def test_a_service_that_cannot_be_asked_runs_the_finish_check_on_the_summa
     await h.reply("Noted: please call me back.")
     await asyncio.sleep(0.05)
     assert [request.tool_choice for request in summarizer.requests] == ["required"]
-
-
-class _GoogleModels:
-    """A GenAI client's ``aio.models`` that finishes the step and keeps what it was sent."""
-
-    def __init__(self) -> None:
-        self.sent: list[dict[str, Any]] = []
-
-    async def generate_content(self, **kwargs: Any) -> Any:
-        self.sent.append(kwargs)
-        types = pytest.importorskip("google.genai.types")
-        finish = types.FunctionCall(name="finish", args={"note": "Please call me back."})
-        content = types.Content(role="model", parts=[types.Part(function_call=finish)])
-        return types.GenerateContentResponse(candidates=[types.Candidate(content=content)])
-
-
-async def test_a_google_service_runs_the_finish_check_on_its_own_client(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    pytest.importorskip("google.genai")
-    google = importlib.import_module("pipecat.services.google.llm")
-    settings = google.GoogleLLMService.Settings(model="gemini-x")
-    llm = google.GoogleLLMService(api_key="test", settings=settings)
-    models = _GoogleModels()
-    llm._client = cast(Any, SimpleNamespace(aio=SimpleNamespace(models=models)))
-    finishes: list[Any] = []
-
-    async def run_function_calls(calls: list[Any]) -> None:
-        finishes.extend(calls)
-
-    llm.run_function_calls = run_function_calls  # ty: ignore[invalid-assignment]
-    note = {**JOB["tasks"][1], "when": "The caller wants to leave a note."}
-    payload = {**JOB, "groups": [], "tasks": [note], "task_only_tools": []}
-    with caplog.at_level("WARNING", logger="unmute_core.pipecat._tasks"):
-        h = Harness(payload, mode="record", llm=llm)
-    assert not [r for r in caplog.records if "finish check" in r.message]
-    h.user("I want to leave a note.")
-    await h.call("take_note")
-    await h.reply("What is your note?")
-    h.user("Please call me back.")
-    await h.reply("Noted: please call me back.")
-    await asyncio.sleep(0.05)
-
-    [sent] = models.sent
-    assert sent["model"] == "gemini-x"
-    assert sent["config"]["tool_config"] == {"function_calling_config": {"mode": "ANY"}}
-    [finish] = finishes
-    assert (finish.function_name, finish.arguments) == ("finish", {"note": "Please call me back."})
 
 
 def test_a_service_that_can_be_asked_warns_about_nothing_at_build(

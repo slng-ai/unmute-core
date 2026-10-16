@@ -55,8 +55,6 @@ knowledge = [
 
 [dependency-groups]
 dev = [
-    # The Gemini service, for the side requests a Pipecat call sends it.
-    "pipecat-ai[google]",
     "pytest>=8",
     "pytest-asyncio>=1",
     "ruff>=0.15",

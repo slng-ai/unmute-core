@@ -41,7 +41,7 @@ and a tool call is required.
 3. The check runs at most once per caller turn, and waits at most 8 seconds.
 4. A step with tools of its own is checked only after one of them succeeded, because its values come from that result.
 
-**On each framework.** On Pipecat, the check goes to the call's LLM when it can be asked: a `ModelCallLLMService`, an OpenAI-compatible service or a `GoogleLLMService`. For any other LLM, the spec's `AgentSpec(summarizer=...)` answers the check. With no summarizer, there is no check.
+**On each framework.** On Pipecat, the check goes to the call's LLM when it can be asked: a `ModelCallLLMService` or an OpenAI-compatible service. For any other LLM, the spec's `AgentSpec(summarizer=...)` answers the check. With no summarizer, there is no check.
 
 **Why it works this way.** The check offers only `finish` and `not_yet`, so a weak model cannot wander off. It runs once per caller turn and has a time limit, so it never holds up the call.
 

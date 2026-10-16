@@ -159,7 +159,7 @@ HandoffContext(history="summary", summarizer=my_model_call)
 
 1. The library sends one model request at the `summary` site, with no tools. It holds a fixed prompt and the conversation as `role: text` lines. Prompts, tool calls and tool results are left out.
 2. `summarizer` is any `ModelCall`, like a LiveKit plugin in `LiveKitModel`. Without one, the agent spec's `summarizer` answers. Without that, the model of the agent that hands off answers, by the path the finish check uses.
-3. On Pipecat, the agent's own model can answer only through a `ModelCallLLMService`, an OpenAI-compatible service or a `GoogleLLMService`. Give any other service a `summarizer`.
+3. On Pipecat, the agent's own model can answer only through a `ModelCallLLMService` or an OpenAI-compatible service. Give any other service a `summarizer`.
 4. A summary that fails, comes back empty, or takes longer than 8 seconds is dropped. The next agent then hears `messages`. The call goes on.
 5. The request is traced as an `llm` span in the open turn, with site `summary`.
 6. On the SLNG Context Router, the request goes out under the agent's own id, with prompt site `task:summary`. The router accepts only `task:<name>` as a prompt site, so no task or group may be named `summary`. See [SLNG](/core/models/slng).
