@@ -9,6 +9,7 @@ import pytest
 from livekit.agents import AgentSession, APIConnectOptions, llm
 from livekit.agents.voice.agent_session import SessionConnectOptions
 
+from tests.livekit.fake import replies
 from tests.livekit.test_standalone import FailsOnce, StatusError
 from tests.livekit.test_trace import Memory
 from tests.tasks.job import Canned, plan, registry, state
@@ -103,7 +104,7 @@ async def test_an_agent_retries_its_model_call_as_the_session_does_before_any_ev
     async with AgentSession(conn_options=_quick()) as session:
         await session.start(agent)
         await session.run(user_input="Hi.")
-        said = [m.text_content for m in session.history.messages() if m.role == "assistant"]
+        said = [m.text_content for m in replies(session)]
     assert model.requests == 2
     assert said == ["Hello."]
 
