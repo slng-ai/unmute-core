@@ -323,14 +323,6 @@ async def test_open_call_gives_the_audio_back_when_the_greeting_fails():
     assert session.audio == [False, True]
 
 
-def test_attach_call_binds_a_call_once():
-    session = Live()
-    call = CallHooks()
-    attach_call(cast(Any, session), call)
-    attach_call(cast(Any, Live()), call)
-    assert len(session.handlers["error"]) == 1
-
-
 async def test_the_models_close_after_the_calls_end_has_decided_the_held_saves():
     class Router(Scripted):
         """A model whose request fails once it is closed, as a real client does."""

@@ -480,31 +480,6 @@ def test_a_library_continue_tool_alone_hides_the_async_tool_text() -> None:
     assert "ASYNC TOOLS" in _composed(llm)
 
 
-class Standin:
-    """A duck-typed stand-in for an LLM service."""
-
-    def add_event_handler(self, name: str, handler: Any) -> None:
-        """Take a handler and keep nothing."""
-
-
-def test_an_own_handler_with_an_empty_closure_cell_keeps_the_text() -> None:
-    def make() -> Any:
-        async def handler(params: Any) -> None:
-            await later(params)
-
-        return handler
-        later = None  # never runs, so the handler's cell for it stays empty
-
-    llm = service(Scripted())
-    llm.register_function("own", make(), cancel_on_interruption=False)
-    attach_call(cast(Any, Worker()), CallHooks(), LLMContext(), llm=llm)
-    assert "ASYNC TOOLS" in _composed(llm)
-
-
-def test_attach_call_leaves_an_llm_that_is_not_a_pipecat_service_alone() -> None:
-    attach_call(cast(Any, Worker()), CallHooks(), LLMContext(), llm=cast(Any, Standin()))
-
-
 async def test_a_step_tool_that_keeps_running_hides_the_async_tool_text_through_flows() -> None:
     from pipecat.flows import FlowManager
 

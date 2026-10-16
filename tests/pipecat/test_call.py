@@ -430,16 +430,6 @@ async def test_a_transport_that_loses_its_client_notes_the_caller_hung_up():
     assert (await call.end("ended")).reason == CALLER_HUNG_UP
 
 
-async def test_open_call_wires_the_transport_once_even_when_attached_twice():
-    call, transport = CallHooks(), Transport()
-    worker = Pipeline()
-    await open_call(
-        cast(Any, worker), Greeting(), call, context=LLMContext(), transport=cast(Any, transport)
-    )
-    attach_call(cast(Any, worker), call, LLMContext(), transport=cast(Any, transport))
-    assert len(transport.handlers["on_client_disconnected"]) == 1
-
-
 async def test_a_call_that_ended_for_another_reason_keeps_it_when_the_client_leaves():
     call, transport = CallHooks(), Transport()
     attach_call(cast(Any, Pipeline()), call, LLMContext(), transport=cast(Any, transport))

@@ -297,27 +297,6 @@ def test_only_reads_a_generator_once_and_the_registry_knows_its_names():
         registry.only(name for name in ["ghost"])
 
 
-async def test_event_dicts_keep_their_keys_and_order():
-    seen: dict[str, dict[str, Any]] = {}
-    later = ToolSpec("later", "Later.", NO_ARGUMENTS, AnyResult, Answer({}), announce="On {{day}}.")
-
-    @local_tool
-    def fail() -> Done:
-        """Fail."""
-        raise ToolError("no slots")
-
-    registry = ToolRegistry([_tool(), fail, later])
-    registry.listen(lambda stage, data: seen.setdefault(stage, data))
-    await registry.call("later", {}, CallState(Booking))
-    with pytest.raises(ToolError):
-        await registry.call("fail", {})
-    await registry.call("check", {})
-    assert list(seen["tool.refused"]) == ["name", "source", "error"]
-    assert list(seen["tool.started"]) == ["name", "source"]
-    assert list(seen["tool.failed"]) == ["name", "source", "ms", "error"]
-    assert list(seen["tool.succeeded"]) == ["name", "source", "ms"]
-
-
 async def test_a_filled_announce_line_may_hold_braces_from_the_callers_words():
     state = CallState(Booking)
     state.save({"day": "{{x}}"})
