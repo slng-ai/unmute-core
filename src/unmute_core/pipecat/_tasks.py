@@ -160,8 +160,8 @@ def _warn_unasked(tasks: CallTasks, side: SideRequests, summarizer: ModelCall | 
         logger.warning(
             "the plan records values, so each step runs a finish check, and this call's LLM "
             "cannot be asked outside the pipeline: the steps go on as the model leaves them. "
-            "Give the AgentSpec a summarizer model, or use an OpenAI-compatible service or a "
-            "ModelCallLLMService."
+            "Give the AgentSpec a summarizer model, or use an OpenAI-compatible or Google "
+            "service, or a ModelCallLLMService."
         )
     if summarizer is None and any(t.history == "summary" for t in tasks.plan.tasks.values()):
         logger.warning(

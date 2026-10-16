@@ -20,6 +20,7 @@ from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.serializers.plivo import PlivoFrameSerializer
 from pipecat.serializers.telnyx import TelnyxFrameSerializer
 from pipecat.serializers.twilio import TwilioFrameSerializer
+from pipecat.services.google.llm import GoogleLLMService
 from pipecat.services.llm_service import (
     FunctionCallParams,
     FunctionCallRegistryItem,
@@ -71,6 +72,16 @@ def test_the_public_settings_property_is_the_services_own_settings_object() -> N
     """Every ``service.settings`` read in the adapter relies on it being the object ``_settings`` is."""
     llm = OpenAILLMService(api_key="test")
     assert llm.settings is llm._settings
+
+
+def test_a_google_service_still_has_its_client_and_request_builders() -> None:
+    """``SideRequests.google_ask`` builds a request as the service does, and sends it on its client."""
+    llm = GoogleLLMService(api_key="test", settings=GoogleLLMService.Settings(model="gemini-x"))
+    assert llm._client is not None
+    assert inspect.iscoroutinefunction(llm._client.aio.models.generate_content)
+    assert isinstance(llm._should_inject_trailing_user_message(), bool)
+    tool_config = {"function_calling_config": {"mode": "ANY"}}
+    assert llm._build_generation_params(tool_config=tool_config)["tool_config"] == tool_config
 
 
 def test_an_openai_service_still_has_its_client() -> None:

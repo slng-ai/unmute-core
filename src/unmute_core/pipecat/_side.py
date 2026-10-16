@@ -7,12 +7,16 @@ hooks, then filled for a native service.
 
 import asyncio
 import contextlib
+import json
 import logging
+import sys
+import uuid
 from collections.abc import Callable
 from dataclasses import replace
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from opentelemetry.trace import Span
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.services.llm_service import LLMService
 from pipecat.services.openai.base_llm import BaseOpenAILLMService
@@ -38,8 +42,12 @@ from unmute_core.model import (
 from unmute_core.pipecat._history import without_instructions
 from unmute_core.pipecat._model import ModelCallLLMService
 from unmute_core.pipecat._requests import RequestHooks, service_model
+from unmute_core.pipecat._tools import function_schema
 from unmute_core.state import CallState
 from unmute_core.tasks import FINISH_TOOL_NAME, FinishCheck, StepRun, decided_finish
+
+if TYPE_CHECKING:
+    from pipecat.services.google.llm import GoogleLLMService
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +113,12 @@ class SideRequests:
     def can_ask(self) -> bool:
         """Whether the call's LLM can be asked outside the pipeline, for a check or a summary.
 
-        A ``ModelCallLLMService`` and an OpenAI-compatible service can. Any other service
-        has no finish check, and a summary needs a ``summarizer`` model.
+        A ``ModelCallLLMService``, an OpenAI-compatible service and a Google service can.
+        Any other service has no finish check, and a summary needs a ``summarizer`` model.
         """
-        return isinstance(self._llm, ModelCallLLMService | BaseOpenAILLMService)
+        return isinstance(self._llm, ModelCallLLMService | BaseOpenAILLMService) or _google(
+            self._llm
+        )
 
     def render(self, text: str, site: str, kind: PromptKind = "agent") -> str:
         """Return a prompt for the LLM after the ``prompt`` hooks, filled unless routed."""
@@ -136,7 +146,7 @@ class SideRequests:
         """Run a finish check: the step's chat and the reply just said, finish or not_yet.
 
         Through a ``ModelCallLLMService`` the check is a ``ModelRequest``. A native
-        OpenAI-compatible service gets it on its own client. Any other service asks the
+        OpenAI-compatible or Google service gets it on its own client. Any other service asks the
         ``summarizer`` model. With none, there is no check, and the step goes on as the
         model leaves it.
 
@@ -225,8 +235,8 @@ class SideRequests:
         """Ask the model outside the pipeline, like a finish check or a summary.
 
         ``model`` answers when given, then a ``ModelCallLLMService``'s model call. A native
-        OpenAI-compatible service gets the request on its own client. Any other service is
-        not asked.
+        OpenAI-compatible or Google service gets the request on its own client. Any other
+        service is not asked.
 
         With a ``ModelCallLLMService``, each replayed tool call gets back the provider data
         it streamed with, like a Gemini thought signature, and the provider data of each
@@ -266,6 +276,8 @@ class SideRequests:
                 if extras is not None:
                     for call in answer.calls:
                         extras.keep(call)
+            elif _google(self._llm):
+                answer = await self.google_ask(cast("GoogleLLMService", self._llm), request)
             elif self.can_ask:
                 answer = await self.native_ask(cast(BaseOpenAILLMService, self._llm), request)
             return answer
@@ -283,15 +295,10 @@ class SideRequests:
         What a pipeline request borrowed is given back first, so this request sends only its
         own ``params``. The first message is the prompt when it is a system message.
         """
-        if self._requests is not None:
-            await self._requests.give_back()
-        messages = request.messages
-        first = messages[0] if messages else {}
-        prompted = first.get("role") == "system" and isinstance(first.get("content"), str)
-        context = LLMContext(messages=cast(Any, messages[1:] if prompted else messages))
+        context, system = await self._own_request(request)
         params = llm.get_llm_adapter().get_llm_invocation_params(
             context,
-            system_instruction=self.fill(first["content"], request.site) if prompted else None,
+            system_instruction=system,
             convert_developer_to_user=not llm.supports_developer_role,
         )
         built = llm.build_chat_completion_params(cast(Any, params))
@@ -313,6 +320,73 @@ class SideRequests:
             ),
             Usage(usage.prompt_tokens, usage.completion_tokens) if usage else None,
         )
+
+    async def google_ask(self, llm: "GoogleLLMService", request: ModelRequest) -> ModelAnswer:
+        """Ask a Google service on its own client, as its pipeline requests go out.
+
+        The service's Gemini adapter converts the chat, so a replayed tool call keeps its
+        thought signature, or gets the placeholder one. The service's own settings, like
+        thinking, apply. ``required`` becomes Gemini's ``ANY`` function calling mode.
+        """
+        context, system = await self._own_request(request)
+        if request.tools:
+            context.set_tools(
+                ToolsSchema([function_schema(tool["function"]) for tool in request.tools])
+            )
+        params = llm.get_llm_adapter().get_llm_invocation_params(
+            context,
+            system_instruction=system,
+            ensure_last_message_is_user=llm._should_inject_trailing_user_message(),
+        )
+        mode = {"auto": "AUTO", "required": "ANY", "none": "NONE"}.get(request.tool_choice or "")
+        config = llm._build_generation_params(
+            system_instruction=params["system_instruction"],
+            tools=params["tools"] or None,
+            tool_config={"function_calling_config": {"mode": mode}} if mode else None,
+        )
+        config |= request.params
+        assert llm._client is not None
+        response = await llm._client.aio.models.generate_content(
+            model=request.model, contents=cast(Any, params["messages"]), config=cast(Any, config)
+        )
+        content = response.candidates[0].content if response.candidates else None
+        parts = (content.parts if content else None) or []
+        usage = response.usage_metadata
+        return ModelAnswer(
+            "".join(part.text for part in parts if part.text and not part.thought),
+            tuple(
+                ToolCall(call.id or str(uuid.uuid4()), call.name or "", json.dumps(call.args or {}))
+                for part in parts
+                if (call := part.function_call) is not None
+            ),
+            Usage(usage.prompt_token_count or 0, usage.candidates_token_count or 0)
+            if usage
+            else None,
+        )
+
+    async def _own_request(self, request: ModelRequest) -> tuple[LLMContext, str | None]:
+        """Give back what a pipeline request borrowed, and split off the filled prompt.
+
+        Returns:
+            The chat as a context, and the prompt when the first message is a system one.
+        """
+        if self._requests is not None:
+            await self._requests.give_back()
+        messages = request.messages
+        first = messages[0] if messages else {}
+        prompted = first.get("role") == "system" and isinstance(first.get("content"), str)
+        context = LLMContext(messages=cast(Any, messages[1:] if prompted else messages))
+        return context, self.fill(first["content"], request.site) if prompted else None
+
+
+def _google(llm: object) -> bool:
+    """Whether ``llm`` is a Pipecat Google service.
+
+    The module is read from ``sys.modules``: a Google service imported it, and
+    ``pipecat-ai`` without its ``google`` extra cannot import it.
+    """
+    module = sys.modules.get("pipecat.services.google.llm")
+    return module is not None and isinstance(llm, module.GoogleLLMService)
 
 
 async def _streamed(

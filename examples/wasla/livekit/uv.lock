@@ -2484,6 +2484,7 @@ provides-extras = ["livekit", "pipecat", "slng", "knowledge"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pipecat-ai", extras = ["google"] },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-asyncio", specifier = ">=1" },
     { name = "ruff", specifier = ">=0.15" },
