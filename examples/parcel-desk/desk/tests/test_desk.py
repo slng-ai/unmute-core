@@ -97,11 +97,11 @@ def test_the_router_defaults_give_way_to_the_environment(monkeypatch) -> None:
     monkeypatch.delenv("SLNG_ROUTER_URL", raising=False)
     monkeypatch.setenv("SLNG_MODEL", "")
     call = build().model_call(CALL)
-    assert call.model == "openai/gpt-5.6-luna"
+    assert call.model == "slng/auto"
     assert str(call.client.base_url) == "https://eu-north.context-router.slng.ai/v1/"
 
-    monkeypatch.setenv("SLNG_MODEL", "slng/auto")
-    assert build().model_call(CALL).model == "slng/auto"
+    monkeypatch.setenv("SLNG_MODEL", "openai/gpt-5.6-luna")
+    assert build().model_call(CALL).model == "openai/gpt-5.6-luna"
 
 
 def test_every_call_starts_empty() -> None:
