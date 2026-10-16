@@ -7,7 +7,7 @@ model's value is never used, and the value never reaches the model's schema.
 import asyncio
 import threading
 from datetime import date
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import pytest
 from pydantic import BaseModel, Field
@@ -103,30 +103,11 @@ def _shown(node: dict[str, Any], *, required: bool = False, defs: dict | None = 
     ("node", "required", "shown"),
     [
         (
-            {
-                "anyOf": [{"type": "string"}, {"type": "null"}],
-                "default": None,
-                "description": "Why.",
-            },
-            False,
-            {"type": "string", "description": "Why."},
-        ),
-        ({"type": ["integer", "null"], "default": None}, False, {"type": "integer"}),
-        (
-            {"anyOf": [{"enum": ["a", "b"], "type": "string"}, {"type": "null"}], "default": None},
-            False,
-            {"enum": ["a", "b"], "type": "string"},
-        ),
-        (
             {"anyOf": [{"type": "string"}, {"type": "null"}]},
             True,
             {"anyOf": [{"type": "string"}, {"type": "null"}]},
         ),
-        (
-            {"anyOf": [{"type": "string"}, {"type": "null"}]},
-            False,
-            {"anyOf": [{"type": "string"}, {"type": "null"}]},
-        ),
+        ({"type": "string", "default": None}, False, {"type": "string"}),
         (
             {"type": "string", "format": "birth-date"},
             True,
@@ -154,11 +135,6 @@ def _shown(node: dict[str, Any], *, required: bool = False, defs: dict | None = 
             True,
             {"type": "string", "description": "Expected text matching ^KP[0-9]{6}$."},
         ),
-        (
-            {"anyOf": [{"format": "date", "type": "string"}, {"type": "null"}], "default": None},
-            False,
-            {"type": "string", "description": "Expected a date written YYYY-MM-DD."},
-        ),
     ],
 )
 def test_the_model_sees_a_plain_schema(node, required, shown):
@@ -166,24 +142,60 @@ def test_the_model_sees_a_plain_schema(node, required, shown):
 
 
 def test_the_model_sees_a_shape_inlined():
-    defs = {"Car": {"type": "object", "title": "Car", "properties": {"plate": {"type": "string"}}}}
+    defs = {
+        "Car": {
+            "type": "object",
+            "title": "Car",
+            "description": "A car.",
+            "properties": {"plate": {"type": "string"}},
+        }
+    }
     shown = _shown({"$ref": "#/$defs/Car", "description": "Their car."}, required=True, defs=defs)
     assert shown == {
         "type": "object",
         "properties": {"plate": {"type": "string"}},
-        "description": "Their car.",
+        "description": "Their car. A car.",
     }
+
+
+class Car(BaseModel):
+    """A car."""
+
+    plate: str
+
+
+def note_crash(
+    must: str | None,
+    day: date | None = None,
+    why: Annotated[str | None, Field(description="Why.")] = None,
+    kind: Literal["a", "b"] | None = None,
+    car: Annotated[Car | None, Field(description="Their car.")] = None,
+) -> dict:
+    """Note a crash."""
+    return {"day": day, "why": why}
+
+
+def test_an_optional_value_of_a_python_tool_has_no_null_branch():
+    shown = local_tool(note_crash, output=AnyResult).model_parameters
+    assert shown["properties"] == {
+        "must": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        "day": {"type": "string", "description": "Expected a date written YYYY-MM-DD."},
+        "why": {"type": "string", "description": "Why."},
+        "kind": {"enum": ["a", "b"], "type": "string"},
+        "car": {
+            "type": "object",
+            "properties": {"plate": {"type": "string"}},
+            "required": ["plate"],
+            "description": "Their car. A car.",
+        },
+    }
+    assert shown["required"] == ["must"]
 
 
 async def test_an_optional_argument_sent_as_null_is_still_accepted():
-    recorder = Recorder()
-    parameters = {
-        "type": "object",
-        "properties": {"note": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}},
-    }
-    registry = ToolRegistry([ToolSpec("t", "T.", parameters, AnyResult, recorder)])
-    assert await registry.call("t", {"note": None}) == {"ok": True}
-    assert recorder.arguments == {"note": None}
+    registry = ToolRegistry([local_tool(note_crash, output=AnyResult)])
+    result = await registry.call("note_crash", {"must": None, "day": None, "why": None})
+    assert result == {"day": None, "why": None}
 
 
 async def test_locked_value_replaces_what_the_model_sent():

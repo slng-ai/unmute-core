@@ -29,7 +29,7 @@ from unmute_core.state._types import json_text
 from unmute_core.tasks._spec import UNSERVED_FIELD, Assign, FinishRule, TaskSpec, read_path
 from unmute_core.tasks._texts import UNSERVED_DESCRIPTION, UNSERVED_DESCRIPTION_RECORD
 from unmute_core.tools._lines import result_matches
-from unmute_core.tools._schema import model_shape
+from unmute_core.tools._schema import ToolSchema, model_shape
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +196,7 @@ def finish_parameters(
 
 def _optional_parameters(model: type[BaseModel]) -> dict[str, Any]:
     """Return a tool's parameters from a model: one optional property per field, refs inlined."""
-    schema = model.model_json_schema(by_alias=True)
+    schema = model.model_json_schema(by_alias=True, schema_generator=ToolSchema)
     return model_shape(
         {
             "type": "object",

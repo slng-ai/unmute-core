@@ -4,20 +4,23 @@ The subset is JSON Schema 2020-12 with a fixed list of keywords and limits on si
 and branches. A schema outside it fails when the tool is built, with a message that names
 what to fix.
 
-The model sees a plainer copy (``model_shape``): refs inlined, ``format`` and ``pattern``
-as words, and no null branch on an optional value. Small models fill a plain schema more
-reliably; Gemini Flash-Lite answers a complex one with a malformed function call.
+A tool built from a Pydantic model gets its schema from ``ToolSchema``: an optional value
+has no null branch. The model sees a plainer copy still (``model_shape``): refs inlined, and
+``format`` and ``pattern`` as words. Small models fill a plain schema more reliably; Gemini
+Flash-Lite answers a complex one with a malformed function call.
 """
 
 import functools
 import json
 import math
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from types import MappingProxyType
 from typing import Any
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
+from pydantic.json_schema import GenerateJsonSchema, JsonSchemaValue
+from pydantic_core import core_schema
 
 MAX_SCHEMA_BYTES = 65_536
 MAX_SCHEMA_DEPTH = 32
@@ -368,6 +371,50 @@ def model_schema(parameters: dict[str, Any], hidden: Collection[str]) -> dict[st
     return shown
 
 
+class ToolSchema(GenerateJsonSchema):
+    """Writes a tool's parameters from a Pydantic model, with no null branch on an optional value.
+
+    A field like ``day: date | None = None`` becomes ``{"type": "string", "format": "date",
+    "default": null}``: leaving it out already says "no value". The ``default`` stays, so
+    ``ToolSpec`` still accepts a model that sends null there. A required field keeps null,
+    which is then a real answer.
+
+    Use it as ``model.model_json_schema(schema_generator=ToolSchema)``.
+    """
+
+    _unset: bool = False
+
+    def default_schema(self, schema: core_schema.WithDefaultSchema) -> JsonSchemaValue:
+        """Mark a field whose default is None, so its own null branch is left out."""
+        self._unset = "default" in schema and schema["default"] is None and _nullable(schema)
+        try:
+            return super().default_schema(schema)
+        finally:
+            self._unset = False
+
+    def nullable_schema(self, schema: core_schema.NullableSchema) -> JsonSchemaValue:
+        """Leave out null for the field's own type, and for one nested right in it."""
+        if self._unset:
+            self._unset = _nullable(schema)
+            return self.generate_inner(schema["schema"])
+        return super().nullable_schema(schema)
+
+
+_VALIDATOR_WRAPPERS = frozenset({"function-before", "function-after", "function-wrap"})
+
+
+def _nullable(schema: Mapping[str, Any]) -> bool:
+    """Return True when a schema's own type, under its validators, takes null.
+
+    A State value of ``str | None`` with a validator, made optional once more, nests one
+    nullable in the other.
+    """
+    inner = schema["schema"]
+    while inner["type"] in _VALIDATOR_WRAPPERS:
+        inner = inner["schema"]
+    return inner["type"] == "nullable"
+
+
 FORMAT_WORDS = MappingProxyType(
     {
         "birth-date": "a date of birth written YYYY-MM-DD",
@@ -386,7 +433,6 @@ _LOCAL_REF = "#/$defs/"
 _LITERAL_KEYWORDS = frozenset({"enum", "const", "default", "examples", "example"})
 _SCHEMA_MAPS = frozenset({"properties", "patternProperties"})
 _DROPPED_KEYWORDS = frozenset({"format", "pattern", "$defs", "title"})
-_NULL = MappingProxyType({"type": "null"})
 
 
 def model_shape(schema: dict[str, Any]) -> dict[str, Any]:
@@ -396,12 +442,7 @@ def model_shape(schema: dict[str, Any]) -> dict[str, Any]:
       resolve makes it invent field names.
     - ``format`` and ``pattern`` become words in the description: some providers refuse
       them, and a format only this library knows, like ``spelled``, tells a model nothing.
-    - A property its object does not require, whose ``default`` is null, loses its null
-      branch and that default: leaving it out already says "no value". Any other property
-      keeps null, which is then a real answer, like "clear this value".
-
-    The arguments are still checked against the full schema, so a model that sends null
-    for an optional value is accepted.
+    - A ``default`` of null goes: ``ToolSchema`` keeps it only for the argument check.
 
     Args:
         schema: The parameters, a schema the library accepts.
@@ -420,22 +461,19 @@ def _shape(node: object, defs: dict[str, Any]) -> object:
     target = node.get("$ref")
     if isinstance(target, str) and target.startswith(_LOCAL_REF):
         found = _shape(defs.get(target.removeprefix(_LOCAL_REF), {}), defs)
-        siblings = {key: _keyword(key, value, defs) for key, value in node.items() if key != "$ref"}
-        return {**found, **siblings} if isinstance(found, dict) else found
+        if not isinstance(found, dict):
+            return found
+        siblings = _shape({key: value for key, value in node.items() if key != "$ref"}, defs)
+        assert isinstance(siblings, dict)  # ponytail: a dict shapes to a dict
+        description = _joined(siblings.get("description"), found.get("description"))
+        return {**found, **siblings} | ({"description": description} if description else {})
     shaped = {
         key: _keyword(key, value, defs)
         for key, value in node.items()
-        if key not in _DROPPED_KEYWORDS
+        if key not in _DROPPED_KEYWORDS and not (key == "default" and value is None)
     }
     if words := _format_words(node):
         shaped["description"] = _joined(shaped.get("description"), words)
-    if isinstance(properties := shaped.get("properties"), dict):
-        listed = shaped.get("required")
-        required = set(listed) if isinstance(listed, list) else set()
-        shaped["properties"] = {
-            name: _optional(child) if name not in required and _defaults_to_null(child) else child
-            for name, child in properties.items()
-        }
     return shaped
 
 
@@ -456,29 +494,6 @@ def _format_words(node: dict[str, Any]) -> str:
     if isinstance(node.get("pattern"), str):
         words.append("text matching " + node["pattern"])
     return f"Expected {'; '.join(words)}." if words else ""
-
-
-def _defaults_to_null(node: object) -> bool:
-    """Return True when a property's ``default`` is null: sending null equals leaving it out."""
-    return isinstance(node, dict) and "default" in node and node["default"] is None
-
-
-def _optional(node: dict[str, Any]) -> dict[str, Any]:
-    """Return an optional property without its null branch and its ``default: null``."""
-    shaped = {key: value for key, value in node.items() if key != "default"}
-    if isinstance(types := shaped.get("type"), list) and "null" in types:
-        left = [kind for kind in types if kind != "null"]
-        shaped["type"] = left[0] if len(left) == 1 else left
-    branches = shaped.get("anyOf")
-    if not isinstance(branches, list) or _NULL not in branches:
-        return shaped
-    kept = [branch for branch in branches if branch != _NULL]
-    if len(kept) != 1 or not isinstance(kept[0], dict):
-        return {**shaped, "anyOf": kept} if kept else shaped
-    rest = {key: value for key, value in shaped.items() if key != "anyOf"}
-    description = _joined(rest.get("description"), kept[0].get("description"))
-    merged = {**kept[0], **rest}
-    return {**merged, "description": description} if description else merged
 
 
 def _joined(first: object, second: object) -> str:

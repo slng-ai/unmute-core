@@ -42,6 +42,7 @@ from unmute_core.settings import env_value
 from unmute_core.state import CallState
 from unmute_core.tools._http import HardenedHttpError, check_destination, send_pinned_request
 from unmute_core.tools._lines import ToolReply
+from unmute_core.tools._schema import ToolSchema
 from unmute_core.tools._spec import (
     ToolEffect,
     ToolError,
@@ -866,5 +867,5 @@ def local_tool(
 
 
 def _schema_of(model: type[BaseModel]) -> dict[str, Any]:
-    """Return a model's JSON Schema, with ``properties`` even when it has none."""
-    return {"properties": {}, **model.model_json_schema()}
+    """Return a model's JSON Schema as a tool's parameters, with ``properties`` even when it has none."""
+    return {"properties": {}, **model.model_json_schema(schema_generator=ToolSchema)}
