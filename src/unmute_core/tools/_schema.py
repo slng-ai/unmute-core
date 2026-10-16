@@ -387,8 +387,6 @@ _LITERAL_KEYWORDS = frozenset({"enum", "const", "default", "examples", "example"
 _SCHEMA_MAPS = frozenset({"properties", "patternProperties"})
 _DROPPED_KEYWORDS = frozenset({"format", "pattern", "$defs", "title"})
 _NULL = MappingProxyType({"type": "null"})
-LEAVE_OUT = "Leave it out when you do not know it."
-"""What an optional property's description ends with once its null branch is gone."""
 
 
 def model_shape(schema: dict[str, Any]) -> dict[str, Any]:
@@ -399,9 +397,8 @@ def model_shape(schema: dict[str, Any]) -> dict[str, Any]:
     - ``format`` and ``pattern`` become words in the description: some providers refuse
       them, and a format only this library knows, like ``spelled``, tells a model nothing.
     - A property its object does not require, whose ``default`` is null, loses its null
-      branch and that default: leaving it out already says "no value". Its description
-      says so in words (``LEAVE_OUT``), or a small model fills it with a guess. Any other
-      property keeps null, which is then a real answer, like "clear this value".
+      branch and that default: leaving it out already says "no value". Any other property
+      keeps null, which is then a real answer, like "clear this value".
 
     The arguments are still checked against the full schema, so a model that sends null
     for an optional value is accepted.
@@ -467,13 +464,7 @@ def _defaults_to_null(node: object) -> bool:
 
 
 def _optional(node: dict[str, Any]) -> dict[str, Any]:
-    """Return an optional property without null: no null branch, no ``default``, ``LEAVE_OUT`` said."""
-    shaped = _without_null(node)
-    return {**shaped, "description": _joined(shaped.get("description"), LEAVE_OUT)}
-
-
-def _without_null(node: dict[str, Any]) -> dict[str, Any]:
-    """Return a property without its null branch and its ``default: null``."""
+    """Return an optional property without its null branch and its ``default: null``."""
     shaped = {key: value for key, value in node.items() if key != "default"}
     if isinstance(types := shaped.get("type"), list) and "null" in types:
         left = [kind for kind in types if kind != "null"]

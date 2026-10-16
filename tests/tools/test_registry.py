@@ -109,21 +109,13 @@ def _shown(node: dict[str, Any], *, required: bool = False, defs: dict | None = 
                 "description": "Why.",
             },
             False,
-            {"type": "string", "description": "Why. Leave it out when you do not know it."},
+            {"type": "string", "description": "Why."},
         ),
-        (
-            {"type": ["integer", "null"], "default": None},
-            False,
-            {"type": "integer", "description": "Leave it out when you do not know it."},
-        ),
+        ({"type": ["integer", "null"], "default": None}, False, {"type": "integer"}),
         (
             {"anyOf": [{"enum": ["a", "b"], "type": "string"}, {"type": "null"}], "default": None},
             False,
-            {
-                "enum": ["a", "b"],
-                "type": "string",
-                "description": "Leave it out when you do not know it.",
-            },
+            {"enum": ["a", "b"], "type": "string"},
         ),
         (
             {"anyOf": [{"type": "string"}, {"type": "null"}]},
@@ -165,11 +157,7 @@ def _shown(node: dict[str, Any], *, required: bool = False, defs: dict | None = 
         (
             {"anyOf": [{"format": "date", "type": "string"}, {"type": "null"}], "default": None},
             False,
-            {
-                "type": "string",
-                "description": "Expected a date written YYYY-MM-DD. Leave it out when you do "
-                "not know it.",
-            },
+            {"type": "string", "description": "Expected a date written YYYY-MM-DD."},
         ),
     ],
 )
