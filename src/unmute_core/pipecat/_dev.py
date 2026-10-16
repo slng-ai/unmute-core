@@ -40,6 +40,7 @@ from pipecat.frames.frames import (
     UserStartedSpeakingFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
+from pipecat.processors.aggregators.llm_response_universal import LLMAssistantAggregator
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.ai_service import AIService
 from pipecat.services.llm_service import LLMService
@@ -157,8 +158,13 @@ class DevObserver(BaseObserver):
         )
 
     def _on_context(self, data: FramePushed) -> None:
-        """End the open input, because the context holding its words reached the model."""
-        self._end_input()
+        """End the open input, because the context holding its words reached the model.
+
+        The assistant aggregator's context, pushed when the agent's reply ends, holds no
+        caller words. A caller who speaks as the reply ends keeps their input open.
+        """
+        if not isinstance(data.source, LLMAssistantAggregator):
+            self._end_input()
 
     def _on_response_start(self, data: FramePushed) -> None:
         """Open an ``llm`` operation when a model's reply starts."""

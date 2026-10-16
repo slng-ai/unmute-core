@@ -24,6 +24,10 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 - kestrel: a future incident day is the tool's rule, not the argument's. `note_facts` returns `status: "future_day"`, and its own reply asks again. The turn costs one model request instead of up to three.
 - No example validator carries caller text now. kestrel's "KP and six digits", faro's "Spanish numbers only" and wasla's ten-day window are prechecks of `lookup_policy`, `check_number`, `record_promise` and `schedule_callback`. Each outcome is a `Literal` value its tool's reply says, before the read-back.
 
+### Fixed
+
+- Pipecat dev records: a caller who speaks as the agent's line ends keeps one input, and the reply links to it. Before, the dev page showed an empty second caller line and linked the reply to that.
+
 ## 0.14.0
 
 This is the first release since 0.10.0. Versions 0.11, 0.12 and 0.13 were never released, so their changes are listed here too.
