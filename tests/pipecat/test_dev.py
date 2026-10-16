@@ -45,6 +45,7 @@ from pipecat.metrics.metrics import (
 )
 from pipecat.observers.base_observer import FramePushed
 from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_response_universal import LLMAssistantAggregator
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.settings import STTSettings, TTSSettings
 from pipecat.services.stt_service import STTService
@@ -222,6 +223,24 @@ async def test_a_reply_is_linked_to_the_input_it_follows_and_a_second_reply_is_n
     first, second = [e for e in call.of("exchange") if e["role"] == "response"]
     assert first["link_status"] == "known"
     assert second["link_status"] == "unavailable" and "input_id" not in second
+
+
+async def test_a_caller_who_speaks_as_the_greeting_ends_gets_the_reply_linked() -> None:
+    call = Call()
+    await call.push(TTSSpeakFrame("Hello, welcome."), 0.1)
+    await call.push(BotStartedSpeakingFrame(), 0.2)
+    await call.push(TranscriptionFrame("Hi there", "caller", "now"), 0.3, call.stt)
+    await call.push(BotStoppedSpeakingFrame(), 0.4)
+    await call.push(
+        LLMContextFrame(LLMContext(messages=[])), 0.4, LLMAssistantAggregator(LLMContext())
+    )
+    await call.push(UserStartedSpeakingFrame(), 0.5)
+    await call.push(LLMContextFrame(LLMContext(messages=[])), 0.6)
+    await call.push(LLMFullResponseStartFrame(), 0.7, call.llm)
+    inputs = [e for e in call.of("exchange") if e["role"] == "input"]
+    replies = [e for e in call.of("exchange") if e["role"] == "response"]
+    assert len(inputs) == 1
+    assert replies[-1]["link_status"] == "known"
 
 
 async def test_a_tool_call_is_an_operation_under_its_model_request_and_is_timed() -> None:
