@@ -125,10 +125,12 @@ from unmute_core.tasks import (
     CallTasks,
     FinishCheck,
     Opening,
+    OpeningTool,
     TaskEventSink,
     TaskPlan,
     ToolStatus,
 )
+from unmute_core.tasks._opening import check_opening, open_agent
 from unmute_core.telemetry import Telemetry
 from unmute_core.tools import (
     SAVE_VALUES_TOOL,
@@ -636,6 +638,7 @@ class UnmuteFlows:
         tts: FrameProcessor | None = None,
         announce: str | None = None,
         context: HandoffContext | None = None,
+        opens_with: OpeningTool | None = None,
     ) -> None:
         """Give the call to another main agent. Call it from the handoff tool's handler.
 
@@ -660,12 +663,16 @@ class UnmuteFlows:
                 waits for it to play.
             context: What the new agent hears. A summary is asked for while the line
                 plays. None keeps what was said, without tool calls.
+            opens_with: A tool of the new agent's own, run in code before its first reply.
+                When a line fills from the result, the line is that reply, with no model
+                request. Not on a realtime model.
 
         Raises:
             ValueError: If the spec lists a handoff that is not one of ``native_tools``,
                 a task names a model, or transfers to an agent ``then_targets`` lacks, or
                 if the spec has a model without a ``ModelCallLLMService``, or ``tts`` is not
-                one of the call's voices.
+                one of the call's voices, or ``opens_with`` names a tool the spec lacks or
+                the model is a realtime one.
         """
         self._check_switch(spec, tts, native_tools)
         holding = self._tasks
@@ -683,6 +690,7 @@ class UnmuteFlows:
                 models=self._models(spec),
             )
             _check_tasks(tasks, native_tools, spec.save_values)
+            check_opening(opens_with, tasks.plan.tools, realtime=self._realtime)
         except ValueError:
             holding.activate()
             raise
@@ -713,7 +721,12 @@ class UnmuteFlows:
             tasks.listen(sink)
         await shielded(
             self._take_over(
-                params, announce, context or HandoffContext(), model=spec.model, tts=tts
+                params,
+                announce,
+                context or HandoffContext(),
+                model=spec.model,
+                tts=tts,
+                opens_with=opens_with,
             )
         )
         self._side.summarizer = spec.summarizer
@@ -752,8 +765,13 @@ class UnmuteFlows:
         *,
         model: ModelCall | None,
         tts: FrameProcessor | None,
+        opens_with: OpeningTool | None,
     ) -> None:
         """Say the line, answer the handoff, then set the new agent's prompt, tools and history.
+
+        With an opening tool, it runs once the new agent's tools are in place. When its line
+        fills, the call, its result and the line join the history, and no model request is
+        made.
 
         The line plays before the call answers, so a strategy that mutes the caller during
         tool calls protects it. It never joins the live context, which only text from a TTS
@@ -801,7 +819,25 @@ class UnmuteFlows:
         await worker.queue_frame(
             LLMUpdateSettingsFrame(delta=LLMSettings(system_instruction=self.main_instruction()))
         )
-        await worker.queue_frame(LLMRunFrame())
+        if not await self._open(worker, opens_with):
+            await worker.queue_frame(LLMRunFrame())
+
+    async def _open(self, worker: PipelineWorker, spec: OpeningTool | None) -> bool:
+        """Run the new agent's opening tool, and say its line. Return True when said."""
+        if spec is None:
+            return False
+        tasks = self._tasks
+        opening = await open_agent(
+            spec, self._main, tasks.state, tasks.spoken_lines, hooks=tasks.hooks
+        )
+        if opening is None:
+            return False
+        self._runs.openings.append(opening)
+        if opening.line is None:
+            return False
+        self._set_messages([*self._messages(), *opening_messages(opening, opening.line)])
+        await worker.queue_frame(TTSSpeakFrame(opening.line, append_to_context=False))
+        return True
 
     async def _take_over_realtime(
         self, params: FunctionCallParams, announce: str | None, tts: FrameProcessor | None

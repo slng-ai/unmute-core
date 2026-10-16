@@ -19,6 +19,7 @@ class Spot(BaseModel):
     latitude: float
     longitude: float
     at_address: bool = Field(description="An exact address or a point they are at.")
+    craving: str | None = Field(default=None, description="What they asked for with the area.")
 
 
 class Offered(BaseModel):

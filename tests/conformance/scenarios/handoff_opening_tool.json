@@ -1,0 +1,84 @@
+{
+  "name": "handoff_opening_tool",
+  "about": "A handoff opens the next agent on a tool run in code. The registry saves what its result names, and the tool's reply line is the agent's first reply, with no model request; the model then reads that result. When no line fills, the next agent replies through the model as before.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {"mode": "record", "tasks": []},
+  "assign": {
+    "lookup_order": [{"variable": "order_id", "path": ["order", "id"]}],
+    "search_web": [{"variable": "status", "path": ["state"], "optional": true}]
+  },
+  "replies": [
+    {"tool": "search_web", "when": {"state": ["open"]}, "say": ["Order {{result.order}} is still open."]}
+  ],
+  "handoffs": {
+    "to_notes": {
+      "to": "notes",
+      "opens_with": {"tool": "search_web", "arguments": {"q": "order_id"}}
+    }
+  },
+  "agents": {
+    "notes": {
+      "instructions": "You take notes.",
+      "tools": ["search_web"],
+      "tasks": {"mode": "record", "tasks": []},
+      "handoffs": {
+        "to_orders": {
+          "to": "main",
+          "opens_with": {"tool": "search_web", "arguments": {"q": "order_id"}}
+        }
+      }
+    }
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "order": {"id": "A-12"}, "status": "open"}],
+    "search_web": [{"order": "A-12", "state": "open"}, {"nothing": "here"}]
+  },
+  "turns": [
+    {
+      "caller": "Where is order A-12?",
+      "model": [
+        {"site": "", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
+        {"site": "", "text": "Found it."}
+      ],
+      "spoken": ["Found it."]
+    },
+    {
+      "caller": "I need a note taken.",
+      "model": [
+        {"site": "", "calls": [{"name": "to_notes"}]}
+      ],
+      "spoken": ["Order A-12 is still open."]
+    },
+    {
+      "caller": "Thanks.",
+      "model": [
+        {
+          "site": "",
+          "prompt": "You take notes.",
+          "result": "{\"order\": \"A-12\", \"state\": \"open\"}",
+          "heard": ["Where is order A-12?", "I need a note taken.", "Thanks."],
+          "text": "What should the note say?"
+        }
+      ],
+      "spoken": ["What should the note say?"]
+    },
+    {
+      "caller": "Back to orders, please.",
+      "model": [
+        {"site": "", "calls": [{"name": "to_orders"}]},
+        {"site": "", "prompt": "You help callers with their orders.", "text": "Orders again."}
+      ],
+      "spoken": ["Orders again."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "A-12", "status": "open", "note": null, "tags": []},
+    "tool_calls": [
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}},
+      {"name": "search_web", "arguments": {"q": "A-12"}},
+      {"name": "search_web", "arguments": {"q": "A-12"}}
+    ],
+    "events": [],
+    "agent": "main"
+  }
+}

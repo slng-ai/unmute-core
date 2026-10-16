@@ -15,6 +15,7 @@ from unmute_core.agent import AgentSpec
 from unmute_core.greeting import Greeting
 from unmute_core.idle import IdleNudges
 from unmute_core.state import CallInfo, CallState
+from unmute_core.tasks import OpeningTool
 from unmute_core.turn import TurnPace
 
 NewCall = Callable[[CallInfo | None, Mapping[str, object] | None], Awaitable[CallState]]
@@ -36,6 +37,9 @@ class Handoff:
         to: The ``name`` of the agent that takes the call.
         announce: A line said first, which the caller cannot cut off.
         saves: State values saved as the call moves, like the language it now speaks.
+        opens_with: A tool of the next agent's own, run in code as it takes the call. When
+            its reply line fills, that line is the agent's first reply, with no model
+            request.
     """
 
     tool: str
@@ -43,6 +47,7 @@ class Handoff:
     to: str
     announce: str | None = None
     saves: Mapping[str, object] = field(default_factory=dict)
+    opens_with: OpeningTool | None = None
 
 
 @dataclass(frozen=True)
