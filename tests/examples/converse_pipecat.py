@@ -20,6 +20,7 @@ turn then also shows what speech to text heard.
 
 import asyncio
 import importlib
+import logging
 import os
 import sys
 import time
@@ -41,6 +42,7 @@ from pipecat.frames.frames import (  # noqa: E402
     LLMFullResponseStartFrame,
     LLMMessagesAppendFrame,
     LLMTextFrame,
+    MetricsFrame,
     StartFrame,
     TranscriptionFrame,
     TTSAudioRawFrame,
@@ -49,6 +51,7 @@ from pipecat.frames.frames import (  # noqa: E402
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
 )
+from pipecat.metrics.metrics import TTFBMetricsData  # noqa: E402
 from pipecat.processors.filters.identity_filter import IdentityFilter  # noqa: E402
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  # noqa: E402
 from pipecat.runner.types import RunnerArguments  # noqa: E402
@@ -69,6 +72,22 @@ the model says next, like a read-back. Gemini's first chunk can take over 3 s. L
 runner waits the same way while the agent is ``thinking``."""
 TURN_TIMEOUT_S = 60
 VERBOSE = bool(os.getenv("CONVERSE_VERBOSE"))
+TIMING = bool(os.getenv("CONVERSE_TIMING"))
+TIMELINE: list[tuple[float, str]] = []
+"""Timed events of the call, when ``CONVERSE_TIMING`` is set."""
+
+
+def mark(event: str) -> None:
+    """Note an event, with the time, for the timing trace."""
+    if TIMING:
+        TIMELINE.append((time.monotonic(), event))
+
+
+class TimingHandler(logging.Handler):
+    """Puts the library's log lines on the timing trace."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        mark(f"log {record.name}: {record.getMessage()}")
 REAL_VOICE = bool(os.getenv("CONVERSE_REAL_VOICE"))
 """Keep the example's own text to speech: each line is synthesised, and its audio dropped."""
 AUDIO = bool(os.getenv("CONVERSE_AUDIO"))
@@ -165,6 +184,7 @@ class AgentOutput(FrameProcessor):
         self._speaking = False
         self.ended = False
         self.answer_due = False
+        self._texted = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Pass every frame on, and note the agent's speech, requests and tool calls."""
@@ -176,6 +196,20 @@ class AgentOutput(FrameProcessor):
             return
         if isinstance(frame, ACTIVITY):
             self.last = time.monotonic()
+        if TIMING:
+            if isinstance(frame, LLMTextFrame):
+                if not self._texted:
+                    mark("first text")
+                self._texted = True
+            elif isinstance(frame, LLMFullResponseStartFrame | LLMFullResponseEndFrame):
+                self._texted = False
+                mark(type(frame).__name__)
+            elif isinstance(frame, FunctionCallInProgressFrame | FunctionCallResultFrame):
+                mark(f"{type(frame).__name__} {frame.function_name}")
+            elif isinstance(frame, MetricsFrame):
+                for data in frame.data:
+                    if isinstance(data, TTFBMetricsData) and "LLM" in data.processor:
+                        mark(f"ttfb {data.processor} {data.value:.2f}s")
         if isinstance(frame, FunctionCallResultFrame):
             properties = frame.properties
             run = (
@@ -393,6 +427,8 @@ async def converse(module: Any, scenario: dict[str, Any]) -> bool:
                 break
             said, tools, requests = len(agent.said), len(agent.tools), agent.requests
             heard = len(HEARD)
+            started = time.monotonic()
+            mark(f"caller: {want['caller']}")
             await transport.caller.say(want["caller"], want.get("language"))
             await transport.caller.done()
             agent.last = time.monotonic()
@@ -403,6 +439,13 @@ async def converse(module: Any, scenario: dict[str, Any]) -> bool:
             turn.tools = agent.tools[tools:]
             turn.requests = agent.requests - requests
             call.turns.append(turn)
+            if TIMING:
+                mark("quiet: next turn")
+                print(f"  timing, turn {len(call.turns)}:")
+                for at, event in TIMELINE:
+                    if at >= started:
+                        print(f"    {at - started:6.2f}  {event}")
+                TIMELINE.clear()
     except Exception as error:  # noqa: BLE001
         call.problems.append(f"the call failed: {error!r}")
     finally:
@@ -424,6 +467,9 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if TIMING:
+        logging.getLogger("unmute_core").addHandler(TimingHandler())
+        logging.getLogger("unmute_core").setLevel(logging.INFO)
     if VERBOSE:
         import logging
 

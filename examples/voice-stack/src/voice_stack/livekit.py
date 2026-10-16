@@ -34,6 +34,7 @@ from livekit.agents import (
     TurnHandlingOptions,
     function_tool,
     inference,
+    llm,
 )
 from livekit.agents.voice import room_io
 from livekit.agents.voice.agent_session import SessionConnectOptions
@@ -41,6 +42,7 @@ from livekit.plugins import google, silero, slng
 from unmute_core.agent import AgentSpec
 from unmute_core.call import CallStartError
 from unmute_core.livekit import (
+    ModelCallLLM,
     UnmuteAgent,
     endpointing,
     greet,
@@ -106,13 +108,15 @@ class VertexLLM(google.LLM):
         self._client = vertex_client(api_key, location)
 
 
-def build_llm(settings: StackSettings) -> VertexLLM:
-    """Return Gemini on Vertex, with minimal thinking: the stack's model on LiveKit."""
+def build_llm(settings: StackSettings, state: CallState) -> llm.LLM:
+    """Return the stack's model on LiveKit: Gemini on Vertex, or a ``gpt-`` model on OpenAI."""
+    if settings.on_openai:
+        return ModelCallLLM(settings.openai_model(), state=state)
     return VertexLLM(
         api_key=settings.google_api_key.get_secret_value(),
         location=settings.vertex_location,
         model=settings.llm_model,
-        thinking_config={"thinking_level": "MINIMAL"},
+        thinking_config={"thinking_level": settings.thinking_level},
     )
 
 
@@ -144,7 +148,7 @@ def build_session(
     session = AgentSession(
         conn_options=SessionConnectOptions(llm_conn_options=APIConnectOptions(max_retry=1)),
         stt=stt,
-        llm=build_llm(settings),
+        llm=build_llm(settings, state),
         tts=slng.TTS(
             api_key=key,
             slng_base_url=settings.slng_host,

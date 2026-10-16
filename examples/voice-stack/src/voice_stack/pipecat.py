@@ -39,7 +39,8 @@ from pipecat.processors.aggregators.llm_response_universal import (
 from pipecat.runner.types import RunnerArguments
 from pipecat.runner.utils import create_transport
 from pipecat.services.google.llm import GoogleLLMService
-from pipecat.services.llm_service import FunctionCallParams
+from pipecat.services.llm_service import FunctionCallParams, LLMService
+from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.services.settings import LLMSettings
 from pipecat.transcriptions.language import Language
 from pipecat.transports.base_transport import BaseTransport, TransportParams
@@ -49,6 +50,7 @@ from pipecat_slng import SlngSTTService, SlngTTSService
 from unmute_core.call import CallStartError
 from unmute_core.pipecat import (
     IdleNudgeObserver,
+    ModelCallLLMService,
     TelemetryObserver,
     UnmuteFlows,
     greeting_frames,
@@ -121,15 +123,21 @@ class VertexLLM(GoogleLLMService):
         self._client = vertex_client(self._api_key, self._vertex_location)
 
 
-def build_llm(settings: StackSettings) -> GoogleLLMService:
-    """Return Gemini on Vertex, with minimal thinking. ``UnmuteFlows`` sets its prompt."""
+def build_llm(settings: StackSettings, state: CallState) -> LLMService:
+    """Return Gemini on Vertex, or a ``gpt-`` model on OpenAI. ``UnmuteFlows`` sets its prompt."""
+    if settings.on_openai:
+        return ModelCallLLMService(
+            settings.openai_model(),
+            state=state,
+            settings=OpenAILLMService.Settings(model=settings.llm_model),
+        )
     return VertexLLM(
         location=settings.vertex_location,
         api_key=settings.google_api_key.get_secret_value(),
         settings=GoogleLLMService.Settings(
             model=settings.llm_model,
             system_instruction="",
-            thinking=GoogleLLMService.ThinkingConfig(thinking_level="MINIMAL"),
+            thinking=GoogleLLMService.ThinkingConfig(thinking_level=settings.thinking_level),
         ),
     )
 
@@ -187,7 +195,7 @@ def build_pipeline(
             ),
         ),
     )
-    llm = build_llm(settings)
+    llm = build_llm(settings, state)
     first, every = app.specs(state)
 
     def tools_of(name: str | None) -> list[FunctionSchema]:
@@ -252,7 +260,12 @@ def build_pipeline(
     observers: list[BaseObserver] = []
     if telemetry is not None:
         observers.append(
-            TelemetryObserver(telemetry, model=settings.llm_model, provider="google", flows=flows)
+            TelemetryObserver(
+                telemetry,
+                model=settings.llm_model,
+                provider="openai" if settings.on_openai else "google",
+                flows=flows,
+            )
         )
     worker = PipelineWorker(
         pipeline,
