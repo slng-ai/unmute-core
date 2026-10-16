@@ -189,6 +189,23 @@ async def test_bad_latencies_are_left_out(bad):
     assert turn["turn.llm_ttft_seconds"] == 0.2
 
 
+async def test_a_turn_counts_its_model_requests_and_the_ones_cut_off():
+    sink = Memory()
+    telemetry = Telemetry(sink, agent="salon", call_id="RM_abc")
+    telemetry.start_call()
+    turn = telemetry.start_turn(1)
+    for interrupted in (True, False):
+        request = telemetry.start_model_request(model="gpt-4.1", provider="openai", parent=turn)
+        telemetry.end_model_request(request, interrupted=interrupted)
+    telemetry.end_turn(turn)
+    telemetry.end_turn(telemetry.start_turn(2))
+    await telemetry.close()
+
+    first, second = (attrs(span) for span in sink.spans.get_finished_spans() if span.name == "turn")
+    assert (first["turn.llm_requests"], first["turn.llm_requests_cut"]) == (2, 1)
+    assert (second["turn.llm_requests"], second["turn.llm_requests_cut"]) == (0, 0)
+
+
 async def test_framework_spans_on_the_provider_get_the_call_identity():
     sink = Memory()
     telemetry = Telemetry(
