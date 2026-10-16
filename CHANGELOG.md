@@ -4,30 +4,6 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
-
-### New
-
-- A tool carries its own replies: `local_tool(fn, replies=[ToolReply(when=..., say=...)])`. They play wherever the tool runs, after the place's own replies. A tool's own reply leaves out `tool`.
-- A `when` value on a `Literal`, `bool` or `Enum` result field must be one the field holds. A typo fails when the registry or the plan is built, with the values it can hold. This holds for `ToolReply.when` and `FinishRule.success`.
-- Code that speaks a reply line tells the sinks and hooks `tool.replied`.
-- A tool can check a business rule before it runs: `local_tool(fn, precheck=check, replies=[...])`. `check` is a plain function that takes some of the tool's parameters and returns an instance of the output model, or None to go ahead. An outcome is the tool's result: the tool does not run, no announce plays, and its replies say it. On a closing tool with `confirm`, the precheck runs before the read-back, so a wrong value is never read back and the refusal costs no model request.
-- `hand_off(opens_with=OpeningTool(...))` on LiveKit and Pipecat runs a tool of the next agent in code as it takes the call. The registry saves what the result names. When a reply line fills, that line is the agent's first reply, with no model request. When none fills, the model replies as before. A realtime model refuses it.
-
-### Changes that can break you
-
-- A `when` or `success` value the field can never hold now fails at build time. Before, the rule silently never matched.
-- `ToolReply.tool` is optional. A `ToolReply` on a `ToolRegistry` or a `TaskSpec` without it is refused.
-
-### Examples
-
-- kestrel: a future incident day is the tool's rule, not the argument's. `note_facts` returns `status: "future_day"`, and its own reply asks again. The turn costs one model request instead of up to three.
-- No example validator carries caller text now. kestrel's "KP and six digits", faro's "Spanish numbers only" and wasla's ten-day window are prechecks of `lookup_policy`, `check_number`, `record_promise` and `schedule_callback`. Each outcome is a `Literal` value its tool's reply says, before the read-back.
-
-### Fixed
-
-- Pipecat dev records: a caller who speaks as the agent's line ends keeps one input, and the reply links to it. Before, the dev page showed an empty second caller line and linked the reply to that.
-
 ## 0.14.0
 
 This is the first release since 0.10.0. Versions 0.11, 0.12 and 0.13 were never released, so their changes are listed here too.
@@ -179,6 +155,11 @@ Test doubles:
 Step tools:
 - A step's tool that does not end the step now saves its registry `assign` rows as soon as it returns, as it does on the main agent. Before, a step ignored them and saved only its own `assign`, when it ended. Leave a row off the registry when a step must not save it early.
 
+Tool replies:
+- A `when` or `success` value the field can never hold now fails at build time. Before, the rule silently never matched.
+- `ToolReply.tool` is optional. A `ToolReply` on a `ToolRegistry` or a `TaskSpec` without it is refused.
+- A required tool argument the model sends as blank text is missing now, like an absent one. Before, a free-text argument sent as `""` passed.
+
 ### Added
 
 - `DevObserver` on LiveKit, for dev records.
@@ -220,6 +201,12 @@ Step tools:
 - A tool's `hidden` fields, like `local_tool(..., hidden=("read_back",))`, are left out of what the model reads of a result that succeeded. `assign` rows and spoken lines still read them, so code can say a line from a result the model never sees.
 - `Greeting.check(prefetch, call_start)` accepts the values a call starts with.
 - `tracking_ids` returns a `TrackingIds` typed dict, so `**tracking_ids(state.call)` type-checks against the SLNG speech plugins.
+- A tool carries its own replies: `local_tool(fn, replies=[ToolReply(when=..., say=...)])`. They play wherever the tool runs, after the place's own replies. A tool's own reply leaves out `tool`.
+- A `when` value on a `Literal`, `bool` or `Enum` result field must be one the field holds. A typo fails when the registry or the plan is built, with the values it can hold. This holds for `ToolReply.when` and `FinishRule.success`.
+- Code that speaks a reply line tells the sinks and hooks `tool.replied`.
+- A tool can check a business rule before it runs: `local_tool(fn, precheck=check, replies=[...])`. `check` is a plain function that takes some of the tool's parameters and returns an instance of the output model, or None to go ahead. An outcome is the tool's result: the tool does not run, no announce plays, and its replies say it. On a closing tool with `confirm`, the precheck runs before the read-back, so a wrong value is never read back and the refusal costs no model request.
+- `hand_off(opens_with=OpeningTool(...))` on LiveKit and Pipecat runs a tool of the next agent in code as it takes the call. The registry saves what the result names. When a reply line fills, that line is the agent's first reply, with no model request. When none fills, the model replies as before. A realtime model refuses it.
+- `ArgumentsMissing`, a `ToolRefused`: a required argument the model left out or sent blank. The model reads which ones are missing and asks the caller. `replies_to(result, spoke=...)` in `unmute_core.tools` holds the rule: no model reply to that refusal when the reply that made the call already spoke.
 
 ### Fixed
 
@@ -244,3 +231,13 @@ Step tools:
 - A tool the model calls gets the transcript in a `Transcript` locked argument, as an event tool does. Before, it got an empty list. `CallHooks.transcript()` reads it.
 - On Pipecat with a realtime model, a tool result waits for its reply to end, so a later call of the same reply can still end the call. Before, the model was asked for another reply first.
 - On Pipecat, a line played as the call ends, like a failure's apology, has its `tts` span in the last turn. Before, it opened a turn that never closed.
+- The model sees a plainer copy of each tool schema. An optional value whose default is `null` has no null branch, `format` and `pattern` are words in the description, and local `$ref`s are inlined. Gemini 3.5 Flash-Lite answered the old schemas with `MALFORMED_FUNCTION_CALL`, an empty reply, about three times as often. The tool still checks its arguments against the full schema, so a model that sends `null` is still accepted.
+- A model call with a blank required argument no longer costs a second model request when its reply already asked the caller. Before, the caller could hear the same question twice.
+- Pipecat: a task step in `record` mode runs its finish check, and a `summary` history gets its summary, when the call's LLM is a `GoogleLLMService`. Before, both were skipped, unlike on LiveKit.
+- Pipecat realtime: a tool that ends the call waits for the reply to end first. Before, the session could close before the reply's later tool calls arrived, and they were lost.
+- Pipecat dev records: a caller who speaks as the agent's line ends keeps one input, and the reply links to it. Before, the dev page showed an empty second caller line and linked the reply to that.
+
+### Examples
+
+- kestrel: a future incident day is the tool's rule, not the argument's. `note_facts` returns `status: "future_day"`, and its own reply asks again. The turn costs one model request instead of up to three.
+- No example validator carries caller text now. kestrel's "KP and six digits", faro's "Spanish numbers only" and wasla's ten-day window are prechecks of `lookup_policy`, `check_number`, `record_promise` and `schedule_callback`. Each outcome is a `Literal` value its tool's reply says, before the read-back.
