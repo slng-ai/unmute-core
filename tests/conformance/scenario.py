@@ -216,6 +216,7 @@ class ToolOptions(_Strict):
     locked: dict[str, Any] = {}
     parameters: dict[str, Any] | None = None
     output: dict[str, str] | None = None
+    replies: list[ToolReply] = []
 
     def fields(self) -> dict[str, Any]:
         """Return the ``ToolSpec`` fields to replace.

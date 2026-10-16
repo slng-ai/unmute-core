@@ -220,20 +220,16 @@ async def open_agent(
     except ToolError as error:
         logger.info("opening %s of a handed-off agent failed: %s", spec.tool, error.message)
         return None
-    line = None
-    if tools.save_result(spec.tool, result, state, hooks=hooks):
+    if not spec.say:
+        line = tools.use_result(spec.tool, result, state, lines, hooks=hooks)
+    elif tools.save_result(spec.tool, result, state, hooks=hooks):
         tool = tools.get(spec.tool)
-        line = (
-            lines.line(
-                f"opening:{spec.tool}",
-                spec.say,
-                result,
-                tool.result_form,
-                state_words(state, "", spec.say),
-            )
-            if spec.say
-            else lines.reply(tool, tools.replies, result, state)
-        )
+        words = state_words(state, "", spec.say)
+        line = lines.line(f"opening:{spec.tool}", spec.say, result, tool.result_form, words)
+        if line is not None:
+            tools.replied(spec.tool, hooks=hooks)
+    else:
+        line = None
     return Opening(
         call_id=f"opening_{new_run_id()}",
         tool=spec.tool,

@@ -37,10 +37,11 @@ A 13-turn call costs 15 model requests on both frameworks.
 | Group `arguments` + `OpeningTool` | The main agent passes the number and date it heard. When both are known, `find_policy` opens on `lookup_policy` and code reads them back with no model request |
 | `FinishRule.confirm` and `say` | The read-backs, and the lines after a lookup and a filing |
 | `ToolReply` | The next question after each answer, and the "can't find a policy" line |
+| `local_tool(replies=...)` on a typed `status` | A future day is kept out of the report, and code says "That day hasn't happened yet." with no model request |
 | `local_tool` with `locked` | The model never sends the call id, the report or the policy number to `file_claim` |
 | `ToolRegistry(assign=...)` on a step's tool | `note_facts` saves the report and its read-back as soon as it returns |
 | `Spelled` and `BirthDate` | The policy and claim numbers said a character at a time, and the date of birth with its year, by code |
-| Pydantic validators on tool arguments | A future day is refused with words for the caller: "That day hasn't happened yet." |
+| Pydantic validators on tool arguments | A policy number that is not KP and six digits is refused before it is read back |
 | `Prefetch` with a `Clock` | Today and the weekday on the London clock, so "yesterday" and "on Monday" become dates |
 | `IdleNudges` | A patient nudge for a shaken caller who goes quiet |
 | `AgentSpec(language="en-GB", timezone="Europe/London")` | Dates in code's lines named from London's today |
