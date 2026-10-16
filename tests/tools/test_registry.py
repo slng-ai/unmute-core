@@ -74,7 +74,10 @@ def test_schemas_are_openai_function_tools_without_locked_arguments():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "day": {"type": "string", "format": "date"},
+                        "day": {
+                            "type": "string",
+                            "description": "Expected a date written YYYY-MM-DD.",
+                        },
                         "party": {"type": "integer", "minimum": 1},
                     },
                     "required": ["day"],
@@ -82,6 +85,105 @@ def test_schemas_are_openai_function_tools_without_locked_arguments():
             },
         }
     ]
+
+
+def _shown(node: dict[str, Any], *, required: bool = False, defs: dict | None = None) -> object:
+    parameters = {
+        "type": "object",
+        "properties": {"x": node},
+        "required": ["x"] if required else [],
+    }
+    if defs:
+        parameters["$defs"] = defs
+    spec = ToolSpec("t", "T.", parameters, AnyResult, Recorder())
+    return spec.model_parameters["properties"]["x"]
+
+
+@pytest.mark.parametrize(
+    ("node", "required", "shown"),
+    [
+        (
+            {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+                "description": "Why.",
+            },
+            False,
+            {"type": "string", "description": "Why."},
+        ),
+        ({"type": ["integer", "null"], "default": None}, False, {"type": "integer"}),
+        (
+            {"anyOf": [{"enum": ["a", "b"], "type": "string"}, {"type": "null"}], "default": None},
+            False,
+            {"enum": ["a", "b"], "type": "string"},
+        ),
+        (
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            True,
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        ),
+        (
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            False,
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        ),
+        (
+            {"type": "string", "format": "birth-date"},
+            True,
+            {"type": "string", "description": "Expected a date of birth written YYYY-MM-DD."},
+        ),
+        (
+            {"type": "string", "format": "spelled"},
+            True,
+            {
+                "type": "string",
+                "description": "Expected the code as one word of letters and digits, like KP482913.",
+            },
+        ),
+        (
+            {"type": "string", "format": "phone", "description": "Their phone."},
+            True,
+            {
+                "type": "string",
+                "description": "Their phone. Expected a phone number with its country code: a "
+                "plus, the country code, then the number.",
+            },
+        ),
+        (
+            {"type": "string", "pattern": "^KP[0-9]{6}$"},
+            True,
+            {"type": "string", "description": "Expected text matching ^KP[0-9]{6}$."},
+        ),
+        (
+            {"anyOf": [{"format": "date", "type": "string"}, {"type": "null"}], "default": None},
+            False,
+            {"type": "string", "description": "Expected a date written YYYY-MM-DD."},
+        ),
+    ],
+)
+def test_the_model_sees_a_plain_schema(node, required, shown):
+    assert _shown(node, required=required) == shown
+
+
+def test_the_model_sees_a_shape_inlined():
+    defs = {"Car": {"type": "object", "title": "Car", "properties": {"plate": {"type": "string"}}}}
+    shown = _shown({"$ref": "#/$defs/Car", "description": "Their car."}, required=True, defs=defs)
+    assert shown == {
+        "type": "object",
+        "properties": {"plate": {"type": "string"}},
+        "description": "Their car.",
+    }
+
+
+async def test_an_optional_argument_sent_as_null_is_still_accepted():
+    recorder = Recorder()
+    parameters = {
+        "type": "object",
+        "properties": {"note": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}},
+    }
+    registry = ToolRegistry([ToolSpec("t", "T.", parameters, AnyResult, recorder)])
+    assert await registry.call("t", {"note": None}) == {"ok": True}
+    assert recorder.arguments == {"note": None}
 
 
 async def test_locked_value_replaces_what_the_model_sent():
