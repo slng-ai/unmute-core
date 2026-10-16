@@ -82,9 +82,45 @@ from unmute_core.pipecat._tools import function_schema
 
 @dataclass
 class Marker(DataFrame):
-    """A frame that marks the end of a turn. A data frame keeps its place in the queue."""
+    """A frame that marks the end of a turn. A data frame keeps its place in the queue.
+
+    It goes down the pipeline, up again, and down a second time, marked ``back``. Then
+    what each processor pushed on the way, up or down, has been handled. One example is
+    the commit of a line code said, which the LLM service sends once the bot stops.
+    """
 
     turn: int = 0
+    back: bool = False
+
+
+class TurnStart(FrameProcessor):
+    """Sends a marker that came up the pipeline back down. It is first in the pipeline."""
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        """Turn a marker going up around, and pass every other frame on."""
+        await super().process_frame(frame, direction)
+        if isinstance(frame, Marker) and direction == FrameDirection.UPSTREAM:
+            await self.push_frame(Marker(turn=frame.turn, back=True))
+            return
+        await self.push_frame(frame, direction)
+
+
+class TurnEnd(FrameProcessor):
+    """Sends a new marker back up, and notes one on its way back. It is last in the pipeline."""
+
+    def __init__(self, speaker: "Speaker") -> None:
+        super().__init__()
+        self.speaker = speaker
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        """Turn a new marker around, note a marker that is back, and pass every other frame."""
+        await super().process_frame(frame, direction)
+        if not isinstance(frame, Marker):
+            await self.push_frame(frame, direction)
+        elif frame.back:
+            self.speaker.marker = frame.turn
+        else:
+            await self.push_frame(Marker(turn=frame.turn), FrameDirection.UPSTREAM)
 
 
 class Speaker(FrameProcessor):
@@ -122,9 +158,6 @@ class Speaker(FrameProcessor):
             if self.realtime:
                 await self.push_frame(BotStartedSpeakingFrame(), FrameDirection.UPSTREAM)
                 await self.push_frame(BotStoppedSpeakingFrame(), FrameDirection.UPSTREAM)
-        elif isinstance(frame, Marker) and self.realtime:
-            self.marker = frame.turn
-            return
         await self.push_frame(frame, direction)
 
 
@@ -145,22 +178,18 @@ class SilentTTS(TTSService):
 
 
 class Output(FrameProcessor):
-    """Plays the TTS's speech as an output transport does, and notes the latest marker.
+    """Plays the TTS's speech as an output transport does.
 
     The bot starts to speak at a line's first audio and stops once the TTS stops.
     """
 
-    def __init__(self, speaker: Speaker) -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self.speaker = speaker
         self._speaking = False
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
-        """Pass every frame on but the audio and the markers."""
+        """Pass every frame on but the audio."""
         await super().process_frame(frame, direction)
-        if isinstance(frame, Marker):
-            self.speaker.marker = frame.turn
-            return
         if isinstance(frame, TTSAudioRawFrame):
             if not self._speaking:
                 self._speaking = True
@@ -182,10 +211,14 @@ def _replies(model: ScriptedModel) -> int:
 
 
 async def _until(check: Callable[[], bool]) -> None:
-    """Wait until ``check`` holds, for at most five seconds."""
+    """Wait until ``check`` holds, for at most five seconds.
+
+    It checks on every step of the event loop. A wait that can pass too early then fails
+    on every run, not once in a hundred.
+    """
     async with asyncio.timeout(5):
         while not check():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
 
 
 async def _tools_done(llm: LLMService[Any]) -> None:
@@ -344,9 +377,19 @@ def _run_on(
     recorder.watch_state(run.state)
     flows.listen(recorder.task_event)
     delegates = {delegate.name for plan in run.plans.values() for delegate in plan.delegates()}
-    voice = [] if speaker.realtime else [SilentTTS(), Output(speaker)]
+    voice = [] if speaker.realtime else [SilentTTS(), Output()]
     worker = PipelineWorker(
-        Pipeline([aggregators.user(), llm, speaker, *voice, aggregators.assistant()]),
+        Pipeline(
+            [
+                TurnStart(),
+                aggregators.user(),
+                llm,
+                speaker,
+                *voice,
+                aggregators.assistant(),
+                TurnEnd(speaker),
+            ]
+        ),
         params=PipelineParams(enable_metrics=True, enable_usage_metrics=True),
         observers=[observer, DevObserver(recorder, handoffs=delegates, controls=scenario.controls)],
     )
