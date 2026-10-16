@@ -10,7 +10,7 @@ from livekit.agents import NOT_GIVEN, AgentSession, NotGivenOr, llm
 from livekit.agents.voice import FunctionToolsExecutedEvent, RunContext, SpeechHandle
 
 from unmute_core.livekit._realtime import speak, speaks_itself
-from unmute_core.tools import ToolError, ToolSpec
+from unmute_core.tools import ToolError, ToolSpec, replies_to
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,35 @@ def tool_text(result: object) -> str:
     Python repr for a dict.
     """
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+
+
+async def asks_no_reply(result: object, context: RunContext) -> bool:
+    """Return True when ``replies_to`` holds back the model's reply to this result.
+
+    Only a result the rule may hold back waits for the reply that made the call to play
+    out. LiveKit adds that reply's words to its speech after the call, just before playout
+    ends (voice/agent_activity.py:3935).
+    """
+    if replies_to(result, spoke=True):
+        return False
+    await context.wait_for_playout()
+    items = context.speech_handle.chat_items
+    call_id = context.function_call.call_id
+    start = next(
+        (
+            index
+            for index, item in enumerate(items)
+            if isinstance(item, llm.FunctionCall) and item.call_id == call_id
+        ),
+        len(items),
+    )
+    spoke = any(
+        isinstance(item, llm.ChatMessage)
+        and item.role == "assistant"
+        and bool((item.text_content or "").strip())
+        for item in items[start:]
+    )
+    return not replies_to(result, spoke=spoke)
 
 
 def say(

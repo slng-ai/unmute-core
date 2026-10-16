@@ -21,6 +21,7 @@ from unmute_core.tools import (
     ToolRegistry,
     ToolSpec,
     local_tool,
+    replies_to,
 )
 
 
@@ -74,7 +75,10 @@ def test_schemas_are_openai_function_tools_without_locked_arguments():
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "day": {"type": "string", "format": "date"},
+                        "day": {
+                            "type": "string",
+                            "description": "Expected a date written YYYY-MM-DD.",
+                        },
                         "party": {"type": "integer", "minimum": 1},
                     },
                     "required": ["day"],
@@ -82,6 +86,105 @@ def test_schemas_are_openai_function_tools_without_locked_arguments():
             },
         }
     ]
+
+
+def _shown(node: dict[str, Any], *, required: bool = False, defs: dict | None = None) -> object:
+    parameters = {
+        "type": "object",
+        "properties": {"x": node},
+        "required": ["x"] if required else [],
+    }
+    if defs:
+        parameters["$defs"] = defs
+    spec = ToolSpec("t", "T.", parameters, AnyResult, Recorder())
+    return spec.model_parameters["properties"]["x"]
+
+
+@pytest.mark.parametrize(
+    ("node", "required", "shown"),
+    [
+        (
+            {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+                "description": "Why.",
+            },
+            False,
+            {"type": "string", "description": "Why."},
+        ),
+        ({"type": ["integer", "null"], "default": None}, False, {"type": "integer"}),
+        (
+            {"anyOf": [{"enum": ["a", "b"], "type": "string"}, {"type": "null"}], "default": None},
+            False,
+            {"enum": ["a", "b"], "type": "string"},
+        ),
+        (
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            True,
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        ),
+        (
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+            False,
+            {"anyOf": [{"type": "string"}, {"type": "null"}]},
+        ),
+        (
+            {"type": "string", "format": "birth-date"},
+            True,
+            {"type": "string", "description": "Expected a date of birth written YYYY-MM-DD."},
+        ),
+        (
+            {"type": "string", "format": "spelled"},
+            True,
+            {
+                "type": "string",
+                "description": "Expected the code as one word of letters and digits, like KP482913.",
+            },
+        ),
+        (
+            {"type": "string", "format": "phone", "description": "Their phone."},
+            True,
+            {
+                "type": "string",
+                "description": "Their phone. Expected a phone number with its country code: a "
+                "plus, the country code, then the number.",
+            },
+        ),
+        (
+            {"type": "string", "pattern": "^KP[0-9]{6}$"},
+            True,
+            {"type": "string", "description": "Expected text matching ^KP[0-9]{6}$."},
+        ),
+        (
+            {"anyOf": [{"format": "date", "type": "string"}, {"type": "null"}], "default": None},
+            False,
+            {"type": "string", "description": "Expected a date written YYYY-MM-DD."},
+        ),
+    ],
+)
+def test_the_model_sees_a_plain_schema(node, required, shown):
+    assert _shown(node, required=required) == shown
+
+
+def test_the_model_sees_a_shape_inlined():
+    defs = {"Car": {"type": "object", "title": "Car", "properties": {"plate": {"type": "string"}}}}
+    shown = _shown({"$ref": "#/$defs/Car", "description": "Their car."}, required=True, defs=defs)
+    assert shown == {
+        "type": "object",
+        "properties": {"plate": {"type": "string"}},
+        "description": "Their car.",
+    }
+
+
+async def test_an_optional_argument_sent_as_null_is_still_accepted():
+    recorder = Recorder()
+    parameters = {
+        "type": "object",
+        "properties": {"note": {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}},
+    }
+    registry = ToolRegistry([ToolSpec("t", "T.", parameters, AnyResult, recorder)])
+    assert await registry.call("t", {"note": None}) == {"ok": True}
+    assert recorder.arguments == {"note": None}
 
 
 async def test_locked_value_replaces_what_the_model_sent():
@@ -152,7 +255,6 @@ async def test_value_waiting_for_the_caller_is_not_sent():
     [
         ("{not json", "not valid JSON"),
         ("[1, 2]", "must be a JSON object"),
-        ({"phone": "+1"}, "arguments: 'day' is a required property"),
         ({"day": "x", "phone": "+1", "party": 0}, "party: 0 is less than the minimum of 1"),
         ({"day": 5, "phone": "+1"}, "day: 5 is not of type 'string'. Call book again"),
     ],
@@ -160,6 +262,44 @@ async def test_value_waiting_for_the_caller_is_not_sent():
 async def test_bad_arguments_name_what_to_fix(arguments, message):
     with pytest.raises(ToolError, match=message):
         await ToolRegistry([_spec()]).call("book", arguments)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "missing"),
+    [
+        ({"phone": "+1"}, ["day"]),
+        ({"day": "", "phone": "+1"}, ["day"]),
+        ({"day": " ", "phone": "+1", "party": 2}, ["day"]),
+        ({"day": ""}, ["day", "phone"]),
+    ],
+)
+async def test_a_required_argument_left_out_or_empty_is_missing(arguments, missing):
+    recorder = Recorder()
+    refused = await ToolRegistry([_spec(executor=recorder)]).call("book", arguments)
+    one = len(missing) == 1
+    assert refused == {
+        "refused": f"{' and '.join(missing)} {'is' if one else 'are'} missing. Ask the caller "
+        f"for {'it' if one else 'them'}, then call book again.",
+        "missing": missing,
+    }
+    assert recorder.arguments is None
+
+
+@pytest.mark.parametrize(
+    ("result", "spoke", "replies"),
+    [
+        ({"refused": "day is missing.", "missing": ["day"]}, True, False),
+        ({"refused": "day is missing.", "missing": ["day"]}, False, True),
+        ({"refused": "phone not set yet."}, True, True),
+        ({"error": "day: bad"}, True, True),
+        ({"missing": []}, True, True),
+        (None, True, True),
+    ],
+)
+def test_the_model_replies_to_a_result_unless_its_reply_asked_for_the_missing_argument(
+    result, spoke, replies
+):
+    assert replies_to(result, spoke=spoke) is replies
 
 
 async def test_an_argument_the_schema_does_not_name_is_refused():
@@ -430,7 +570,11 @@ async def test_started_runs_once_the_call_is_checked_and_never_for_a_refused_one
         started.append(tool.name)
 
     with pytest.raises(ToolError):
-        await registry.call("book", {"day": "2026-10-12"}, started=note)
+        await registry.call("book", {"day": 5, "phone": "+34600111222"}, started=note)
+    assert await registry.call("book", {"day": "2026-10-12"}, started=note) == {
+        "refused": "phone is missing. Ask the caller for it, then call book again.",
+        "missing": ["phone"],
+    }
     assert started == []
     await registry.call("book", {"day": "2026-10-12", "phone": "+34600111222"}, started=note)
     assert started == ["book"]

@@ -27,10 +27,11 @@ def test_the_model_never_sees_the_locked_phone_number() -> None:
 
 def test_every_tool_date_is_an_iso_date() -> None:
     """One date format for every tool, so code speaks each one by the same rule."""
+    registry = tools(Salon())
     dates = [
-        (tool["function"]["name"], options)
-        for tool in tools(Salon()).schemas()
-        for name, field in tool["function"]["parameters"]["properties"].items()
+        (tool, options)
+        for tool in registry.names
+        for name, field in registry.get(tool).parameters["properties"].items()
         if name == "date"
         for options in [[field, *field.get("anyOf", [])]]
     ]

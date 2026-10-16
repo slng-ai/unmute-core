@@ -102,6 +102,11 @@ class Speaker(FrameProcessor):
         self.marker = -1
         self._reply: str | None = None
 
+    @property
+    def replying(self) -> bool:
+        """Whether a response has started and not ended yet."""
+        return self._reply is not None
+
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         """Keep spoken text, count finished responses, and note the latest marker."""
         await super().process_frame(frame, direction)
@@ -199,6 +204,16 @@ async def _tools_done(llm: LLMService[Any]) -> None:
     await _until(lambda: not llm._function_call_tasks)
 
 
+async def _mark(worker: PipelineWorker, speaker: Speaker, turn: int) -> None:
+    """End a turn: queue its marker and wait until it has passed and no reply is open.
+
+    A realtime service starts a reply in the pipeline's order, but its text and its end come
+    on the service's own task. They can reach the speaker after the marker.
+    """
+    await worker.queue_frame(Marker(turn=turn))
+    await _until(lambda: speaker.marker == turn and not speaker.replying)
+
+
 def _caller(text: str, *, voice: bool) -> list[Frame]:
     """Return the frames of one caller line: typed, or spoken and transcribed."""
     if not voice:
@@ -268,8 +283,13 @@ async def run_realtime(scenario: Scenario) -> dict[str, Any]:
         )
 
         async def answered() -> None:
-            """Wait until the server has answered and the client has gone quiet."""
+            """Wait until the server has answered, the client has gone quiet and read it all.
+
+            The client reads each ``response.done`` on its own task, so a busy machine can
+            still be behind the server after the quiet time.
+            """
             await server.wait_idle(quiet=0.3)
+            await _until(lambda: speaker.responses >= server.done)
 
         speaker = Speaker(realtime=True)
         worker, flows = _run_on(scenario, run, llm, context, aggregators, speaker)
@@ -363,7 +383,11 @@ async def _turns(
     caller: Callable[[str], Awaitable[None]],
     answered: Callable[[], Awaitable[None]],
 ) -> dict[str, Any]:
-    """Open the call, run each caller line, and return what the agent did."""
+    """Open the call, run each caller line, and return what the agent did.
+
+    On OpenAI's realtime service the call opens once the session is set up. A reply asked
+    for before then waits for the setup, and so starts after the opening's marker.
+    """
     model = run.model
     llm = flows.llm
     runner = WorkerRunner(handle_sigint=False)
@@ -372,6 +396,8 @@ async def _turns(
     try:
         model.script(scenario.opening)
         realtime = llm if run.realtime else None
+        if isinstance(llm, OpenAIRealtimeLLMService):
+            await _until(lambda: llm._api_session_ready)
         await open_call(worker, scenario.opens, run.call, context=context, llm=realtime)
         if scenario.max_duration_s is not None:
             max_duration(worker, scenario.max_duration_s, call=run.call)
@@ -380,8 +406,7 @@ async def _turns(
         else:
             await answered()
             await _tools_done(llm)
-            await worker.queue_frame(Marker(turn=-2))
-            await _until(lambda: speaker.marker == -2)
+            await _mark(worker, speaker, -2)
         run.opening = list(speaker.lines)
         model.problems += run.unused()
         for number, turn in enumerate(scenario.turns):
@@ -393,8 +418,7 @@ async def _turns(
                 await _until(running.done)
             else:
                 await _tools_done(llm)
-                await worker.queue_frame(Marker(turn=number))
-                await _until(lambda number=number: speaker.marker == number)
+                await _mark(worker, speaker, number)
             run.spoken.append(speaker.lines[said:])
         if flows._run is None:
             run.agent = flows._name

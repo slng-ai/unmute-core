@@ -71,6 +71,7 @@ class FakeRealtimeServer:
         received: Every event the client sent, as parsed JSON.
         refused: How many ``response.create`` came while a response ran. The server
             refuses them, as OpenAI's does, and the client never gets that reply.
+        done: How many ``response.done`` the server has sent: one per response.
     """
 
     def __init__(self, model: ModelCall) -> None:
@@ -79,6 +80,7 @@ class FakeRealtimeServer:
         self.requests: list[ModelRequest] = []
         self.received: list[dict[str, Any]] = []
         self.refused = 0
+        self.done = 0
         self._runner: web.AppRunner | None = None
         self._port = 0
         self._connections: list[_Connection] = []
@@ -522,6 +524,7 @@ class FakeRealtimeServer:
                 "error": {"type": "server_error", "code": "model_failed", "message": error},
             }
         await self._send(conn, "response.done", response=response)
+        self.done += 1
 
     def _response(
         self,

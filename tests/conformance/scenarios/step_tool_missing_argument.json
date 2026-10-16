@@ -1,0 +1,170 @@
+{
+  "name": "step_tool_missing_argument",
+  "about": "A step's closing tool with a confirm line is called with its required argument empty, in a reply that asked the caller for it. The tool is not run and nothing is asked back: the caller answers next, and the step goes on to its confirm line.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "close_order",
+        "when": "The caller wants to close an order.",
+        "instructions": "Close the order the caller names.",
+        "tools": [
+          "lookup_order"
+        ],
+        "assign": [
+          {
+            "variable": "order_id",
+            "path": [
+              "order",
+              "id"
+            ],
+            "optional": true
+          },
+          {
+            "variable": "status",
+            "path": [
+              "status"
+            ],
+            "optional": true
+          }
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {
+              "found": [
+                true
+              ]
+            },
+            "confirm": [
+              "Shall I close order {{input.order_id}}?"
+            ],
+            "say": [
+              "Order {{result.order.id}} is {{result.status}}."
+            ]
+          }
+        ]
+      }
+    ],
+    "task_only_tools": [
+      "lookup_order"
+    ]
+  },
+  "tool_options": {
+    "lookup_order": {
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id"
+        ]
+      }
+    }
+  },
+  "tool_results": {
+    "lookup_order": [
+      {
+        "found": true,
+        "order": {
+          "id": "B-7"
+        },
+        "status": "closed"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Please close my order.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "close_order"
+            }
+          ]
+        },
+        {
+          "site": "task:close_order",
+          "text": "What is the order number?",
+          "calls": [
+            {
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": ""
+              }
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "What is the order number?"
+      ]
+    },
+    {
+      "caller": "B-7.",
+      "model": [
+        {
+          "site": "task:close_order",
+          "result_holds": "order_id is missing",
+          "calls": [
+            {
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "B-7"
+              }
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Shall I close order B-7?"
+      ]
+    },
+    {
+      "caller": "Yes.",
+      "model": [
+        {
+          "site": "task:close_order",
+          "calls": [
+            {
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "B-7"
+              }
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Order B-7 is closed."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": "B-7",
+      "status": "closed",
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "lookup_order",
+        "arguments": {
+          "order_id": "B-7"
+        }
+      }
+    ],
+    "events": [
+      "task.started task=close_order",
+      "task.ended_on_tool task=close_order saved=order_id,status",
+      "task.completed task=close_order saved=order_id,status"
+    ]
+  }
+}

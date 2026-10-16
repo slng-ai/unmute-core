@@ -61,6 +61,11 @@ def test_the_realtime_service_still_has_its_private_context_and_setup_flag() -> 
     assert isinstance(llm._llm_needs_conversation_setup, bool)
 
 
+def test_the_realtime_service_still_notes_when_its_session_is_ready() -> None:
+    """The conformance driver opens a realtime call once ``_api_session_ready`` is set."""
+    assert OpenAIRealtimeLLMService(api_key="test")._api_session_ready is False
+
+
 def test_an_llm_service_still_has_a_base_system_instruction_and_update_settings() -> None:
     """``RequestHooks`` reads ``_base_system_instruction`` and calls ``_update_settings`` to lend a prompt."""
     assert inspect.iscoroutinefunction(LLMService._update_settings)
@@ -166,6 +171,13 @@ def test_a_realtime_service_still_skips_the_results_it_has_marked_completed() ->
     assert isinstance(llm._completed_tool_calls, set)
     source = inspect.getsource(OpenAIRealtimeLLMService._process_completed_function_calls)
     assert "not in self._completed_tool_calls" in source
+
+
+def test_a_realtime_service_still_sends_one_tool_result_without_a_reply() -> None:
+    """``send_quietly`` calls ``_send_tool_result``, which creates the item and no response."""
+    source = inspect.getsource(OpenAIRealtimeLLMService._send_tool_result)
+    assert "ConversationItemCreateEvent" in source
+    assert "ResponseCreateEvent" not in source
 
 
 def test_a_live_service_still_answers_only_the_calls_it_holds_open() -> None:

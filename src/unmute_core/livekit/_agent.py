@@ -44,7 +44,7 @@ from unmute_core.agent._setup import agent_name, agent_state, agent_tasks, check
 from unmute_core.call import AGENT_ENDED, CallHooks
 from unmute_core.handoff import HandoffContext
 from unmute_core.livekit._call import attach_call
-from unmute_core.livekit._calls import end_call_now, say
+from unmute_core.livekit._calls import asks_no_reply, end_call_now, say
 from unmute_core.livekit._close import CloseGuard
 from unmute_core.livekit._delegate import DelegateRunner
 from unmute_core.livekit._dev import dev_observer
@@ -586,7 +586,8 @@ class UnmuteAgent(Agent):
 
         Otherwise the registry saves what its ``assign`` names, and a registry reply line
         that fills is spoken with no model reply. Once this agent has handed off, a result
-        asks for no reply: the new agent speaks.
+        asks for no reply: the new agent speaks. A refusal for a missing argument the reply
+        already asked for asks for none either.
         """
         call = context.function_call
         result = await self._registry.call(
@@ -601,7 +602,7 @@ class UnmuteAgent(Agent):
             self._end_requested()
             end_call_now(self.session)
             return llm.ToolResult(shown, reply_required=False)
-        if self._handed_off:
+        if self._handed_off or await asks_no_reply(result, context):
             return llm.ToolResult(shown, reply_required=False)
         run = (
             self.tasks.enter_via(call.name, result, caller_turns=CallerHistory(self.chat_ctx).turns)

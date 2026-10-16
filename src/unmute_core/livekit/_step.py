@@ -15,7 +15,14 @@ from livekit.agents import NOT_GIVEN, NotGivenOr, llm, tts
 from livekit.agents.voice import Agent, AgentTask, ModelSettings, RunContext, SpeechHandle
 
 from unmute_core.call import AGENT_ENDED
-from unmute_core.livekit._calls import announce, end_call_now, raw_tool, say, tool_text
+from unmute_core.livekit._calls import (
+    announce,
+    asks_no_reply,
+    end_call_now,
+    raw_tool,
+    say,
+    tool_text,
+)
 from unmute_core.livekit._finish import FinishChecker
 from unmute_core.livekit._gate import HandoffGate
 from unmute_core.livekit._history import CallerHistory
@@ -294,7 +301,8 @@ class StepTask(AgentTask[None]):
 
         A tool that ends the call waits for the words of its reply to play first: closing the
         session cancels a running step and cuts its speech off, where a main agent's speech
-        drains.
+        drains. A refusal for a missing argument the reply already asked for asks for no
+        reply.
         """
         call = context.function_call
         result = await self.step.call_tool(call.name, arguments, started=self._started)
@@ -303,6 +311,8 @@ class StepTask(AgentTask[None]):
                 hooks.end_requested(AGENT_ENDED)
             await context.wait_for_playout()
             end_call_now(self.session)
+            return llm.ToolResult(tool_text(result), reply_required=False)
+        if await asks_no_reply(result, context):
             return llm.ToolResult(tool_text(result), reply_required=False)
         if result is not None and (line := self.step.reply) is not None:
             self._say_reply(line)
