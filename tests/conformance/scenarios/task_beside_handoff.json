@@ -1,6 +1,6 @@
 {
   "name": "task_beside_handoff",
-  "about": "One reply hands off and then starts a task. The handoff wins; the task is refused and the notes agent speaks first. The notes agent has a task of the same name, which must not start either.",
+  "about": "The caller asks for the notes desk and an order in one breath, and the model calls both in one reply: the handoff first, then the task. The handoff wins; the task is refused and the notes agent speaks first. The notes agent has a task of the same name, which must not start either.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",

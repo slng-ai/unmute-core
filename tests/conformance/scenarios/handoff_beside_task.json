@@ -1,6 +1,6 @@
 {
   "name": "handoff_beside_task",
-  "about": "One reply starts a task and then a handoff. The task runs; the handoff is refused, so the main agent keeps the call.",
+  "about": "The caller asks for an order and for the notes desk in one breath, and the model calls both in one reply: the task first, then the handoff. The task runs; the handoff is refused, so the main agent keeps the call.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",
