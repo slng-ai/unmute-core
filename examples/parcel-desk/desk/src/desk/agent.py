@@ -35,7 +35,7 @@ class RouterSettings(SlngSettings):
     """
 
     router_url: str = "https://eu-north.context-router.slng.ai/v1"
-    model: str = "gpt-5.6-luna"
+    model: str = "openai/gpt-5.6-luna"
 
 
 def prefetch(rows: list[dict[str, Any]], state: type[BaseModel]) -> Prefetch:
