@@ -269,6 +269,22 @@ reads the same on both.
 2. Let any other error raise. The model reads that the tool failed, and the log keeps the details.
 3. Use `show_result=False` for a result the caller must not hear. See [A result the model does not read](#a-result-the-model-does-not-read).
 
+## A required argument left out or empty
+
+```python
+{"refused": "birth_date is missing. Ask the caller for it, then call lookup_policy again.",
+ "missing": ["birth_date"]}
+```
+
+Small models often call a tool before they ask, with `""` for what they do not know.
+
+1. A required argument that is absent, or text that is blank, is missing. The tool does not run.
+2. The model reads this refusal, not a format error like "expected a day written year-month-day".
+3. When the reply that made the call already said something, no model reply follows. That reply asked the caller, so the caller answers next. `replies_to(result, spoke=...)` from `unmute_core.tools` holds this rule.
+4. When the reply said nothing, the model replies to the refusal and asks.
+5. A step's closing tool with `confirm` lines refuses the same way, before it asks anything.
+6. On Pipecat, `tools_schema` cannot tell whether the reply spoke, so the model always replies there. So does OpenAI's live service, which cannot take a result without replying.
+
 ## Save a result and speak it
 
 A task step lists the values a result saves (`Assign`) and the lines code speaks
