@@ -10,6 +10,17 @@ This is the first release since 0.10.0. Versions 0.11, 0.12 and 0.13 were never 
 
 It is the first release on PyPI: `uv add "unmute-core[livekit]"`. You no longer need a git source or a GitHub token.
 
+### Highlights
+
+- **On PyPI.** Install with `uv add "unmute-core[livekit]"` or `uv add "unmute-core[pipecat]"`. Add `slng` for the SLNG Context Router.
+- **One agent description for both frameworks.** An `AgentSpec` holds the prompt, the tasks or tools, the model and the handoffs. `UnmuteAgent(spec)` runs it on LiveKit and `UnmuteFlows(spec, ...)` on Pipecat.
+- **One call state.** `state.call` holds what the call carries, with one `session_id` from the first turn to the last handoff, on both frameworks. `tracking_ids(state.call)` gives SLNG speech the same ids.
+- **Code speaks the outcome of a tool.** A tool's typed result picks the line the caller hears: `local_tool(fn, replies=[ToolReply(when=..., say=...)])`. A `precheck` refuses a wrong value before the tool runs or anything is read back. A `when` value the result can never hold fails when the agent is built. In the kestrel example, refusing a future date now costs one model request instead of up to three.
+- **Fewer wasted model requests.** The model reads a plainer tool schema, so small models send fewer malformed or empty calls. A required argument sent blank is asked for once, not answered with a format error. A handoff can open the next agent with a tool that code runs: `hand_off(opens_with=OpeningTool(...))`.
+- **The same behaviour on both frameworks.** Pipecat now runs the step finish check on a Google model, keeps every tool call of a realtime reply that ends the call, and keeps one caller input in its dev records. Shared test scenarios run the same calls on both frameworks.
+
+Read "Changes that can break you" before you upgrade from 0.10.0. Then call `unmute_core.require("0.14.0")` in your code, so a later breaking version fails at import and never during a call.
+
 ### Changes that can break you
 
 Dependencies:
