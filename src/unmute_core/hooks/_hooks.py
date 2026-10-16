@@ -54,6 +54,7 @@ EVENTS = (
     "tool.succeeded",
     "tool.failed",
     "tool.refused",
+    "tool.replied",
     "state.changed",
     *get_args(TaskStage),
 )

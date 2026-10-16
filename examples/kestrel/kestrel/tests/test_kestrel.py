@@ -8,7 +8,7 @@ from datetime import date, timedelta
 
 import pytest
 from unmute_core.state import CallState, call_info
-from unmute_core.tools import ToolError, ToolRegistry
+from unmute_core.tools import SpokenLines, ToolError, ToolRegistry
 
 from kestrel import claims
 from kestrel.agent import AGENT_ID, KESTREL, Kestrel
@@ -129,10 +129,12 @@ async def test_the_safety_line_goes_before_the_next_question_once() -> None:
     assert not again["next_question"].startswith("I'm sorry")
 
 
-async def test_a_future_day_is_refused_with_words_for_the_caller() -> None:
+async def test_a_future_day_is_kept_out_and_code_asks_for_it_again() -> None:
     state, tools = await found(Kestrel())
-    with pytest.raises(ToolError, match="That day hasn't happened yet"):
-        await tools.call("note_facts", {"incident_day": "2026-10-05"}, state)
+    result = await tools.call("note_facts", {"incident_day": "2026-10-05"}, state)
+    line = tools.use_result("note_facts", result, state, SpokenLines())
+    assert result["status"] == "future_day"
+    assert line == "That day hasn't happened yet. On which day did it happen?"
     assert state.plain("report.incident_day") is None
 
 

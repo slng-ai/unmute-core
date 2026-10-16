@@ -12,8 +12,9 @@ import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import field
 from datetime import date, datetime
+from enum import Enum
 from functools import reduce
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal, get_args, get_origin
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints
@@ -22,6 +23,7 @@ from pydantic.dataclasses import dataclass
 from unmute_core._pydantic import VALUE, original_errors
 from unmute_core.state import CallState
 from unmute_core.state._call_state import EMPTY_TEXT
+from unmute_core.state._paths import unwrapped
 from unmute_core.tools._spoken import spoken
 
 if TYPE_CHECKING:
@@ -74,6 +76,22 @@ def _matches(fields: Mapping[str, Sequence[object]], read: Callable[[str], objec
         success_word(read(name)) in {success_word(value) for value in values}
         for name, values in fields.items()
     )
+
+
+def match_words(annotation: object) -> frozenset[str] | None:
+    """Return the words a match on a field of this type can hold, or None when any can.
+
+    A ``Literal`` holds its values, a ``bool`` true and false, an ``Enum`` its values.
+    ``Annotated`` and ``| None`` are looked through.
+    """
+    annotation = unwrapped(annotation)
+    if annotation is bool:
+        return frozenset({"true", "false"})
+    if get_origin(annotation) is Literal:
+        return frozenset(success_word(value) for value in get_args(annotation))
+    if isinstance(annotation, type) and issubclass(annotation, Enum):
+        return frozenset(success_word(member.value) for member in annotation)
+    return None
 
 
 def result_matches(fields: Mapping[str, Sequence[str | int | bool]], result: object) -> bool:
@@ -165,15 +183,16 @@ class ToolReply(_Row):
     ``format``, in the call's language: a ``date`` is "tomorrow, October 9".
 
     Attributes:
-        tool: The tool.
+        tool: The tool. Left out on a tool's own ``replies``: it is that tool.
         when: Result field to the values that call for the line. Every field must hold
-            one of its values. Empty matches every result.
+            one of its values. Empty matches every result. On a ``Literal``, ``bool`` or
+            ``Enum`` field, each value must be one the field can hold.
         state: State value to the values that call for the line, read the same way.
         say: Lines spoken from the result, with ``{{result.<field>}}`` and
             ``{{variable}}`` placeholders. One is picked each time.
     """
 
-    tool: ToolName
+    tool: ToolName | None = None
     when: Annotated[dict[FieldName, MatchValues], Field(max_length=16)] = Field(
         default_factory=dict
     )

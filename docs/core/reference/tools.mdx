@@ -303,7 +303,34 @@ registry = ToolRegistry(
 6. A value is said by its output field's JSON Schema `format`, in the call's language. A `date` reads "tomorrow, October 16" with a timezone and "Friday, October 16, 2026" without one. A `date-time` adds the time, a `time` reads "9:00 AM", a `phone` is grouped, and a `Literal` or `Enum` value is said as words. Any other value is said as it is.
 7. The registry checks every row when it is built. A tool, a result field or a State value that does not exist, or a result value whose type cannot fill the State value, fails with a message that names the fix.
 8. A reply on a tool that ends the call is refused: the call is over before the line could play. Say a goodbye with the tool's `announce` and `announce_wait=True`.
-9. A result that reports an error saves nothing and speaks nothing. Inside a task step, a tool that does not end the step still saves its registry `assign` rows at once, so a step that asks several questions keeps each answer as it comes. Only the step's own `replies` are spoken, and the step's own `assign` saves when the step ends.
+9. A result that reports an error saves nothing and speaks nothing. Inside a task step, a tool that does not end the step still saves its registry `assign` rows at once, so a step that asks several questions keeps each answer as it comes. The step's own `replies` are spoken, then the tool's own, and the step's own `assign` saves when the step ends.
+10. A `when` value on a `Literal`, `bool` or `Enum` field must be one the field can hold. A typo like `"shiped"` fails when the registry is built, with the values the field holds.
+11. Each line code speaks is told to the sinks as `tool.replied`, so a trace shows which turns cost no model reply.
+
+### Replies on the tool itself
+
+A tool can carry its own replies. They play wherever the tool runs: on the main
+agent, as a step's tool, and as a step's closing tool.
+
+```python
+class Noted(BaseModel):
+    status: Literal["noted", "future_day"] = "noted"
+    complete: bool
+    next_question: str = ""
+
+
+local_tool(
+    note_facts,
+    replies=[
+        ToolReply(when={"status": ["future_day"]}, say=["That day hasn't happened yet. On which day did it happen?"]),
+        ToolReply(when={"complete": [False]}, say=["{{result.next_question}}"]),
+    ],
+)
+```
+
+1. A tool's own reply leaves out `tool`. One that names another tool is refused.
+2. The place's replies are tried first: the registry's on the main agent, the `TaskSpec`'s in a step. Then the tool's own, in order.
+3. A reply on a `ToolRegistry` or a `TaskSpec` still names its tool.
 
 **Why it works this way.** A model that reads a booking back to the caller
 words it a little differently each time, and sometimes gets the day wrong. A
