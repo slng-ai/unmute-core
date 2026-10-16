@@ -5,7 +5,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
-from livekit.agents import APIConnectOptions, NotGivenOr, llm, tts, utils
+from livekit.agents import AgentSession, APIConnectOptions, NotGivenOr, llm, tts, utils
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN
 
 
@@ -24,6 +24,11 @@ class Reply:
 def call(name: str, text: str = "", **arguments: Any) -> Reply:
     """A reply that calls one tool."""
     return Reply(text, [(name, arguments)])
+
+
+def replies(session: AgentSession) -> list[llm.ChatMessage]:
+    """The agent's messages in the session's history, in order."""
+    return [m for m in session.history.messages() if m.role == "assistant"]
 
 
 @dataclass

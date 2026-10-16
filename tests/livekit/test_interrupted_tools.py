@@ -17,7 +17,7 @@ from livekit.agents.voice import SpeechHandle, speech_handle
 
 from tests.conformance.livekit_driver import Silence
 from tests.hooks.helpers import on_end
-from tests.livekit.fake import ScriptedLLM, call
+from tests.livekit.fake import ScriptedLLM, call, replies
 from tests.livekit.test_agent_lifecycle import Scripted
 from tests.livekit.test_trace import Memory
 from tests.outputs import AnyResult
@@ -86,15 +86,6 @@ def tool_items(session: AgentSession, name: str) -> list[tuple[str, str]]:
     ]
 
 
-def replies(session: AgentSession) -> list[str | None]:
-    """The agent's replies in the session's history, in order."""
-    return [
-        item.text_content
-        for item in session.history.items
-        if isinstance(item, llm.ChatMessage) and item.role == "assistant"
-    ]
-
-
 def slow_tool(
     gate: Gate,
     *,
@@ -153,7 +144,7 @@ async def test_a_tool_cut_off_for_longer_than_the_timeout_answers_the_model_once
         assert gate.cancelled == 0
         assert tool_items(session, "slow")[-1] == ("out", '{"done": true}')
         assert [text for role, text in model.requests[-1].texts if role == "assistant"] == []
-        assert replies(session) == ["It is done."]
+        assert [m.text_content for m in replies(session)] == ["It is done."]
     assert agent._trace is not None and agent._trace.closing is not None
     await agent._trace.closing
     [span] = [s for s in sink.spans.get_finished_spans() if s.name == "llm_tool_call"]
