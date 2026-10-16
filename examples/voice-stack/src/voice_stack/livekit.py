@@ -57,6 +57,7 @@ from unmute_core.state import CallState, call_phone_region, use_phone_region
 from unmute_core.telemetry import Langfuse, Telemetry
 from unmute_core.turn import turn_window
 
+from voice_stack import malformed
 from voice_stack.app import Handoff, VoiceApp
 from voice_stack.settings import StackSettings
 
@@ -79,16 +80,18 @@ def vertex_client(api_key: str, location: str) -> genai.Client:
         host = "aiplatform.googleapis.com"
     else:
         host = f"{location}-aiplatform.googleapis.com"
-    return genai.Client(
-        vertexai=True,
-        api_key=api_key,
-        location=location,
-        http_options=genai.types.HttpOptions(
-            base_url=f"https://{host}/v1beta1",
-            base_url_resource_scope=genai.types.ResourceScope.COLLECTION,
-            api_version="v1beta1",
-            headers={"X-Vertex-AI-LLM-Shared-Request-Type": "priority"},
-        ),
+    return malformed.watch(
+        genai.Client(
+            vertexai=True,
+            api_key=api_key,
+            location=location,
+            http_options=genai.types.HttpOptions(
+                base_url=f"https://{host}/v1beta1",
+                base_url_resource_scope=genai.types.ResourceScope.COLLECTION,
+                api_version="v1beta1",
+                headers={"X-Vertex-AI-LLM-Shared-Request-Type": "priority"},
+            ),
+        )
     )
 
 
