@@ -1,0 +1,88 @@
+{
+  "name": "tool_missing_argument",
+  "about": "The model asks the caller a question and, in the same reply, calls a tool with a required argument left empty. The tool does not run, and the model reads that the argument is missing. That reply already asked, so no second reply follows: the caller answers next.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_options": {
+    "search_web": {
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ]
+      }
+    }
+  },
+  "realtime": true,
+  "turns": [
+    {
+      "caller": "When are you open?",
+      "model": [
+        {
+          "site": "",
+          "text": "Which day do you mean?",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": ""
+              }
+            }
+          ]
+        }
+      ],
+      "spoken": [
+        "Which day do you mean?"
+      ]
+    },
+    {
+      "caller": "Saturday.",
+      "model": [
+        {
+          "site": "",
+          "result_holds": "q is missing. Ask the caller for it, then call search_web again.",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "Saturday hours"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "We are open 9 to 5."
+        }
+      ],
+      "spoken": [
+        "We are open 9 to 5."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "Saturday hours"
+        }
+      }
+    ],
+    "events": []
+  }
+}

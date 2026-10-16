@@ -173,6 +173,13 @@ def test_a_realtime_service_still_skips_the_results_it_has_marked_completed() ->
     assert "not in self._completed_tool_calls" in source
 
 
+def test_a_realtime_service_still_sends_one_tool_result_without_a_reply() -> None:
+    """``send_quietly`` calls ``_send_tool_result``, which creates the item and no response."""
+    source = inspect.getsource(OpenAIRealtimeLLMService._send_tool_result)
+    assert "ConversationItemCreateEvent" in source
+    assert "ResponseCreateEvent" not in source
+
+
 def test_a_live_service_still_answers_only_the_calls_it_holds_open() -> None:
     """``withhold_result`` pops a call from ``_open_function_calls``, so the live service sends no output."""
     from pipecat.services.openai.live.llm import OpenAILiveLLMService

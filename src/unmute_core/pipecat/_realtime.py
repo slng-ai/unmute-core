@@ -9,6 +9,7 @@ does (unmute@2c78a5a templates/pipecat_v1/call.py.tmpl:263-290).
 
 import asyncio
 import contextlib
+import json
 import weakref
 from collections.abc import Mapping
 from typing import Any, ClassVar, TypeGuard, cast
@@ -242,6 +243,24 @@ def withhold_result(service: object, call_id: str) -> None:
         service._completed_tool_calls.add(call_id)
     elif isinstance(service, OpenAILiveLLMService):
         service._open_function_calls.pop(call_id, None)
+
+
+async def send_quietly(service: object, call_id: str, result: object) -> bool:
+    """Send a realtime service a tool's result, with no reply after it.
+
+    OpenAI's realtime service asks for a reply with every result it sends from the
+    context. This sends the result on its own and marks it sent, so the model reads it
+    with the caller's next turn. The live service continues its response once the result
+    is in, so it cannot send one quietly.
+
+    Returns:
+        False for a service that cannot: the result goes through Pipecat as usual.
+    """
+    if not isinstance(service, OpenAIRealtimeLLMService):
+        return False
+    service._completed_tool_calls.add(call_id)
+    await service._send_tool_result(call_id, json.dumps(result, ensure_ascii=False))
+    return True
 
 
 def can_hold(service: object) -> TypeGuard[OpenAIRealtimeLLMService]:

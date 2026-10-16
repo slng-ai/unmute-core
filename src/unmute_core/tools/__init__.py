@@ -4,8 +4,9 @@ A ``ToolSpec`` holds what the model sees, the Pydantic model of its result, and 
 ``ToolExecutor`` that runs the call. ``ToolRegistry`` gives adapters the schemas for the
 model request and one ``call`` for every tool call. A result that does not fit its output
 model fails the call. A failure the model should hear is a ``ToolError``, which each
-adapter maps to its framework's error. A call that reads a value not set yet is refused
-with ``{"refused": ...}`` before anything is said or sent.
+adapter maps to its framework's error. A call that reads a value not set yet, or leaves a
+required argument out or blank, is refused with ``{"refused": ...}`` before anything is
+said or sent. ``replies_to`` says when no model reply follows such a refusal.
 
 What a result does on the main agent sits on the registry: ``Assign`` rows save its values
 into the State, and a ``ToolReply`` is a line code says in place of a model reply.
@@ -34,6 +35,7 @@ from unmute_core.tools._save import (
 from unmute_core.tools._schema import ParameterSchemaError, check_parameters
 from unmute_core.tools._spec import (
     TRANSCRIPT_MAX_BYTES,
+    ArgumentsMissing,
     ToolEffect,
     ToolError,
     ToolEventSink,
@@ -47,6 +49,7 @@ from unmute_core.tools._spec import (
     ToolStarted,
     Transcript,
     check_tool_names,
+    replies_to,
 )
 from unmute_core.tools._spoken import spoken
 
@@ -54,6 +57,7 @@ __all__ = [
     "SAVE_VALUES_TOOL",
     "TRANSCRIPT_MAX_BYTES",
     "Accepted",
+    "ArgumentsMissing",
     "Assign",
     "Done",
     "LinePicker",
@@ -82,6 +86,7 @@ __all__ = [
     "free_values",
     "is_values",
     "local_tool",
+    "replies_to",
     "spoken",
     "user_phone_number_tool",
     "values_block",
