@@ -270,11 +270,6 @@ class RunLifecycle:
         return self._run
 
     @property
-    def flow(self) -> FlowManager | None:
-        """The call's one FlowManager, once a run has built it."""
-        return self._flow
-
-    @property
     def step(self) -> ActiveStep | None:
         """The step running now, or None."""
         return self._run.step if self._run is not None else None

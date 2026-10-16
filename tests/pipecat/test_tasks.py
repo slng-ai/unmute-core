@@ -133,15 +133,21 @@ async def test_a_call_from_a_step_that_ended_does_nothing() -> None:
     assert await handler({}, cast(Any, None)) == (dict(ALREADY_HANDLED), NO_RESPONSE)
 
 
-async def test_every_run_of_a_call_shares_one_flow_manager() -> None:
+async def test_every_run_of_a_call_shares_one_flow_manager(monkeypatch: Any) -> None:
+    built: list[FlowManager] = []
+    initialize = FlowManager.initialize
+
+    async def counted(flow: FlowManager, *args: Any, **kwargs: Any) -> None:
+        built.append(flow)
+        await initialize(flow, *args, **kwargs)
+
+    monkeypatch.setattr(FlowManager, "initialize", counted)
     h = Harness()
     await _in_step(h)
-    first = h.flows._runs.flow
     h.user("A-12.")
     await h.call("finish", {"order_id": "A-12"})
     await _in_step(h, "order_flow")
-    assert isinstance(first, FlowManager)
-    assert h.flows._runs.flow is first
+    assert len(built) == 1
 
 
 @pytest.mark.parametrize("text", ["{{order_id}}", "{{ order.id }}", "\\{{x}}", "{{ 1x }}", "{x}"])
@@ -157,7 +163,7 @@ async def test_a_step_that_cannot_open_hands_the_main_agent_back(monkeypatch: An
     async def broken(*_args: Any) -> None:
         raise RuntimeError("no node")
 
-    monkeypatch.setattr(h.flows._runs, "_node", broken)
+    monkeypatch.setattr(FlowManager, "set_node_from_config", broken)
     h.user("Where is my order?")
     with pytest.raises(RuntimeError):
         await h.call("find_order")
@@ -444,9 +450,9 @@ async def test_a_confirm_line_cut_off_before_its_end_is_asked_again(
     asked, properties = await h.call("lookup_order", {"order_id": "A-12"})
     assert not runs_llm(properties), asked
     assert asked["asked"] == "Shall I close order A-12?"
-    await h._hook("on_before_process_frame", BotStartedSpeakingFrame())
+    await h.event("on_before_process_frame", BotStartedSpeakingFrame())
     ending = InterruptionFrame() if cut_off else BotStoppedSpeakingFrame()
-    await h._hook("on_before_process_frame", ending)
+    await h.event("on_before_process_frame", ending)
     h.user("Yes.")
     again, properties = await h.call("lookup_order", {"order_id": "A-12"})
     assert bool(lookup.calls) is looked_up

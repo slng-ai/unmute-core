@@ -81,7 +81,7 @@ class FakeLLM:
     """What the adapter uses of an LLM service: its frame hooks."""
 
     def __init__(self) -> None:
-        self.hooks: dict[str, Any] = {}
+        self.hooks: dict[str, list[Any]] = {}
         self.pushed: list[Any] = []
         self.composed = 0
 
@@ -92,7 +92,12 @@ class FakeLLM:
         self.composed += 1
 
     def add_event_handler(self, name: str, handler: Any) -> None:
-        self.hooks[name] = handler
+        self.hooks.setdefault(name, []).append(handler)
+
+    async def _call_event_handler(self, name: str, *args: Any) -> None:
+        """Run each handler of ``name`` in turn, as Pipecat runs a frame hook."""
+        for handler in self.hooks.get(name, []):
+            await handler(self, *args)
 
     async def push_frame(self, frame: Any, direction: Any = None) -> None:
         self.pushed.append(frame)
@@ -192,9 +197,9 @@ class Harness:
         tools = cast(Any, self.context.tools)
         return [schema.name for schema in tools.standard_tools]
 
-    async def _hook(self, name: str, frame: Any) -> None:
-        hook = self.flows._on_process if name == "on_before_process_frame" else self.flows._on_push
-        await hook(self.llm, frame)
+    async def event(self, name: str, frame: Any) -> None:
+        """Fire one of the LLM's frame hooks, the way Pipecat does around a frame."""
+        await self.llm._call_event_handler(name, frame)
 
     def handler(self, name: str) -> Any:
         """The handler Pipecat 1.12 registers for ``name``: the one the context advertises."""
@@ -211,10 +216,10 @@ class Harness:
     async def reply(self, said: str) -> None:
         """A model reply with text and no tool call."""
         self.pump()
-        await self._hook("on_before_process_frame", LLMContextFrame(self.context))
-        await self._hook("on_before_push_frame", LLMFullResponseStartFrame())
-        await self._hook("on_before_push_frame", LLMTextFrame(said))
-        await self._hook("on_before_push_frame", LLMFullResponseEndFrame())
+        await self.event("on_before_process_frame", LLMContextFrame(self.context))
+        await self.event("on_before_push_frame", LLMFullResponseStartFrame())
+        await self.event("on_before_push_frame", LLMTextFrame(said))
+        await self.event("on_before_push_frame", LLMFullResponseEndFrame())
         self.context.add_message({"role": "assistant", "content": said})
         self.pump()
 
@@ -234,10 +239,10 @@ class Harness:
         result moves to the next node, or after the handlers.
         """
         self.pump()
-        await self._hook("on_before_process_frame", LLMContextFrame(self.context))
-        await self._hook("on_before_push_frame", LLMFullResponseStartFrame())
+        await self.event("on_before_process_frame", LLMContextFrame(self.context))
+        await self.event("on_before_push_frame", LLMFullResponseStartFrame())
         if said:
-            await self._hook("on_before_push_frame", LLMTextFrame(said))
+            await self.event("on_before_push_frame", LLMTextFrame(said))
         spoken = [said] if said else []
 
         def land() -> None:
@@ -297,7 +302,7 @@ class Harness:
                 for call_id, (name, arguments) in zip(ids, calls, strict=True)
             )
         )
-        await self._hook("on_before_push_frame", LLMFullResponseEndFrame())
+        await self.event("on_before_push_frame", LLMFullResponseEndFrame())
         self.worker.on_flush = None
         land()
         self.pump()

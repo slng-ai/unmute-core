@@ -85,7 +85,7 @@ def test_the_model_reads_livekits_end_call_text_first() -> None:
 async def test_reply_text_follows_the_newest_reply_without_flows() -> None:
     llm = FakeLLM()
     text = reply_text(cast(Any, llm))
-    follow = llm.hooks["on_before_push_frame"]
+    [follow] = llm.hooks["on_before_push_frame"]
 
     await follow(llm, LLMFullResponseStartFrame())
     await follow(llm, LLMTextFrame("Good"))

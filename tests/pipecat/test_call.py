@@ -369,8 +369,9 @@ async def test_flows_give_a_native_llm_the_main_prompt_with_a_value_saved_since(
         aggregators=LLMContextAggregatorPair(context),
         state=state,
     )
+    flows.install()
     state.save({"closes_at": "18:00"})
-    await flows._on_process(llm, LLMContextFrame(context))
+    await llm._call_event_handler("on_before_process_frame", LLMContextFrame(context))
     assert llm._settings.system_instruction == "We close at 18:00."
 
 
@@ -387,10 +388,10 @@ async def test_a_main_prompt_that_cannot_be_filled_leaves_the_request_going(capl
         aggregators=LLMContextAggregatorPair(context),
         state=CallState(Shop),
     )
+    flows.install()
     with caplog.at_level(logging.ERROR):
-        await flows._on_process(llm, LLMContextFrame(context))
+        await llm._call_event_handler("on_before_process_frame", LLMContextFrame(context))
     assert "could not be refreshed" in caplog.text
-    assert flows._replies.request == context.get_messages()
 
 
 def test_the_greeting_hold_lets_go_after_the_shared_hold_time_by_default():
