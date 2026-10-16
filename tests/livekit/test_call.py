@@ -10,6 +10,7 @@ from livekit.agents import AgentSession
 from pydantic import BaseModel
 
 from tests.hooks.helpers import checks, on_end
+from tests.livekit.fake import until
 from tests.livekit.test_agent_lifecycle import Scripted
 from unmute_core.agent import AgentSpec
 from unmute_core.call import FAILURE_LINE, CallEnd, CallHooks
@@ -141,12 +142,11 @@ class Closing:
 async def test_max_duration_shuts_the_session_down_unless_it_closed_first():
     session = Closing()
     max_duration(cast(Any, session), 0.01)
-    await asyncio.sleep(0.05)
-    assert session.shut == 1
+    await until(lambda: session.shut == 1)
     closed = Closing()
     max_duration(cast(Any, closed), 0.01)
     closed.handlers["close"](None)
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.05)  # past the 0.01 s limit, which would shut it down
     assert closed.shut == 0
 
 
@@ -287,12 +287,12 @@ async def test_an_unrecoverable_model_error_fails_the_call_once_and_a_tts_error_
     assert session.said == []
     speech = SimpleNamespace(type="tts_error", recoverable=False, error=RuntimeError("x"))
     session.emit("error", SimpleNamespace(error=speech))
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.01)  # time for a wrong failure line to start
     assert session.said == []
     assert session.shut == 0
     fatal = SimpleNamespace(type="llm_error", recoverable=False, error=RuntimeError("x"))
     session.emit("error", SimpleNamespace(error=fatal))
-    await asyncio.sleep(0.01)
+    await until(lambda: session.shut)
     assert session.said == [FAILURE_LINE]
     assert session.shut == 1
 
@@ -303,7 +303,7 @@ async def test_the_close_ends_the_call_with_the_transcript():
     call = CallHooks(hooks=on_end(ended.append))
     attach_call(cast(Any, session), call)
     session.emit("close", SimpleNamespace(reason=SimpleNamespace(value="participant_disconnected")))
-    await asyncio.sleep(0.01)
+    await until(lambda: ended)
     assert ended[0].reason == "caller_hung_up"
     assert ended[0].transcript == [
         {"role": "user", "content": "hi"},

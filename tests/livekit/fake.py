@@ -1,7 +1,9 @@
 """A scripted LiveKit LLM and a silent TTS for tests: no network, every request kept."""
 
+import asyncio
 import json
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -140,3 +142,10 @@ class Voice(tts.TTS):
         self, text: str, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS
     ) -> tts.ChunkedStream:
         raise NotImplementedError("a text-only session speaks no audio")
+
+
+async def until(done: Callable[[], object]) -> None:
+    """Wait until ``done()`` is true, or fail the test after 3 s."""
+    async with asyncio.timeout(3):
+        while not done():
+            await asyncio.sleep(0)
