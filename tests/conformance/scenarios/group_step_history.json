@@ -1,6 +1,6 @@
 {
-  "name": "group_step_history_full",
-  "about": "In a shared group, a step opens on its own history value (full). The step after a tool step hears what was said and the earlier step's tool call and result.",
+  "name": "group_step_history",
+  "about": "In a shared group, each step opens on its own history value. The first step uses the group's history. The step after the tool step uses full and hears the tool call and result. The last step uses messages and hears only what was said.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",
@@ -37,6 +37,9 @@
               ]
             }
           }
+        ],
+        "announce": [
+          "Let me look."
         ]
       },
       {
@@ -52,6 +55,20 @@
           }
         ],
         "history": "full"
+      },
+      {
+        "name": "tag_order",
+        "instructions": "Tag the order.",
+        "assign": [
+          {
+            "variable": "tags",
+            "path": [
+              "tags"
+            ],
+            "optional": true
+          }
+        ],
+        "history": "messages"
       }
     ],
     "groups": [
@@ -60,7 +77,8 @@
         "when": "The caller wants help with an order.",
         "steps": [
           "find_order",
-          "take_note"
+          "take_note",
+          "tag_order"
         ],
         "context_scope": "shared"
       }
@@ -101,6 +119,7 @@
         }
       ],
       "spoken": [
+        "Let me look.",
         "What is the order number?"
       ]
     },
@@ -132,6 +151,7 @@
           "order": [
             "user",
             "assistant",
+            "assistant",
             "user",
             "tool"
           ]
@@ -162,16 +182,56 @@
           ]
         },
         {
-          "site": "",
+          "site": "task:tag_order",
           "heard": [
-            "I need help with my order."
+            "I need help with my order.",
+            "It is A-12.",
+            "Mark it urgent."
           ],
-          "result": "{\"status\": \"completed\", \"task\": \"order_flow\", \"steps\": [{\"step\": \"find_order\", \"outcome\": \"completed\", \"saved\": {\"order_id\": \"A-12\", \"status\": \"open\"}}, {\"step\": \"take_note\", \"outcome\": \"completed\", \"saved\": {\"note\": \"urgent\"}, \"said\": \"Noted.\"}]}",
-          "text": "Anything else?"
+          "order": [
+            "user",
+            "assistant",
+            "assistant",
+            "user",
+            "assistant",
+            "user",
+            "assistant"
+          ],
+          "text": "Any tag?"
         }
       ],
       "spoken": [
         "Noted.",
+        "Any tag?"
+      ]
+    },
+    {
+      "caller": "Tag it rush.",
+      "model": [
+        {
+          "site": "task:tag_order",
+          "text": "Tagged.",
+          "calls": [
+            {
+              "name": "finish",
+              "arguments": {
+                "tags": [
+                  "rush"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "heard": [
+            "I need help with my order."
+          ],
+          "text": "Anything else?"
+        }
+      ],
+      "spoken": [
+        "Tagged.",
         "Anything else?"
       ]
     }
@@ -181,7 +241,9 @@
       "order_id": "A-12",
       "status": "open",
       "note": "urgent",
-      "tags": []
+      "tags": [
+        "rush"
+      ]
     },
     "tool_calls": [
       {
@@ -200,6 +262,9 @@
       "group.step_started group=order_flow task=take_note step=1",
       "task.started group=order_flow task=take_note step=1",
       "task.completed group=order_flow task=take_note step=1 saved=note",
+      "group.step_started group=order_flow task=tag_order step=2",
+      "task.started group=order_flow task=tag_order step=2",
+      "task.completed group=order_flow task=tag_order step=2 saved=tags",
       "group.completed group=order_flow"
     ]
   }
