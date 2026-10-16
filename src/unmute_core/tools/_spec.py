@@ -28,6 +28,7 @@ from pydantic import (
     AfterValidator,
     BaseModel,
     ConfigDict,
+    Field,
     PlainValidator,
     SkipValidation,
     StringConstraints,
@@ -64,8 +65,10 @@ from unmute_core.tools._lines import (
     Assign,
     SpokenLines,
     ToolReply,
+    match_words,
     read_path,
     result_paths,
+    success_word,
 )
 from unmute_core.tools._schema import check_parameters, model_schema
 from unmute_core.tools._spoken import form_at
@@ -85,7 +88,8 @@ filled. An awaitable it returns is awaited before the tool runs."""
 ToolEventSink = Callable[[str, dict[str, Any]], object]
 """Told each tool call's stage: ``tool.started``, ``tool.succeeded``, ``tool.failed`` or
 ``tool.refused``, with the tool's ``name`` and ``source`` (``model`` or ``event``). Names
-and timing only, never argument values."""
+and timing only, never argument values. ``tool.replied`` follows when code speaks a reply
+line for the result, in place of a model reply."""
 HIDDEN_RESULT = MappingProxyType({"ok": True})
 """What the model reads from a tool that succeeded and hides its result."""
 SCALAR_TYPES = frozenset({"string", "integer", "number", "boolean"})
@@ -416,6 +420,9 @@ class ToolSpec:
         ends_as: Reads the tool's result and returns the end reason it gives the call, like
             ``transferred``, when its effect ends the conversation and it succeeded. None
             leaves the shared ``agent_ended``. The reason is told to the call's hooks.
+        replies: The lines code speaks for the tool's own results, in place of a model
+            reply, wherever it runs: on the main agent, in a task step, as a step's closing
+            tool. Each reply leaves out ``tool``. A place's own replies are tried first.
     """
 
     name: Annotated[str, StringConstraints(pattern=f"^{TOOL_NAME.pattern}$")]
@@ -432,6 +439,7 @@ class ToolSpec:
     result_instructions: str = ""
     hidden: tuple[str, ...] = ()
     ends_as: SkipValidation[Callable[[object], str] | None] = None
+    replies: Annotated[tuple[ToolReply, ...], Field(max_length=16)] = ()
 
     @model_validator(mode="after")
     def _locked_placeholders(self) -> Self:
@@ -450,6 +458,34 @@ class ToolSpec:
                     f"tool {self.name}: locked argument {name!r} holds a placeholder that is "
                     "not {{name}} or {{name.field}}"
                 )
+        return self
+
+    @model_validator(mode="after")
+    def _own_replies(self) -> Self:
+        """Name this tool on its own replies, and refuse one that cannot play.
+
+        Raises:
+            ValueError: Naming the tool and what to fix.
+        """
+        if not self.replies:
+            return self
+        if self.effect == "ends_conversation":
+            raise ValueError(
+                f"tool {self.name} ends the call, so the call is over before a reply could "
+                "play. Say a goodbye with its announce and announce_wait=True"
+            )
+        if stray := [reply.tool for reply in self.replies if reply.tool not in (None, self.name)]:
+            raise ValueError(
+                f"tool {self.name} has a reply for {stray[0]!r}. Leave tool out of a tool's "
+                "own replies"
+            )
+        named = tuple(reply.model_copy(update={"tool": self.name}) for reply in self.replies)
+        where = f"tool {self.name}: a reply"
+        for reply in named:
+            for path in result_paths(reply.say):
+                self.check_result_path(path, where)
+            self.check_match(reply.when, where)
+        object.__setattr__(self, "replies", named)
         return self
 
     @model_validator(mode="after")
@@ -575,6 +611,27 @@ class ToolSpec:
                 f"{where} reads result.{'.'.join(path)}, which {self.output.__name__}, the "
                 f"output of {self.name}, does not have: {error}"
             ) from None
+
+    def check_match(self, fields: Mapping[str, Sequence[str | int | bool]], where: str) -> None:
+        """Refuse a match on a field the output model lacks, or on a value it never holds.
+
+        Args:
+            fields: Result field to the values a rule matches, like a reply's ``when``.
+            where: What matches, for the error.
+
+        Raises:
+            ValueError: Naming the field and the values it can hold.
+        """
+        for name, values in fields.items():
+            annotation = self.check_result_path((name,), where)
+            allowed = None if annotation is None else match_words(annotation)
+            if allowed is None:
+                continue
+            if wrong := [value for value in values if success_word(value) not in allowed]:
+                raise ValueError(
+                    f"{where} matches result.{name} on {wrong[0]!r}, which {self.output.__name__} "
+                    f"never holds there. It holds {', '.join(sorted(allowed))}"
+                )
 
     @cached_property
     def reads_transcript(self) -> bool:
@@ -813,8 +870,9 @@ class ToolRegistry:
             assign: Tool name to the values its result saves into the State, on the main
                 agent. A task step saves only what its own ``assign`` names.
             replies: The lines code speaks for a tool's result on the main agent, in
-                place of a model reply. The first that matches and fills is spoken. A task
-                step speaks only its own ``replies``.
+                place of a model reply. Each names its tool. The first that matches and
+                fills is spoken. The tools' own ``replies`` follow them. A task step
+                speaks its own ``replies``, then the tool's.
 
         Raises:
             ValueError: If two tools have the same name, a locked path does not fit, or an
@@ -832,7 +890,10 @@ class ToolRegistry:
         self.assign: Mapping[str, tuple[Assign, ...]] = MappingProxyType(
             {name: tuple(rows) for name, rows in (assign or {}).items() if rows}
         )
-        self.replies: tuple[ToolReply, ...] = tuple(replies)
+        self.replies: tuple[ToolReply, ...] = (
+            *replies,
+            *(reply for tool in listed for reply in tool.replies),
+        )
         if state is not None:
             for tool in self._tools.values():
                 tool.check_locked(state)
@@ -858,6 +919,11 @@ class ToolRegistry:
                 if source is not None and (unfit := _unfit(source, target, append=row.append)):
                     raise ValueError(f"{where}, but {unfit}")
         for reply in self.replies:
+            if reply.tool is None:  # only a tool's own replies leave it out
+                raise ValueError(
+                    "replies: a ToolReply on the ToolRegistry names its tool. Set tool=, or "
+                    "put the reply on the tool's own replies"
+                )
             tool = self._owner(reply.tool, "replies")
             if tool.effect == "ends_conversation":
                 raise ValueError(
@@ -865,8 +931,9 @@ class ToolRegistry:
                     "could play. Say a goodbye with its announce and announce_wait=True"
                 )
             where = f"replies: a line for {tool.name}"
-            for path in result_paths(reply.say) | {(name,) for name in reply.when}:
+            for path in result_paths(reply.say):
                 tool.check_result_path(path, where)
+            tool.check_match(reply.when, where)
             for variable in reply.say_variables:
                 if self.state is None:
                     raise ValueError(
@@ -1025,7 +1092,19 @@ class ToolRegistry:
         if not self.save_result(name, result, state, hooks=hooks):
             return None
         tool = self._tools[name]
-        return lines.reply(tool, self.replies, result, state) if self.replies else None
+        line = lines.reply(tool, self.replies, result, state) if self.replies else None
+        if line is not None:
+            self.replied(name, hooks=hooks)
+        return line
+
+    def replied(self, name: str, *, hooks: ToolHooks | None = None) -> None:
+        """Tell the sinks and hooks ``tool.replied``: code spoke a line for the tool's result.
+
+        Args:
+            name: The tool.
+            hooks: The call's hooks.
+        """
+        self._emit("tool.replied", _ToolEvent(name=name, source="model"), hooks)
 
     def save_result(
         self,

@@ -81,10 +81,14 @@ the cars on the policy.
 
 ## Why it works this way
 
-**The model only fills typed fields.** `incident_day` is a date that cannot be
-in the future. `injuries` is a `bool`. `incident_time` is a time or one of four
-parts of the day. A wrong value is refused with words the model passes on:
-"That day hasn't happened yet."
+**The model only fills typed fields.** `incident_day` is a date. `injuries` is a
+`bool`. `incident_time` is a time or one of four parts of the day.
+
+**Code decides, and code says it.** A day in the future is the tool's rule, not
+the argument's. `note_facts` keeps it out of the report and returns
+`status: "future_day"`. A reply on the tool turns that into "That day hasn't
+happened yet. On which day did it happen?" The model makes one request for the
+turn, the call, and says nothing.
 
 **Every read-back is code's.** The caller hears the same claim read-back on
 every call. The model never paraphrases the report it is about to file.

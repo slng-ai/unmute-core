@@ -92,6 +92,15 @@ def _assign(*rows: Assign) -> dict[str, Any]:
             {"replies": [ToolReply(tool="bye", say=["Goodbye."])]},
             "bye ends the call, so the call is over before a line could play",
         ),
+        (
+            {"replies": [ToolReply(tool="find_order", when={"status": ["lost"]}, say=["Lost."])]},
+            "matches result.status on 'lost', which Order never holds there. It holds held, "
+            "shipped",
+        ),
+        (
+            {"replies": [ToolReply(when={"status": ["held"]}, say=["Held."])]},
+            "a ToolReply on the ToolRegistry names its tool",
+        ),
     ],
 )
 def test_a_save_or_a_reply_that_does_not_fit_is_refused_when_built(
@@ -99,6 +108,58 @@ def test_a_save_or_a_reply_that_does_not_fit_is_refused_when_built(
 ):
     with pytest.raises(ValueError, match=message):
         _registry(**rows)
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        (
+            {"replies": [ToolReply(tool="bye", say=["Held."])]},
+            "tool find_order has a reply for 'bye'. Leave tool out",
+        ),
+        (
+            {"replies": [ToolReply(when={"status": ["lost"]}, say=["Lost."])]},
+            "matches result.status on 'lost'",
+        ),
+        (
+            {"replies": [ToolReply(say=["{{result.colour}}"])]},
+            "reads result.colour",
+        ),
+        (
+            {"replies": [ToolReply(say=["Bye."])], "effect": "ends_conversation"},
+            "tool find_order ends the call",
+        ),
+    ],
+)
+def test_a_tools_own_reply_that_does_not_fit_is_refused_when_built(
+    options: dict[str, Any], message: str
+):
+    def find_order(order_id: str) -> Order:
+        """Find an order."""
+        return Order.model_validate(GOOD)
+
+    with pytest.raises(ValueError, match=message):
+        local_tool(find_order, **options)
+
+
+@pytest.mark.parametrize(
+    ("status", "line"),
+    [("held", "The registry's line."), ("shipped", "The tool's line.")],
+)
+async def test_a_tools_own_reply_follows_the_registrys(status: str, line: str):
+    def find_order(order_id: str) -> Order:
+        """Find an order."""
+        return Order.model_validate({**GOOD, "status": status})
+
+    tool = local_tool(find_order, replies=[ToolReply(say=["The tool's line."])])
+    registry = ToolRegistry(
+        [tool],
+        replies=[
+            ToolReply(tool="find_order", when={"status": ["held"]}, say=["The registry's line."])
+        ],
+    )
+    result = await registry.call("find_order", {"order_id": "A-12"}, None)
+    assert registry.use_result("find_order", result, None, SpokenLines()) == line
 
 
 @pytest.mark.parametrize(
@@ -140,7 +201,7 @@ async def test_a_save_the_state_refuses_is_told_to_the_sinks_and_the_line_still_
     state = CallState(State)
     result = await registry.call("find_order", {"order_id": "A-12"}, state)
     assert registry.use_result("find_order", result, state, SpokenLines()) == "Found it."
-    assert seen[-1] == "tool.save_refused"
+    assert seen[-2:] == ["tool.save_refused", "tool.replied"]
     assert state.plain("order_number") is None
 
 

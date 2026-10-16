@@ -114,8 +114,23 @@ caller's yes to the same input. See [Ask before a closing tool runs](/core/build
 request. A group's `arguments` carry what the caller already said into the
 first step, so its read-back can play at once.
 
-**Refuse in code, and say how to fix it.** Raise `ToolError` with a message
-that names what to do next. The model reads it and asks the caller.
+**Decide in the tool, say it in code.** An argument type says what the caller
+meant: a date, a phone number, a spelled id. A rule about the request, like
+"not in the future", belongs to the tool. The tool returns a typed outcome, a
+`Literal` field, and a reply on the tool turns each outcome into a line. Code
+says it, and the turn costs one model request: the call. A validator that
+raises would cost two more: one for the model to say the error, and a finish
+check after it. See [Replies on the tool itself](/core/reference/tools#replies-on-the-tool-itself).
+
+```python claims.py
+future = incident_day is not None and incident_day > today()
+...
+if future:
+    noted.status = "future_day"
+```
+
+**Refuse in code when the model must decide.** Raise `ToolError` with a
+message that names what to do next. The model reads it and chooses what to ask.
 
 ```python finder.py
 if picked is None:
