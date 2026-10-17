@@ -111,6 +111,10 @@ async def run_realtime(scenario: Scenario) -> dict[str, Any]:
             await model.aclose()
     if server.refused:
         outcome["problems"].append(f"the server refused {server.refused} replies")
+    if server.tools_on_lines:
+        outcome["problems"].append(
+            f"{server.tools_on_lines} lines to say let the model call a tool"
+        )
     return outcome
 
 

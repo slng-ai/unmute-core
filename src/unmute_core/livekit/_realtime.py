@@ -56,11 +56,14 @@ def speak(
     """Say a fixed line: with ``session.say``, or by the realtime model that speaks itself.
 
     The model's reply joins its conversation, whatever ``add_to_chat_ctx`` says: the
-    model holds it on its own server.
+    model holds it on its own server. The reply calls no tool: with its tools on, a model
+    may call one instead of, or after, saying the line.
     """
     if speaks_itself(session):
         return session.generate_reply(
-            instructions=say_line(line), allow_interruptions=allow_interruptions
+            instructions=say_line(line),
+            allow_interruptions=allow_interruptions,
+            tool_choice="none",
         )
     return session.say(
         line, allow_interruptions=allow_interruptions, add_to_chat_ctx=add_to_chat_ctx

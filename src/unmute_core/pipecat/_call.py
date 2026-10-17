@@ -42,6 +42,7 @@ from unmute_core.pipecat._realtime import (
     follow_replies,
     is_realtime,
     keep_resend,
+    line_next,
     settled,
     speak,
     speaks_itself,
@@ -443,6 +444,8 @@ async def open_call(
     elif llm is not None and is_realtime(llm) and greeting.line(call.state) is None:
         await call.before_request(None)
         await settled(llm)
+    elif llm is not None and speaks_itself(llm):
+        line_next(llm)
     if (not frames or greeting.speaks_first == "user") and hold is not None:
         hold.release()
     await worker.queue_frames(frames)
