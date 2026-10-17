@@ -86,8 +86,8 @@ Policies to try: `KP482913`, Daniel, born 5 June 1979, one car. `KP731508`, Priy
 
 ```bash
 cd kestrel && uv run pytest                          # offline: the desk, the words, the tasks
-cd livekit && .venv/bin/python -I ../../../tests/examples/converse_livekit.py agent ../scenarios/*.json
-cd pipecat && .venv/bin/python -I ../../../tests/examples/converse_pipecat.py bot ../scenarios/*.json
+cd livekit && .venv/bin/python -I -m unmute_core.testing converse livekit agent --patch voice_stack ../scenarios/*.json
+cd pipecat && .venv/bin/python -I -m unmute_core.testing converse pipecat bot --patch voice_stack ../scenarios/*.json
 ```
 
 The last two run every scenario as a whole call against the real model, text only, and print the transcript, the tools called and the model requests per turn.

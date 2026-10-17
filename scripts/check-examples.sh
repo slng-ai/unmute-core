@@ -6,7 +6,7 @@
 # For each project: install from its lock, import every module with an empty
 # environment and no network, then call unmute_core.require() with this repo's version.
 # A hand-written project then runs one text turn through each of its agents, with a
-# scripted model and no network (tests/examples/smoke_*.py).
+# scripted model and no network (python -m unmute_core.testing smoke).
 # --live skips the import check and runs the same turn with the real model and the keys
 # in your environment. A project whose keys are unset is skipped.
 set -euo pipefail
@@ -127,9 +127,9 @@ for project in "$@"; do
   [[ -n "$values" ]] && start=("UNMUTE_CALL_START=$values")
   for module in $modules; do
     if [[ -n "$live" ]]; then
-      (cd "$project" && env ${start[@]+"${start[@]}"} .venv/bin/python -I "$repo/tests/examples/smoke_$framework.py" "$module" --live)
+      (cd "$project" && env ${start[@]+"${start[@]}"} .venv/bin/python -I -m unmute_core.testing smoke "$framework" "$module" --patch voice_stack --live)
     else
-      (cd "$project" && env -i ${start[@]+"${start[@]}"} .venv/bin/python -I "$repo/tests/examples/smoke_$framework.py" "$module")
+      (cd "$project" && env -i ${start[@]+"${start[@]}"} .venv/bin/python -I -m unmute_core.testing smoke "$framework" "$module" --patch voice_stack)
     fi
   done
 done

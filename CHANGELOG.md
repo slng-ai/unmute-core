@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `unmute_core.testing`: the scenario runner the examples use now ships in the library. `python -m unmute_core.testing converse livekit agent scenarios/*.json` runs whole calls through your own project on its real model, and `smoke` runs one offline turn. `unmute_core.testing.Scenario` is the scenario format, and it refuses a key it does not know. See `docs/core/reference/testing.mdx`.
+
 ## 0.15.0
 
 This release makes task steps open on the same request on LiveKit and Pipecat, and times every turn the caller hears. No API changed. Change `unmute_core.require("0.14.0")` to `require("0.15.0")` when you upgrade.

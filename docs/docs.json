@@ -147,7 +147,8 @@
               "core/reference/dev-records",
               "core/reference/telephony",
               "core/reference/tools",
-              "core/reference/tasks"
+              "core/reference/tasks",
+              "core/reference/testing"
             ]
           }
         ]

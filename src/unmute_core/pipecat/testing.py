@@ -1,38 +1,41 @@
-"""Run whole scripted calls through a Pipecat example's own ``bot()``, on its real model.
+"""Run a Pipecat project's own ``bot()`` through scripted calls, for tests.
 
-Run it inside the example's venv, from the project folder::
+``python -m unmute_core.testing`` runs it. A project fits when its module has
+``bot(runner_args)`` and gets its transport from ``create_transport`` in a module the
+run patches: the project's module, or one named with ``--patch``.
 
-    .venv/bin/python -I ../../../tests/examples/converse_pipecat.py bot ../scenarios/*.json
+``converse`` runs whole calls from scenario files on the project's real model. ``bot()``
+runs as written, on a fake transport. The transport says a caller connected, then types
+each caller line once the agent has gone quiet. Speech to text is a pass through. Text to
+speech is a stand-in that turns text into a moment of silence, so the pipeline sees the
+bot start and stop speaking as it does on a real call, and a confirm line counts as heard
+only once it "played".
 
-``bot()`` runs as written, on a fake transport. The transport says a caller connected,
-then types each caller line once the agent has gone quiet. Speech to text is a pass
-through. Text to speech is a stand-in that turns text into a moment of silence, so the
-pipeline sees the bot start and stop speaking as it does on a real call, and a confirm
-line counts as heard only once it "played". The model is the example's own, with the
-keys in your environment. See ``tests/examples/script.py`` for the scenario format.
+``CONVERSE_AUDIO=1`` runs the whole voice pipeline instead: each caller line is spoken by
+SLNG text to speech and streamed in real time, so the project's own voice detector, turn
+detector and speech to text hear it. The agent's own text to speech speaks every line,
+and the transport plays its audio on a clock. Each turn then also shows what speech to
+text heard.
 
-``CONVERSE_AUDIO=1`` runs the whole voice pipeline instead: each caller line is spoken
-by SLNG text to speech (``tests/examples/voices.py``) and streamed in real time, so the
-example's own voice detector, turn detector and speech to text hear it; the agent's own
-text to speech speaks every line, and the transport plays its audio on a clock. Each
-turn then also shows what speech to text heard.
+``smoke`` runs one text turn. Without ``live`` a scripted model answers and no request
+leaves the machine.
 """
 
 import asyncio
 import importlib
-import os
+import json
+import logging
 import sys
 import time
-from collections.abc import AsyncGenerator
-from pathlib import Path
+from collections.abc import AsyncGenerator, Sequence
+from types import ModuleType
 from typing import Any
 
-sys.path[:0] = [os.getcwd(), str(Path(__file__).resolve().parents[2])]
-
-from pipecat.frames.frames import (  # noqa: E402
+from pipecat.frames.frames import (
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
     EndFrame,
+    EndWorkerFrame,
     Frame,
     FunctionCallInProgressFrame,
     FunctionCallResultFrame,
@@ -44,19 +47,21 @@ from pipecat.frames.frames import (  # noqa: E402
     StartFrame,
     TranscriptionFrame,
     TTSAudioRawFrame,
+    TTSSpeakFrame,
     TTSStoppedFrame,
     TTSTextFrame,
     UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
 )
-from pipecat.processors.filters.identity_filter import IdentityFilter  # noqa: E402
-from pipecat.processors.frame_processor import FrameDirection, FrameProcessor  # noqa: E402
-from pipecat.runner.types import RunnerArguments  # noqa: E402
-from pipecat.services.settings import TTSSettings  # noqa: E402
-from pipecat.services.tts_service import TTSService  # noqa: E402
-from pipecat.transports.base_transport import BaseTransport  # noqa: E402
+from pipecat.processors.filters.identity_filter import IdentityFilter
+from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
+from pipecat.runner.types import RunnerArguments
+from pipecat.services.settings import TTSSettings
+from pipecat.services.tts_service import TTSService
+from pipecat.transports.base_transport import BaseTransport
 
-from tests.examples import script, voices  # noqa: E402
+from unmute_core.testing import _offline, _scenario, _voices
+from unmute_core.testing._scenario import ConverseSettings, Scenario
 
 QUIET_S = 2.5
 """How long the agent must stay quiet before the caller's next line."""
@@ -68,12 +73,7 @@ A slow model would otherwise look quiet, and the caller's next line would cut of
 the model says next, like a read-back. Gemini's first chunk can take over 3 s. LiveKit's
 runner waits the same way while the agent is ``thinking``."""
 TURN_TIMEOUT_S = 60
-VERBOSE = bool(os.getenv("CONVERSE_VERBOSE"))
-REAL_VOICE = bool(os.getenv("CONVERSE_REAL_VOICE"))
-"""Keep the example's own text to speech: each line is synthesised, and its audio dropped."""
-AUDIO = bool(os.getenv("CONVERSE_AUDIO"))
-"""Run the whole voice pipeline, with a caller who speaks."""
-CALLER_LANGUAGE = os.getenv("CONVERSE_CALLER_LANGUAGE", "en")
+SMOKE_TIMEOUT_S = 30
 CHUNK_S = 0.02
 ACTIVITY = (
     TTSAudioRawFrame,
@@ -84,6 +84,8 @@ ACTIVITY = (
     FunctionCallInProgressFrame,
 )
 """The frames that show the agent is still answering."""
+SPEECH = ("OpenAISTTService", "OpenAITTSService", "SlngSTTService", "SlngTTSService")
+"""The speech services a smoke run swaps for a pass through."""
 HEARD: list[str] = []
 """What speech to text heard, in order."""
 
@@ -154,9 +156,10 @@ class AgentOutput(FrameProcessor):
     and stopped once its speech ends.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, settings: ConverseSettings) -> None:
         """Start with nothing said."""
         super().__init__()
+        self._settings = settings
         self.said: list[str] = []
         self.tools: list[str] = []
         self.requests = 0
@@ -189,7 +192,7 @@ class AgentOutput(FrameProcessor):
             self.answer_due = False
         elif isinstance(frame, FunctionCallInProgressFrame):
             name = frame.function_name
-            self.tools.append(f"{name}({frame.arguments})" if VERBOSE else name)
+            self.tools.append(f"{name}({frame.arguments})" if self._settings.verbose else name)
         elif isinstance(frame, TTSAudioRawFrame) and not self._speaking:
             self._speaking = True
             await self.push_frame(BotStartedSpeakingFrame(), FrameDirection.UPSTREAM)
@@ -200,7 +203,7 @@ class AgentOutput(FrameProcessor):
             if line := " ".join(" ".join(self._line).split()):
                 self.said.append(line)
             self._line = []
-            if self._speaking and not AUDIO:
+            if self._speaking and not self._settings.audio:
                 self._speaking = False
                 await self.push_frame(BotStoppedSpeakingFrame(), FrameDirection.UPSTREAM)
                 await self.push_frame(BotStoppedSpeakingFrame())
@@ -218,9 +221,10 @@ class AgentOutput(FrameProcessor):
 class AudioCaller(CallerInput):
     """A caller who speaks: their audio, then silence, in real time, 20 ms at a time."""
 
-    def __init__(self, transport: "FakeTransport") -> None:
+    def __init__(self, transport: "FakeTransport", settings: ConverseSettings) -> None:
         """Start with nothing to say."""
         super().__init__(transport)
+        self._settings = settings
         self._audio = bytearray()
         self._pump: asyncio.Task[None] | None = None
 
@@ -232,20 +236,21 @@ class AudioCaller(CallerInput):
 
     async def _stream(self) -> None:
         """Push the caller's audio, or silence, every 20 ms, on the wall clock."""
-        size = int(voices.SAMPLE_RATE * CHUNK_S) * 2
+        size = int(_voices.SAMPLE_RATE * CHUNK_S) * 2
         start, sent = time.monotonic(), 0
         while True:
             chunk = bytes(self._audio[:size]).ljust(size, b"\x00")
             del self._audio[:size]
             await self.push_frame(
-                InputAudioRawFrame(audio=chunk, sample_rate=voices.SAMPLE_RATE, num_channels=1)
+                InputAudioRawFrame(audio=chunk, sample_rate=_voices.SAMPLE_RATE, num_channels=1)
             )
             sent += 1
             await asyncio.sleep(max(0.0, start + sent * CHUNK_S - time.monotonic()))
 
     async def say(self, line: str, language: str | None = None) -> None:
         """Speak one caller line, in its own language: its audio is streamed from now on."""
-        self._audio.extend(await voices.spoken(line, language or CALLER_LANGUAGE))
+        language = language or self._settings.caller_language
+        self._audio.extend(await _voices.spoken(line, language, self._settings))
 
     async def done(self) -> None:
         """Wait until the caller's line has been streamed to its end."""
@@ -262,9 +267,9 @@ class AudioCaller(CallerInput):
 class AudioOutput(AgentOutput):
     """Plays the agent's audio on a clock, as a transport would, and says when it stops."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: ConverseSettings) -> None:
         """Start silent."""
-        super().__init__()
+        super().__init__(settings)
         self._until = 0.0
         self._clock: asyncio.Task[None] | None = None
 
@@ -306,11 +311,12 @@ class AudioOutput(AgentOutput):
 class FakeTransport(BaseTransport):
     """A transport with one caller who types instead of speaking."""
 
-    def __init__(self) -> None:
+    def __init__(self, settings: ConverseSettings) -> None:
         """Register the events a web transport fires."""
         super().__init__(name="converse")
-        self.caller = AudioCaller(self) if AUDIO else CallerInput(self)
-        self.agent = AudioOutput() if AUDIO else AgentOutput()
+        audio = settings.audio
+        self.caller = AudioCaller(self, settings) if audio else CallerInput(self)
+        self.agent = AudioOutput(settings) if audio else AgentOutput(settings)
         self.ready = asyncio.Event()
         self._register_event_handler("on_client_connected")
         self._register_event_handler("on_client_disconnected")
@@ -333,23 +339,30 @@ class FakeTransport(BaseTransport):
         return self.agent
 
 
-def patch(module: Any, transport: FakeTransport) -> None:
-    """Give the example, and the shared stack it runs on, the fake transport and speech."""
+def _shared(module: ModuleType, prefixes: Sequence[str]) -> list[ModuleType]:
+    """Return the project's module and every loaded module whose name has a prefix."""
+    loaded = [m for n, m in list(sys.modules.items()) if n.startswith(tuple(prefixes))]
+    return [module, *(m for m in loaded if m is not module)] if prefixes else [module]
 
-    async def create_transport(*args: object, **kwargs: object) -> FakeTransport:
+
+def _patch(
+    modules: Sequence[ModuleType], transport: BaseTransport, settings: ConverseSettings
+) -> None:
+    """Give the project, and the modules it builds its pipeline in, the fake transport."""
+
+    async def create_transport(*args: object, **kwargs: object) -> BaseTransport:
         """Hand the bot the fake transport."""
         return transport
 
-    for name, loaded in list(sys.modules.items()):
-        if loaded is module or name.startswith("voice_stack"):
-            if hasattr(loaded, "create_transport"):
-                setattr(loaded, "create_transport", create_transport)  # noqa: B010
-            if hasattr(loaded, "SlngSTTService") and not AUDIO:
-                setattr(loaded, "SlngSTTService", passthrough)  # noqa: B010
-            if hasattr(loaded, "SlngTTSService") and not (REAL_VOICE or AUDIO):
-                setattr(loaded, "SlngTTSService", TextTTS)  # noqa: B010
-            if AUDIO and (stt := getattr(loaded, "SlngSTTService", None)) is not None:
-                hear(stt)
+    for loaded in modules:
+        if hasattr(loaded, "create_transport"):
+            setattr(loaded, "create_transport", create_transport)  # noqa: B010
+        if hasattr(loaded, "SlngSTTService") and not settings.audio:
+            setattr(loaded, "SlngSTTService", passthrough)  # noqa: B010
+        if hasattr(loaded, "SlngTTSService") and not (settings.real_voice or settings.audio):
+            setattr(loaded, "SlngTTSService", TextTTS)  # noqa: B010
+        if settings.audio and (stt := getattr(loaded, "SlngSTTService", None)) is not None:
+            hear(stt)
 
 
 def hear(stt: type[FrameProcessor]) -> None:
@@ -369,40 +382,49 @@ def hear(stt: type[FrameProcessor]) -> None:
     stt._converse_heard = True  # ty: ignore[unresolved-attribute]
 
 
-async def converse(module: Any, scenario: dict[str, Any]) -> bool:
-    """Run one scenario through the module's ``bot()``. Return True when it passed."""
-    script.STATES.clear()
-    script.start_values(scenario)
-    transport = FakeTransport()
-    patch(module, transport)
+async def _turn(
+    transport: FakeTransport, call: _scenario.Call, caller: str, language: str | None
+) -> None:
+    """Say one caller line, wait for the agent, and add what it did to the call."""
     agent = transport.agent
-    call = script.Call()
-    body = {"call_start": scenario["dispatch"]} if "dispatch" in scenario else None
+    said, tools, requests = len(agent.said), len(agent.tools), agent.requests
+    heard = len(HEARD)
+    await transport.caller.say(caller, language)
+    await transport.caller.done()
+    agent.last = time.monotonic()
+    await agent.quiet()
+    turn = _scenario.Turn(caller)
+    turn.heard = HEARD[heard:]
+    turn.said = agent.said[said:]
+    turn.tools = agent.tools[tools:]
+    turn.requests = agent.requests - requests
+    call.turns.append(turn)
+
+
+async def _converse_one(
+    module: ModuleType, scenario: Scenario, settings: ConverseSettings, patch: Sequence[str]
+) -> bool:
+    """Run one scenario through the module's ``bot()``. Return True when it passed."""
+    _scenario.start_values(scenario)
+    transport = FakeTransport(settings)
+    _patch(_shared(module, patch), transport, settings)
+    agent = transport.agent
+    call = _scenario.Call()
+    body = {"call_start": scenario.dispatch} if scenario.dispatch is not None else None
     running = asyncio.create_task(module.bot(RunnerArguments(body=body)))
     try:
         ready = asyncio.create_task(transport.ready.wait())
         await asyncio.wait({ready, running}, timeout=30, return_when=asyncio.FIRST_COMPLETED)
         ready.cancel()
-        call.problems.extend(script.refusal(scenario, transport.ready.is_set()))
+        call.problems.extend(_scenario.refusal(scenario, transport.ready.is_set()))
         if not transport.ready.is_set():
-            return script.report("pipecat", scenario, call)
+            return _scenario.report("pipecat", scenario, call, settings)
         await agent.quiet()
         call.greeting = list(agent.said)
-        for want in scenario["turns"]:
+        for want in scenario.turns:
             if agent.ended or running.done():
                 break
-            said, tools, requests = len(agent.said), len(agent.tools), agent.requests
-            heard = len(HEARD)
-            await transport.caller.say(want["caller"], want.get("language"))
-            await transport.caller.done()
-            agent.last = time.monotonic()
-            await agent.quiet()
-            turn = script.Turn(want["caller"])
-            turn.heard = HEARD[heard:]
-            turn.said = agent.said[said:]
-            turn.tools = agent.tools[tools:]
-            turn.requests = agent.requests - requests
-            call.turns.append(turn)
+            await _turn(transport, call, want.caller, want.language)
     except Exception as error:  # noqa: BLE001
         call.problems.append(f"the call failed: {error!r}")
     finally:
@@ -412,21 +434,28 @@ async def converse(module: Any, scenario: dict[str, Any]) -> bool:
             await asyncio.wait_for(running, 15)
         except Exception as error:  # noqa: BLE001
             call.problems.append(f"the bot did not end cleanly: {error!r}")
-    return script.report("pipecat", scenario, call)
+    return _scenario.report("pipecat", scenario, call, settings)
 
 
-async def main() -> None:
-    """Run every scenario named on the command line, one call each."""
-    name, *paths = sys.argv[1:]
-    module = importlib.import_module(name)
-    results = [await converse(module, scenario) for scenario in script.load(paths)]
-    script.exit_code(results)
+async def converse(
+    module: ModuleType,
+    scenarios: Sequence[Scenario],
+    settings: ConverseSettings,
+    *,
+    patch: Sequence[str] = (),
+) -> list[bool]:
+    """Run each scenario as one call through the module's ``bot()``.
 
+    Args:
+        module: The project's module, with ``bot``.
+        scenarios: The calls to run, in order.
+        settings: How to run them.
+        patch: Name prefixes of other modules that build the pipeline.
 
-if __name__ == "__main__":
-    if VERBOSE:
-        import logging
-
+    Returns:
+        Whether each scenario passed.
+    """
+    if settings.verbose:
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter("    log %(name)s: %(message)s"))
         logging.getLogger("unmute_core").addHandler(handler)
@@ -436,4 +465,167 @@ if __name__ == "__main__":
 
         logger.remove()
         logger.add(sys.stderr, level="WARNING")
-    asyncio.run(main())
+    _scenario.watch()
+    return [await _converse_one(module, scenario, settings, patch) for scenario in scenarios]
+
+
+def openai_reply(request: Any) -> Any:
+    """Keep the request's system text, then answer with the reply, streamed as OpenAI does."""
+    import httpx2
+
+    _offline.PROMPTS.append(_offline.system_text(json.loads(request.content)["messages"]))
+    chunks = [{"role": "assistant", "content": _offline.REPLY}, {}]
+    events = [
+        {
+            "id": "smoke",
+            "object": "chat.completion.chunk",
+            "created": 0,
+            "model": "scripted",
+            "choices": [{"index": 0, "delta": delta, "finish_reason": None if delta else "stop"}],
+        }
+        for delta in chunks
+    ]
+    body = "".join(f"data: {json.dumps(event)}\n\n" for event in events) + "data: [DONE]\n\n"
+    return httpx2.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+
+def _scripted_client(self: object, *args: object, **kwargs: object) -> Any:
+    """Give the project's real OpenAI service a client that never leaves the machine."""
+    import httpx2
+    from openai import AsyncOpenAI
+
+    return AsyncOpenAI(
+        api_key="smoke",
+        base_url="https://openai.invalid/v1",
+        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(openai_reply)),
+    )
+
+
+def _scripted_llm() -> Any:
+    """Stand in for a model built by a helper, like a Gemini on Vertex."""
+    from pipecat.services.openai.llm import OpenAILLMService
+
+    return OpenAILLMService(settings=OpenAILLMService.Settings(model="scripted"))
+
+
+class SmokeCaller(FrameProcessor):
+    """Says a caller connected when the pipeline starts, then types the caller line."""
+
+    def __init__(self, transport: "SmokeTransport") -> None:
+        """Keep the transport whose event this fires."""
+        super().__init__()
+        self.transport = transport
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        """Pass every frame on. After the start frame, connect and speak."""
+        await super().process_frame(frame, direction)
+        await self.push_frame(frame, direction)
+        if isinstance(frame, StartFrame):
+            await self.transport.connected()
+            caller = LLMMessagesAppendFrame(
+                [{"role": "user", "content": _offline.CALLER}], run_llm=True
+            )
+            await self.push_frame(caller)
+
+
+class SmokeOutput(FrameProcessor):
+    """Keeps what the agent says, and ends the call after its first full reply.
+
+    A reply is the model's text, or a line code speaks after a tool, like the opening
+    line of a step that listens. A line spoken before any tool, like a greeting, is not.
+    """
+
+    def __init__(self) -> None:
+        """Start with nothing said."""
+        super().__init__()
+        self.replies: list[str] = []
+        self._text = ""
+        self._tool_answered = False
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        """Pass every frame on. Collect reply text and end once a reply is complete."""
+        await super().process_frame(frame, direction)
+        await self.push_frame(frame, direction)
+        if isinstance(frame, LLMTextFrame):
+            self._text += frame.text
+        elif isinstance(frame, FunctionCallResultFrame):
+            self._tool_answered = True
+        elif isinstance(frame, TTSSpeakFrame) and self._tool_answered:
+            self._text += frame.text
+            await self._reply()
+        elif isinstance(frame, LLMFullResponseEndFrame):
+            await self._reply()
+
+    async def _reply(self) -> None:
+        """Keep the reply so far and end the call, when there is one."""
+        if self._text.strip():
+            self.replies.append(self._text)
+            self._text = ""
+            await self.push_frame(EndWorkerFrame(reason="smoke test done"))
+
+
+class SmokeTransport(BaseTransport):
+    """A transport with one caller who types one line instead of speaking."""
+
+    def __init__(self) -> None:
+        """Register the events a web transport fires."""
+        super().__init__(name="smoke")
+        self.caller = SmokeCaller(self)
+        self.agent = SmokeOutput()
+        self._register_event_handler("on_client_connected")
+        self._register_event_handler("on_client_disconnected")
+
+    async def connected(self) -> None:
+        """Fire the caller-connected event, as a web transport does."""
+        await self._call_event_handler("on_client_connected", "smoke-client")
+
+    def input(self) -> FrameProcessor:
+        """The caller's side."""
+        return self.caller
+
+    def output(self) -> FrameProcessor:
+        """The agent's side."""
+        return self.agent
+
+
+async def _smoke(module: ModuleType, name: str, live: bool, patch: Sequence[str]) -> str:
+    """Run the module's ``bot()`` until the agent answers the caller. Return the reply."""
+    transport = SmokeTransport()
+
+    async def create_transport(*args: object, **kwargs: object) -> SmokeTransport:
+        """Hand the bot the fake transport."""
+        return transport
+
+    for loaded in _shared(module, patch):
+        if hasattr(loaded, "create_transport"):
+            setattr(loaded, "create_transport", create_transport)  # noqa: B010
+        for service in SPEECH:
+            if hasattr(loaded, service):
+                setattr(loaded, service, passthrough)
+        if not live and hasattr(loaded, "build_llm"):
+            setattr(loaded, "build_llm", lambda *args, **kwargs: _scripted_llm())  # noqa: B010
+    if not live:
+        from pipecat.services.openai.llm import OpenAILLMService
+
+        OpenAILLMService.create_client = _scripted_client
+    await module.bot(RunnerArguments())
+    return _offline.check(name, transport.agent.replies, live=live)
+
+
+def smoke(name: str, *, live: bool = False, patch: Sequence[str] = ()) -> str:
+    """Run one caller turn through a project's ``bot()``. Return the agent's reply.
+
+    Args:
+        name: The project's module, like ``bot``.
+        live: Answer with the project's own model and keys. Otherwise a script answers,
+            placeholder keys fill the environment, and no request leaves the machine.
+        patch: Name prefixes of other modules that build the pipeline.
+
+    Raises:
+        SystemExit: The agent did not answer, or the library logged an error.
+    """
+    _offline.listen_for_errors()
+    if not live:
+        _offline.go_offline()
+    module = importlib.import_module(name)
+    return asyncio.run(asyncio.wait_for(_smoke(module, name, live, patch), SMOKE_TIMEOUT_S))

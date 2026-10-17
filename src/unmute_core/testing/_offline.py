@@ -1,5 +1,8 @@
-"""What both smoke scripts share: the caller line, the scripted reply, the offline switch
-and the check that the agent answered."""
+"""What both smoke runs share.
+
+The caller line, the scripted reply, the offline switch and the check that the agent
+answered.
+"""
 
 import logging
 import os
@@ -41,7 +44,6 @@ class LibraryErrors(logging.Handler):
 
 
 ERRORS = LibraryErrors()
-logging.getLogger("unmute_core").addHandler(ERRORS)
 
 
 def system_text(messages: list[dict[str, Any]]) -> str:
@@ -86,17 +88,21 @@ def go_offline() -> None:
     socket.socket.connect = refuse_network
     socket.getaddrinfo = refuse_network  # ty: ignore[invalid-assignment]
     try:
-        import llama_index.embeddings.openai as openai_embeddings  # ty: ignore[unresolved-import]
-        from llama_index.core.embeddings import MockEmbedding
+        from unmute_core.knowledge._offline import mock_openai_embeddings
     except ImportError:
         pass
     else:
-        openai_embeddings.OpenAIEmbedding = lambda *args, **kwargs: MockEmbedding(embed_dim=8)
+        mock_openai_embeddings()
     try:
         from unmute_core.slng import RouterModelCall
     except ImportError:
         return
     RouterModelCall.stream = Scripted.stream  # ty: ignore[invalid-assignment]
+
+
+def listen_for_errors() -> None:
+    """Keep every error the library logs from now on, for ``check``."""
+    logging.getLogger("unmute_core").addHandler(ERRORS)
 
 
 def check(name: str, replies: list[str], *, live: bool) -> str:
