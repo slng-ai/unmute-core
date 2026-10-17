@@ -140,6 +140,7 @@ LOGFIRE_TOKEN=
 | `AgentSettings` | `unmute_core.state` | `UNMUTE_AGENT_ID`, the agent id a call takes when your code passes none. Without either, building the call state raises `SettingsError`. |
 | `CallStartSettings` | `unmute_core.call` | `UNMUTE_CALL_START` (a JSON object, may be unset) |
 | `DevSettings` | `unmute_core.dev` | `UNMUTE_DEV_METRICS` (an on/off word, off when unset). `unmute dev` sets it. `metrics_enabled()` reads it. |
+| `ConverseSettings` | `unmute_core.testing` | `CONVERSE_AUDIO`, `CONVERSE_REAL_VOICE`, `CONVERSE_VERBOSE`, `CONVERSE_OUT`, `CONVERSE_CALLER_LANGUAGE`, `CONVERSE_VOICE_CACHE`, plus `SLNG_API_KEY` and `SLNG_WORLD_PART` for a spoken caller. Only the [scenario runner](/core/reference/testing) reads them. |
 
 The SLNG variables feed the optional [Context Router model call](/core/models/slng). The Langfuse, Logfire and Coval variables feed the [telemetry sinks](/core/observe/telemetry).
 

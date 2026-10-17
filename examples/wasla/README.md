@@ -87,8 +87,8 @@ Also try: "This is her husband" (nothing about the account is said), "There's no
 
 ```bash
 cd wasla && uv run pytest
-cd livekit && .venv/bin/python -I ../../../tests/examples/converse_livekit.py agent ../scenarios/*.json
-cd pipecat && .venv/bin/python -I ../../../tests/examples/converse_pipecat.py bot ../scenarios/*.json
+cd livekit && .venv/bin/python -I -m unmute_core.testing converse livekit agent --patch voice_stack ../scenarios/*.json
+cd pipecat && .venv/bin/python -I -m unmute_core.testing converse pipecat bot --patch voice_stack ../scenarios/*.json
 ```
 
 ## Why the account comes from the check

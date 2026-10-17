@@ -28,7 +28,7 @@ flowchart TD
 1. **Guards** check the design rules: `tests/test_imports.py`, `tests/test_framework_imports.py`, `tests/test_version.py`, `tests/test_docs.py`, and the SDK pins in `tests/livekit/test_sdk_pins.py` and `tests/pipecat/test_sdk_pins.py`.
 2. **Unit tables** cover pure core logic through its public API. One test per behaviour. The inputs sit in a `pytest.mark.parametrize` table.
 3. **Parity scenarios** cover what a caller hears or the model sees. One JSON file in `tests/conformance/scenarios/` runs on all six drivers: LiveKit, LiveKit plain, Pipecat, Pipecat voice, and both realtime drivers.
-4. **Example smoke turns** run one typed caller line through each hand-written example's own entrypoint, with a scripted model and no network. `scripts/check-examples.sh` runs them in CI. The code is in `tests/examples/`.
+4. **Example smoke turns** run one typed caller line through each hand-written example's own entrypoint, with a scripted model and no network. `scripts/check-examples.sh` runs them in CI. The runner ships in the library: `python -m unmute_core.testing`.
 5. **Live checks** use real keys. `pytest -m live` runs `tests/live/`. `scripts/check-examples.sh --live` runs the smoke turns with the real model. The `Nightly` workflow runs both. Run it by hand before a release tag.
 
 ## Where a new test goes

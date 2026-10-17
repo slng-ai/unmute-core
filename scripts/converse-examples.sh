@@ -3,7 +3,7 @@
 # Usage: scripts/converse-examples.sh                        # every use case, both frameworks
 #        scripts/converse-examples.sh examples/kestrel/livekit
 #        scripts/converse-examples.sh --audio examples/nosh/pipecat
-# Each project installs from its lock, then tests/examples/converse_<framework>.py runs
+# Each project installs from its lock, then python -m unmute_core.testing converse runs
 # ../scenarios/*.json through the project's own entrypoint and prints each call's
 # transcript, the tools called and the model requests per turn. --audio runs the whole
 # voice pipeline, with a caller whose lines are spoken by SLNG text to speech.
@@ -26,9 +26,10 @@ for project in "$@"; do
   echo "== $project"
   uv sync --quiet --locked --project "$project" --python "$python_version"
   case "$project" in
-    */livekit) runner=converse_livekit.py module=agent ;;
-    */pipecat) runner=converse_pipecat.py module=bot ;;
+    */livekit) framework=livekit module=agent ;;
+    */pipecat) framework=pipecat module=bot ;;
   esac
-  (cd "$project" && .venv/bin/python -I "$repo/tests/examples/$runner" "$module" ../scenarios/*.json) || status=1
+  (cd "$project" && .venv/bin/python -I -m unmute_core.testing converse "$framework" "$module" \
+    --patch voice_stack ../scenarios/*.json) || status=1
 done
 exit "$status"

@@ -72,7 +72,7 @@ scripts/converse-examples.sh examples/kestrel/livekit          # every scenario,
 scripts/converse-examples.sh --audio examples/kestrel/pipecat  # every scenario, spoken caller, the whole voice pipeline
 ```
 
-A scenario lists each caller line, the text the agent must say, the most model requests the turn may make, and the state the call must end in. The format is described in `tests/examples/script.py`. `--audio` speaks each line with SLNG text to speech and sends it through voice detection, turn detection and speech to text, so it checks the real call. It does not cap model requests: a spoken answer the turn detector splits in two costs one more.
+A scenario lists each caller line, the text the agent must say, the most model requests the turn may make, and the state the call must end in. The format is `unmute_core.testing.Scenario`. `--audio` speaks each line with SLNG text to speech and sends it through voice detection, turn detection and speech to text, so it checks the real call. It does not cap model requests: a spoken answer the turn detector splits in two costs one more.
 
 ## Where the source comes from
 - Unmute commit: `868ae23d543b7704c58b6a538a64ef7ffbbc7691` (the full SHA is in `UNMUTE_SHA`).

@@ -80,8 +80,8 @@ cd pipecat && cp .env.example .env && uv sync && uv run bot.py -t webrtc
 
 ```bash
 cd nosh && uv run pytest
-cd livekit && .venv/bin/python -I ../../../tests/examples/converse_livekit.py agent ../scenarios/*.json
-cd pipecat && .venv/bin/python -I ../../../tests/examples/converse_pipecat.py bot ../scenarios/*.json
+cd livekit && .venv/bin/python -I -m unmute_core.testing converse livekit agent --patch voice_stack ../scenarios/*.json
+cd pipecat && .venv/bin/python -I -m unmute_core.testing converse pipecat bot --patch voice_stack ../scenarios/*.json
 ```
 
 Every scenario takes one model request per caller turn, on both frameworks.

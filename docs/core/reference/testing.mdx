@@ -1,0 +1,70 @@
+---
+title: "Testing reference"
+sidebarTitle: "Testing"
+description: "Run your own LiveKit or Pipecat project through whole scripted calls on its real model, or one offline turn, with python -m unmute_core.testing."
+---
+
+The library ships the runner its own examples use. It runs your project as written: your entrypoint, your tools, your model. A scripted caller types each line, and the runner checks what the agent said.
+
+## Run it
+
+Run it inside your project's environment, from the project folder.
+
+```bash
+python -I -m unmute_core.testing converse livekit agent scenarios/*.json   # whole calls, real model
+python -I -m unmute_core.testing converse pipecat bot scenarios/*.json
+python -I -m unmute_core.testing smoke livekit agent                       # one turn, no network
+python -I -m unmute_core.testing smoke pipecat bot --live                  # one turn, real model
+```
+
+1. `converse` runs each scenario file as one call. It prints the transcript, the tools called and the model requests per turn. It exits 1 when a scenario fails.
+2. `smoke` runs one caller line. Without `--live`, a scripted model answers, placeholder keys fill the environment and no request leaves the machine.
+3. `--patch PREFIX` also patches the modules whose name starts with `PREFIX`. Use it when your project builds its session or transport in a shared package.
+
+## What your project needs
+
+| Framework | Your module has | The runner replaces |
+|---|---|---|
+| LiveKit | `entrypoint(ctx)` and `server`, and builds `AgentSession` in the module | `AgentSession`, with a session that has no room and no speech |
+| Pipecat | `bot(runner_args)`, and gets its transport from `create_transport` | `create_transport`, and the SLNG speech services, with text stand-ins |
+
+## A scenario
+
+```json
+{
+  "name": "Priya files a claim",
+  "call_start": {"call": {"direction": "inbound", "calling_number": "+447700900123"}},
+  "turns": [
+    {"caller": "KP731508, born on the 23rd of January 1992.", "expect": ["Is your policy number"], "max_requests": 2},
+    {"caller": "Yes.", "expect": ["Thank you, Priya"], "max_requests": 1}
+  ],
+  "state": {"policy_number": "KP731508"}
+}
+```
+
+| Key | What it checks or sets |
+|---|---|
+| `name` | What the call is. |
+| `greeting` | Text the greeting must hold. |
+| `turns[].caller` | What the caller says. |
+| `turns[].expect`, `turns[].reject` | Text that must, or must not, be in what the agent said that turn. Case is ignored. |
+| `turns[].max_requests` | The most model requests the turn may make. An audio run does not cap it. |
+| `turns[].language` | The language the line is spoken in on an audio run. |
+| `state` | A state path and the value it must hold when the call ends. |
+| `call_start` | What `UNMUTE_CALL_START` simulates: the caller's numbers and the values the call starts with. |
+| `dispatch` | Start values sent the way a real dispatch sends them. It wins over `call_start`. |
+| `refused` | Text your project must log when the call does not start. Give such a scenario no turns. |
+
+A key the runner does not know fails the scenario file. Lines code speaks are word for word, so check them exactly. Check the model's own words loosely, or not at all.
+
+## Settings
+
+| Variable | What it does |
+|---|---|
+| `CONVERSE_AUDIO` | Run the whole voice pipeline. Each caller line is spoken by SLNG text to speech. Needs `SLNG_API_KEY`. |
+| `CONVERSE_REAL_VOICE` | Keep your Pipecat text to speech on a typed run. |
+| `CONVERSE_VERBOSE` | Log the library's steps and each tool call's arguments. |
+| `CONVERSE_OUT` | Write each call to this folder as JSON. |
+| `CONVERSE_CALLER_LANGUAGE` | The language caller lines are spoken in. `en` by default. |
+| `CONVERSE_VOICE_CACHE` | Where spoken caller lines are kept. A temporary folder by default. |
+| `SLNG_WORLD_PART` | The region that speaks caller lines. `eu-north` by default. |

@@ -49,6 +49,11 @@ async def test_a_session_still_has_its_private_closing_flag() -> None:
     assert AgentSession()._closing is False
 
 
+async def test_a_session_still_has_its_private_started_flag() -> None:
+    """``testing._converse_one`` reads it to stop a scenario once the agent ended the call."""
+    assert AgentSession()._started is False
+
+
 async def test_a_session_still_answers_whether_it_is_closing() -> None:
     """``DevObserver`` reads ``_is_closing()`` to tell a hang-up from a tool that failed."""
     assert AgentSession()._is_closing() is False

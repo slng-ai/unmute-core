@@ -86,6 +86,6 @@ Also try: a question in the middle of an exercise (a hint, and the next right an
 
 ```bash
 cd faro && uv run pytest
-cd livekit && FARO_DB=:memory: .venv/bin/python -I ../../../tests/examples/converse_livekit.py agent ../scenarios/*.json
-cd pipecat && FARO_DB=:memory: .venv/bin/python -I ../../../tests/examples/converse_pipecat.py bot ../scenarios/*.json
+cd livekit && FARO_DB=:memory: .venv/bin/python -I -m unmute_core.testing converse livekit agent --patch voice_stack ../scenarios/*.json
+cd pipecat && FARO_DB=:memory: .venv/bin/python -I -m unmute_core.testing converse pipecat bot --patch voice_stack ../scenarios/*.json
 ```
