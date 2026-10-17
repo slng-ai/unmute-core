@@ -4,7 +4,9 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.16.1
+
+This release fixes one bug from 0.16.0. No API changed. `unmute_core.require("0.16.0")` accepts 0.16.1, so code built for 0.16.0 needs no change.
 
 ### Fixed
 
