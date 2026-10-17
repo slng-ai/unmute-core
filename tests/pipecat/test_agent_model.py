@@ -88,10 +88,10 @@ class Voice(FrameProcessor):
 
 
 async def _until(check: Callable[[], bool]) -> None:
-    """Wait until ``check`` holds, for at most five seconds."""
+    """Wait until ``check`` holds, for at most three seconds."""
     async with asyncio.timeout(3):
         while not check():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
 
 
 async def test_the_next_agent_speaks_with_its_own_voice_and_model_after_the_line() -> None:

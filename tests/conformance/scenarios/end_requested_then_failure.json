@@ -1,6 +1,6 @@
 {
   "name": "end_requested_then_failure",
-  "about": "A held save waits for the call's end. A tool ends the conversation, and then the request the end makes about the held save fails. The call already asked to end: no failure line is said, and the end reason stays agent_ended.",
+  "about": "The caller leaves a note, then says \"make it an email instead, bye\". A tool ends the conversation, and then the request the end makes about the held save fails. The call already asked to end: no failure line is said, and the end reason stays agent_ended.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",

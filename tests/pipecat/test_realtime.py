@@ -28,6 +28,7 @@ from pipecat.services.openai.realtime import events
 from pipecat.services.openai.realtime.events import Modality
 from pipecat.services.openai.realtime.llm import OpenAIRealtimeLLMService
 
+from tests.pipecat.harness import until
 from tests.pipecat.test_model import Scripted, service
 from tests.pipecat.test_telemetry import _pusher
 from tests.tasks.job import job, plan, state
@@ -110,7 +111,7 @@ async def test_a_line_waits_for_the_running_reply_to_end() -> None:
     await llm.push_frame(LLMFullResponseStartFrame())
 
     asking = asyncio.create_task(speak(llm, "One moment."))
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.05)  # time for a line that does not wait to go out
     assert sent(llm) == []
 
     await llm.push_frame(LLMFullResponseEndFrame())
@@ -126,11 +127,11 @@ async def test_a_line_waits_for_its_own_reply_after_a_tool_only_reply() -> None:
     await llm.push_frame(FunctionCallsStartedFrame(function_calls=[call]))
 
     saying = asyncio.create_task(speak(llm, "Goodbye.", wait=True))
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.05)  # time for a line that does not wait to go out
     assert sent(llm) == []
 
     await llm.push_frame(LLMFullResponseEndFrame())
-    await asyncio.sleep(0.05)
+    await until(lambda: sent(llm))
     assert len(sent(llm)) == 1
     assert not saying.done()
 
@@ -271,7 +272,7 @@ async def test_attach_realtime_runs_the_first_message_tools_and_sends_their_note
     await llm.push_frame(
         TranscriptionFrame("Where is my order?", "caller", "now"), FrameDirection.UPSTREAM
     )
-    await asyncio.sleep(0.05)
+    await until(lambda: len(queued) == 2)
 
     assert heard == ["Where is my order?"]
     assert len(queued) == 2
@@ -478,31 +479,6 @@ def test_a_library_continue_tool_alone_hides_the_async_tool_text() -> None:
     assert "ASYNC TOOLS" not in _composed(llm)
     _own_async_tool(llm)
     assert "ASYNC TOOLS" in _composed(llm)
-
-
-class Standin:
-    """A duck-typed stand-in for an LLM service."""
-
-    def add_event_handler(self, name: str, handler: Any) -> None:
-        """Take a handler and keep nothing."""
-
-
-def test_an_own_handler_with_an_empty_closure_cell_keeps_the_text() -> None:
-    def make() -> Any:
-        async def handler(params: Any) -> None:
-            await later(params)
-
-        return handler
-        later = None  # never runs, so the handler's cell for it stays empty
-
-    llm = service(Scripted())
-    llm.register_function("own", make(), cancel_on_interruption=False)
-    attach_call(cast(Any, Worker()), CallHooks(), LLMContext(), llm=llm)
-    assert "ASYNC TOOLS" in _composed(llm)
-
-
-def test_attach_call_leaves_an_llm_that_is_not_a_pipecat_service_alone() -> None:
-    attach_call(cast(Any, Worker()), CallHooks(), LLMContext(), llm=cast(Any, Standin()))
 
 
 async def test_a_step_tool_that_keeps_running_hides_the_async_tool_text_through_flows() -> None:

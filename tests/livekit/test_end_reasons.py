@@ -1,11 +1,11 @@
 """Why a LiveKit call ended: its close reasons and each place that ends the call on purpose."""
 
-import asyncio
 from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
 
+from tests.livekit.fake import until
 from tests.outputs import AnyResult
 from unmute_core.call import (
     AGENT_ENDED,
@@ -46,8 +46,7 @@ async def test_the_max_duration_asks_the_call_to_end_for_that_reason() -> None:
     session.on = lambda name, handler: None
     hooks = CallHooks()
     max_duration(cast(Any, session), 0.01, call=hooks)
-    await asyncio.sleep(0.05)
-    assert session.shut == 1
+    await until(lambda: session.shut == 1)
     assert (await hooks.end("ended")).reason == MAX_DURATION
 
 

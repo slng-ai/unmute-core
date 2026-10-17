@@ -12,7 +12,6 @@ import asyncio
 import contextlib
 import itertools
 import json
-import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from types import TracebackType
@@ -86,7 +85,6 @@ class FakeRealtimeServer:
         self._connections: list[_Connection] = []
         self._connected = asyncio.Event()
         self._active = 0
-        self._last_event = time.monotonic()
         self._ids = itertools.count(1)
 
     @property
@@ -127,15 +125,18 @@ class FakeRealtimeServer:
     async def caller_says(self, text: str, *, timeout: float = 5.0) -> None:
         """Play server VAD for one spoken turn on the latest connection, then reply.
 
-        It first waits until the client is quiet, so the session setup has arrived. Sends
-        the speech start and stop, the committed buffer, the user item and its
+        It first waits until the client has sent its session setup and no response runs.
+        Sends the speech start and stop, the committed buffer, the user item and its
         transcript. After ``THINK_SECONDS``, as server VAD with ``create_response`` does
         after a real model's pause, it starts a response. The client has taken the turn by
         then, so its interruption does not cut the reply.
         It returns when the events are sent, not when the response is done: use
         ``wait_idle`` for that.
         """
-        await self.wait_idle(timeout=timeout, quiet=0.05)
+        await self.wait_idle(
+            lambda: any(event.get("type") == "session.update" for event in self.received),
+            timeout=timeout,
+        )
         conn = self._connections[-1]
         item_id = self._next("item")
         previous = conn.items[-1]["id"] if conn.items else None
@@ -169,27 +170,29 @@ class FakeRealtimeServer:
         await asyncio.sleep(THINK_SECONDS)
         self._start_response(conn, {})
 
-    async def wait_idle(self, *, timeout: float = 5.0, quiet: float = 0.1) -> None:
-        """Wait until a client has connected, no response runs, and it is quiet for ``quiet`` s.
+    async def wait_idle(
+        self, first: Callable[[], bool] = lambda: True, *, timeout: float = 5.0
+    ) -> None:
+        """Wait until a client has connected, ``first()`` is true and no response runs.
 
-        The quiet time lets a client follow up on a tool call, which it does by sending
-        the output and a new ``response.create``. It counts from the connection at the
-        earliest: before that, the client has not sent its greeting yet.
+        An idle server is also idle before the client has sent its follow-up to a tool
+        call. So ``first`` names what must have happened first, like every scripted reply
+        of the turn taken by a request.
 
         Raises:
-            TimeoutError: When no client connects, or the server is still busy, after
-                ``timeout`` seconds.
+            TimeoutError: When no client connects, ``first()`` stays false, or the server
+                is still busy, after ``timeout`` seconds.
         """
         async with asyncio.timeout(timeout):
             await self._connected.wait()
-            while self._active or time.monotonic() - self._last_event < quiet:
-                await asyncio.sleep(0.01)
+            while self._active or not first():
+                await asyncio.sleep(0)
 
     async def wait_for(self, condition: Callable[[], bool], *, timeout: float = 5.0) -> None:
         """Wait until ``condition()`` is true, polling, or raise ``TimeoutError``."""
         async with asyncio.timeout(timeout):
             while not condition():
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0)
 
     def _next(self, prefix: str) -> str:
         """Return the next id with this prefix: ``resp_1``, ``item_2``, ``evt_3``."""
@@ -208,7 +211,6 @@ class FakeRealtimeServer:
         await ws.prepare(request)
         conn = _Connection(ws=ws, session={"model": request.query.get("model", "fake-realtime")})
         self._connections.append(conn)
-        self._last_event = time.monotonic()
         self._connected.set()
         await self._send(conn, "session.created", session=self._session_view(conn))
         async for message in ws:
@@ -220,7 +222,6 @@ class FakeRealtimeServer:
                 continue
             if isinstance(event, dict):
                 self.received.append(event)
-                self._last_event = time.monotonic()
                 await self._handle(conn, event)
         for task in conn.responses:
             task.cancel()
@@ -314,7 +315,6 @@ class FakeRealtimeServer:
             await self._finish(conn, response_id, params, output, Usage(0, 0), "cancelled")
         finally:
             self._active -= 1
-            self._last_event = time.monotonic()
 
     async def _answer(
         self,

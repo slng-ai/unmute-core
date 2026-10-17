@@ -1,6 +1,6 @@
 {
   "name": "step_handoff_beside",
-  "about": "A step handoff in the same reply as another call of the step is refused. The other call runs, here a lookup that ends the step, and the main agent answers as usual.",
+  "about": "Inside a step, the caller asks for the notes desk after a lookup, and the model calls both in one reply. The step handoff is refused. The other call runs, here a lookup that ends the step, and the main agent answers as usual.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",

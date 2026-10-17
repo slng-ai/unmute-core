@@ -85,7 +85,7 @@ async def test_a_background_lookup_runs_after_open_and_the_first_request_waits()
     assert await call.open()
     assert state.plain("customer") is None
     waiting = asyncio.ensure_future(call.before_request("hello"))
-    await asyncio.sleep(0.01)
+    await asyncio.sleep(0.01)  # time for a request that does not wait to go ahead
     assert not waiting.done()
     release.set()
     await waiting
@@ -463,7 +463,9 @@ async def test_a_failure_before_bind_plays_once_the_adapter_binds() -> None:
     await call.fail("llm", RuntimeError("down"))
     assert log.said == []
     log.bind(call)
-    await asyncio.sleep(0.01)
+    async with asyncio.timeout(1):
+        while not log.hung_up:
+            await asyncio.sleep(0)
     assert log.said == [FAILURE_LINE]
     assert log.hung_up == 1
 
@@ -498,7 +500,6 @@ async def test_the_end_stops_a_background_lookup_and_still_runs_the_call_end_too
     await call.open()
     async with asyncio.timeout(1):
         await call.end("participant_disconnected")
-    await asyncio.sleep(0.01)
     assert [name for name, _ in log.ran] == ["report"]
     assert state.plain("customer") is None
 
@@ -519,7 +520,7 @@ async def test_a_failure_stops_a_background_lookup() -> None:
     call = Log().bind(CallHooks(state, prefetch=prefetch))
     await call.open()
     await call.fail("llm", RuntimeError("down"))
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.1)  # past the lookup's 0.05 s, so a lookup still running is seen
     assert ran == []
 
 

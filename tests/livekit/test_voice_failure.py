@@ -8,7 +8,7 @@ from livekit.agents.voice.agent_session import SessionConnectOptions
 
 from tests.conformance.livekit_driver import Lines, Silence
 from tests.hooks.helpers import on_end
-from tests.livekit.fake import ScriptedLLM, call, replies
+from tests.livekit.fake import ScriptedLLM, call, replies, until
 from tests.livekit.test_dev import Records
 from tests.tasks.job import Canned, job, plan, registry, state
 from unmute_core.agent import AgentSpec
@@ -74,9 +74,8 @@ async def test_a_voice_that_fails_leaves_the_call_open_and_answers_the_next_turn
         await session.start(agent)
         await session.run(user_input="Where is my order?")
         await session.run(user_input="Hello?")
-        await asyncio.sleep(0.1)
-        assert not closed.is_set()
-        assert session.agent_state == "listening"
+        await until(lambda: session.agent_state == "listening")
+        assert not session._is_closing()
         assert len(model.requests) == 2
         cut, *silent = replies(session)
         assert cut.text_content and cut.text_content.startswith("Your order is on its way.")
@@ -87,7 +86,7 @@ async def test_a_voice_that_fails_leaves_the_call_open_and_answers_the_next_turn
         assert FAILURE_LINE not in lines.lines
         session.shutdown()
         await closed.wait()
-        await asyncio.sleep(0.1)
+        await until(lambda: ends)
     assert failed == []
     assert [end.reason for end in ends] == [ENDED]
     assert [m["role"] for m in ends[0].transcript] == ["user", "assistant", "user"]
@@ -105,12 +104,11 @@ async def test_the_fourth_voice_failure_in_a_row_closes_the_call_as_an_error() -
         await session.start(agent)
         for turn in range(3):
             await session.run(user_input=f"Turn {turn}.")
-            await asyncio.sleep(0.1)
-            assert not closed.is_set()
+            assert not session._is_closing()
         await session.run(user_input="Turn 3.")
         async with asyncio.timeout(3):
             await closed.wait()
-        await asyncio.sleep(0.1)
+        await until(lambda: ends)
     assert [end.reason for end in ends] == [ERROR]
 
 
@@ -125,7 +123,7 @@ async def test_the_dev_records_show_a_reply_the_voice_cut_short() -> None:
         DevObserver(records.recorder).attach(session)
         await session.start(agent)
         await session.run(user_input="Where is my order?")
-        await asyncio.sleep(0.1)
+        await until(lambda: records.ids("exchange", role="response", state="interrupted"))
     latest = records.latest()
     [reply] = records.ids("exchange", role="response")
     assert (latest["exchange", reply]["state"], latest["exchange", reply]["playback"]) == (

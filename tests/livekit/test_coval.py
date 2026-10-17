@@ -65,11 +65,9 @@ class Job:
 
     async def settled(self, count: int) -> None:
         """Wait until the worker thread has made ``count`` activations."""
-        for _ in range(200):
-            if len(self.activations) >= count:
-                break
-            await asyncio.sleep(0.005)
-        await asyncio.sleep(0.02)
+        async with asyncio.timeout(5):
+            while len(self.activations) < count:
+                await asyncio.sleep(0)
 
     async def origin(self) -> object:
         """Return the origin on the call span, ending the call to read it."""
@@ -125,7 +123,6 @@ async def test_a_participant_who_joins_later_activates_once(
         joined.attributes = {"sip.h.x-coval-simulation-id": "other"}
         job.room.emit("participant_attributes_changed", {}, joined)
         job.room.emit("participant_connected", joined)
-        await job.settled(2)
 
     assert job.activations == [{"simulation_id": "late", "method": "sip_participant_attribute"}]
     assert caplog.text.count("Coval tracing active for simulation") == 1
@@ -141,9 +138,9 @@ async def test_an_already_bound_call_is_logged_not_raised(caplog: pytest.LogCapt
     cast(Any, job.coval).activate = refuse
     with caplog.at_level(logging.WARNING):
         job.correlate()
-        await job.settled(1)
-
-    assert "already bound" in caplog.text
+        async with asyncio.timeout(5):
+            while "already bound" not in caplog.text:
+                await asyncio.sleep(0)
 
 
 @pytest.mark.parametrize(

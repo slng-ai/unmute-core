@@ -8,6 +8,7 @@ import pytest
 from livekit.agents import NOT_GIVEN, llm
 from livekit.agents.voice import events
 
+from tests.livekit.fake import until
 from tests.livekit.test_agent_lifecycle import UnmuteAgent
 from tests.livekit.test_call import Customer, Live
 from tests.outputs import AnyResult
@@ -92,8 +93,7 @@ async def test_a_greeting_that_never_finishes_gives_the_audio_back_after_the_hol
         cast(Any, session), Greeting(text="Hello.", interruptible=False), call, max_hold_s=0.02
     )
     assert session.audio == [False]
-    await asyncio.sleep(0.06)
-    assert session.audio == [False, True]
+    await until(lambda: session.audio == [False, True])
 
 
 async def test_a_caller_who_speaks_first_is_heard() -> None:
@@ -110,7 +110,7 @@ async def test_a_greeting_that_ends_in_time_cancels_the_hold() -> None:
         cast(Any, session), Greeting(text="Hello.", interruptible=False), call, max_hold_s=0.02
     )
     session.handle.finish()
-    await asyncio.sleep(0.06)
+    await asyncio.sleep(0.06)  # past the 0.02 s hold, which would give the audio back again
     assert session.audio == [False, True]
 
 

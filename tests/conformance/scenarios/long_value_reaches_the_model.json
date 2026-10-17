@@ -1,6 +1,6 @@
 {
   "name": "long_value_reaches_the_model",
-  "about": "A saved value of 5000 characters reaches the model whole: only a model call with its own limit, like the router, cuts it.",
+  "about": "A lookup before the greeting saves a long CRM notes field of 5000 characters. It reaches the model whole: only a model call with its own limit, like the router, cuts it.",
   "instructions": "You help callers with their orders. Note: {{note}}.",
   "tasks": {
     "mode": "record",

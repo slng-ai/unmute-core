@@ -10,6 +10,7 @@ from livekit import api, rtc
 from livekit.agents import llm
 from livekit.agents.beta.workflows import WarmTransferTask
 
+from tests.livekit.fake import until
 from tests.outputs import AnyResult
 from unmute_core.livekit import BRIEFING_PERSONA, DialError, SipLine, _phone
 from unmute_core.telephony import NoPhoneCaller, Transfer, TransferError
@@ -362,7 +363,7 @@ async def test_a_dial_waits_for_the_callees_audio_track(
             "+34910000000", detect_voicemail=False, audio_wait_s=5
         )
     )
-    await asyncio.sleep(0.05)
+    await until(lambda: room.handlers.get("track_subscribed"))
     assert not dial.done()
     room.emit_audio("phone_user")
     assert (await dial).participant.identity == "phone_user"

@@ -6,7 +6,7 @@ Ported from unmute@d0c67f1 internal/generate/prefetch_smoke_test.go and prefetch
 import asyncio
 import logging
 import re
-import time
+import threading
 from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -186,39 +186,55 @@ async def test_an_id_is_copied_as_it_is() -> None:
 
 
 async def test_one_budget_bounds_the_whole_block_and_late_results_are_dropped() -> None:
-    calls = []
+    cut: list[str] = []
+    release = asyncio.Event()
+    returned = asyncio.Event()
 
-    async def slow(state: CallState) -> dict[str, str]:
-        calls.append(state)
+    async def first(state: CallState) -> dict[str, str]:
+        await asyncio.sleep(0.15)
+        return {"name": "FIRST_NAME", "id": "FIRST_ID"}
+
+    async def second(state: CallState) -> dict[str, str]:
         try:
-            await asyncio.sleep(0.08)
+            await asyncio.sleep(0.25)
         except asyncio.CancelledError:
-            await asyncio.sleep(0.1)
+            cut.append("second")
+            await release.wait()
+        returned.set()
         return {"name": "LATE_NAME", "id": "LATE_ID"}
 
     state = fresh(inbound(NUMBER))
-    prefetch = Prefetch([CALLER, profile(slow), profile(slow, "second")], budget=0.12)
-    started = time.monotonic()
-    await prefetch.run(state)
+    prefetch = Prefetch([CALLER, profile(first), profile(second, "second")], budget=0.3)
+    async with asyncio.timeout(2):
+        await prefetch.run(state)
+        while not cut:
+            await asyncio.sleep(0)
 
-    assert time.monotonic() - started < 0.2, "a fresh budget per entry, or waited on cancellation"
-    assert len(calls) == 2
+    assert cut == ["second"]
     before = (state.values.model_dump(), [state.is_unconfirmed(name) for name in UNCONFIRMED])
-    await asyncio.sleep(0.15)
+    assert state.values.customer_name == "FIRST_NAME"
+    release.set()
+    await asyncio.wait_for(returned.wait(), 1)
+    await asyncio.sleep(0.05)  # time for a late result to land
     assert (state.values.model_dump(), [state.is_unconfirmed(n) for n in UNCONFIRMED]) == before
 
 
 async def test_a_blocking_tool_does_not_delay_the_greeting() -> None:
+    release = threading.Event()
+    returned = threading.Event()
+
     def blocking(state: CallState) -> dict[str, str]:
-        time.sleep(0.25)
+        release.wait(2)
+        returned.set()
         return {"name": "BLOCKING_NAME", "id": "BLOCKING_ID"}
 
     state = fresh(inbound(NUMBER))
-    started = time.monotonic()
-    await Prefetch([CALLER, profile(blocking)], budget=0.12).run(state)
+    async with asyncio.timeout(1):
+        await Prefetch([CALLER, profile(blocking)], budget=0.05).run(state)
 
-    assert time.monotonic() - started < 0.2
-    await asyncio.sleep(0.3)
+    release.set()
+    assert await asyncio.to_thread(returned.wait, 1)
+    await asyncio.sleep(0.05)  # time for a late result to land
     assert state.values.customer_name == ""
 
 

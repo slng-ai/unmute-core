@@ -97,7 +97,12 @@ async def run_realtime(scenario: Scenario) -> dict[str, Any]:
             base_url=server.http_url, api_key="test", modalities=["audio"], turn_detection=None
         )
         try:
-            outcome = await run_on(scenario, run, model, settle=server.wait_idle)
+
+            async def settle() -> None:
+                """Wait until every scripted reply of the turn is taken and answered."""
+                await server.wait_idle(lambda: not run.model.pending)
+
+            outcome = await run_on(scenario, run, model, settle=settle)
         finally:
             await model.aclose()
     if server.refused:
@@ -118,8 +123,9 @@ async def run_on(
 ) -> dict[str, Any]:
     """Run every turn on ``UnmuteAgent``: through the scripted model call, or ``realtime``.
 
-    ``settle`` waits after each turn until the model's server is quiet, as a caller who
-    takes a moment lets the call's own work finish.
+    ``settle`` waits after each turn until the model's server has answered every scripted
+    reply. Then the agent's tools on events and its instruction resend finish, as they do
+    for a caller who takes a moment.
     """
     names: dict[int, str] = {}
 
@@ -226,6 +232,8 @@ async def _turns(
         await session.run(user_input=turn.caller)
         if settle is not None:
             await settle()
+            if isinstance(agent := session.current_agent, UnmuteAgent):
+                await agent._realtime.settled()
         if scenario.expect.ended and number == len(scenario.turns) - 1:
             await _closing(session)
             await _taken(run)
@@ -237,7 +245,7 @@ async def _closing(session: AgentSession) -> None:
     """Wait until the session closes, as a failure line plays and the call hangs up."""
     async with asyncio.timeout(5):
         while not session._is_closing():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
 
 
 def _watch_closing(session: AgentSession, names: dict[int, str]) -> list[str]:
@@ -264,7 +272,7 @@ async def _taken(run: Run) -> None:
     with contextlib.suppress(TimeoutError):
         async with asyncio.timeout(5):
             while run.model.pending:
-                await asyncio.sleep(0.01)
+                await asyncio.sleep(0)
 
 
 async def _hang_up(session: AgentSession) -> None:

@@ -138,11 +138,14 @@ async def test_a_call_closed_during_a_step_ends_with_no_reply() -> None:
     task_plan = _plan(payload)
     model = ScriptedLLM(call("take_note"), "Sorry, that did not work.")
     agent = UnmuteAgent(AgentSpec("You help with orders.", tasks=task_plan), state=state(task_plan))
+    closed = asyncio.Event()
     async with AgentSession(llm=model) as session:
+        session.on("close", lambda _event: closed.set())
         await session.start(agent)
         await session.run(user_input="Take a note.")
         session.shutdown()
-        await asyncio.sleep(0.2)
+        async with asyncio.timeout(3):
+            await closed.wait()
 
     assert len(model.requests) == 1
 

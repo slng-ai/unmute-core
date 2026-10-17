@@ -70,7 +70,7 @@ def _script() -> Script:
 async def _until(check: Any) -> None:
     async with asyncio.timeout(5):
         while not check():
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0)
 
 
 async def test_livekit_engine_runs_a_tool_and_speaks_the_answer() -> None:
@@ -92,9 +92,12 @@ async def test_livekit_engine_runs_a_tool_and_speaks_the_answer() -> None:
             session.output.transcription = lines
             await session.start(Agent(instructions=INSTRUCTIONS, tools=[lookup]))
             await server.caller_says("hello")
-            await _until(lambda: "It is open." in lines.text)
+            await _until(
+                lambda: "It is open." in [m.text_content for m in session.history.messages()]
+            )
             await server.wait_idle()
 
+            assert "It is open." in lines.text
             assert calls == ["A-12"]
             first, second = server.requests
             assert first.messages[0] == {"role": "system", "content": INSTRUCTIONS}

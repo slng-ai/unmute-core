@@ -1,6 +1,6 @@
 {
   "name": "float_state_renders_whole",
-  "about": "A whole number saved in a float field reads as 3, not 3.0, in the greeting and in the prompt.",
+  "about": "The model saves 3.0 for a count in a float field. It reads as 3, not 3.0, in the greeting and in the prompt.",
   "instructions": "You help callers with their orders. Total: {{amount}}.",
   "tasks": {
     "mode": "record",

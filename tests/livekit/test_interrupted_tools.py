@@ -7,7 +7,6 @@ does with that, and that the tools which must not be cut off never reach it.
 """
 
 import asyncio
-from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -17,7 +16,7 @@ from livekit.agents.voice import SpeechHandle, speech_handle
 
 from tests.conformance.livekit_driver import Silence
 from tests.hooks.helpers import on_end
-from tests.livekit.fake import ScriptedLLM, call, replies
+from tests.livekit.fake import ScriptedLLM, call, replies, until
 from tests.livekit.test_agent_lifecycle import Scripted
 from tests.livekit.test_trace import Memory
 from tests.outputs import AnyResult
@@ -68,13 +67,6 @@ class Gate:
 def short_interruption_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make LiveKit's interruption timeout (5 s) short enough for a test."""
     monkeypatch.setattr(speech_handle, "INTERRUPTION_TIMEOUT", 0.05)
-
-
-async def until(done: Callable[[], bool]) -> None:
-    """Wait until ``done``, or fail the test after 3 s."""
-    async with asyncio.timeout(3):
-        while not done():
-            await asyncio.sleep(0.01)
 
 
 def tool_items(session: AgentSession, name: str) -> list[tuple[str, str]]:
@@ -188,7 +180,7 @@ async def test_a_continue_tool_keeps_its_reply_from_being_cut_off() -> None:
         assert not reply.allow_interruptions
         with pytest.raises(RuntimeError, match="does not allow interruptions"):
             session.interrupt()
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(0.2)  # past the patched interruption timeout, which would cut it
         assert not reply.interrupted
         assert len(model.requests) == 1
         gate.release.set()
@@ -234,13 +226,16 @@ async def test_a_delegate_holds_its_reply_and_a_step_tool_cut_off_ends_the_step_
         with pytest.raises(RuntimeError, match="does not allow interruptions"):
             reply.interrupt()
         session.interrupt()
-        await asyncio.sleep(0.3)
+        await until(
+            lambda: (
+                "still in progress" in " ".join(o for _, o in tool_items(session, "lookup_order"))
+            )
+        )
         assert not reply.interrupted
         assert agent.tasks is not None and agent.tasks.active is not None
-        assert "still in progress" in " ".join(o for _, o in tool_items(session, "lookup_order"))
         gate.release.set()
         await until(reply.done)
-        await until(lambda: session.agent_state == "listening")
+        await until(lambda: len(model.requests) == 3)
         assert agent.tasks.active is None
         assert agent.state is not None and agent.state.plain("order_id") == "A-12"
         assert gate.runs == 1
@@ -264,7 +259,7 @@ async def test_a_call_asked_to_close_while_a_tool_runs_waits_for_the_tool(
         await session.start(agent)
         await ask(session, gate)
         session.shutdown(drain=False)
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.3)  # nothing shows the close waits on the tool: give it time to close
         assert not closed.is_set()
         gate.release.set()
         async with asyncio.timeout(3):

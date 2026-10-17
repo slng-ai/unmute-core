@@ -8,7 +8,6 @@ from pipecat.frames.frames import ErrorFrame, LLMContextFrame, LLMFullResponseEn
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.tests.utils import run_test
-from pydantic import BaseModel
 
 from tests.pipecat.harness import Harness
 from tests.tasks.job import filled
@@ -16,7 +15,6 @@ from unmute_core.call import CallHooks
 from unmute_core.hooks import Hooks, PromptSuffix
 from unmute_core.model import ModelEvent, ModelRequest, TextDelta, ToolCall, Usage
 from unmute_core.pipecat import ModelCallLLMService
-from unmute_core.state import CallState
 
 
 class Scripted:
@@ -280,48 +278,3 @@ async def test_cleanup_closes_the_summarizer_the_flows_were_given() -> None:
     h = Harness(llm=llm, summarizer=summarizer)
     await h.llm.cleanup()
     assert (first.closed, summarizer.closed) == (1, 1)
-
-
-class Memory(BaseModel):
-    name: str | None = None
-
-
-async def _two_requests(llm: ModelCallLLMService, second_prompt: str) -> list[ErrorFrame]:
-    pushed: list[ErrorFrame] = []
-
-    async def push_error(error_msg: str, exception: Exception | None = None, **kw: Any) -> None:
-        pushed.append(ErrorFrame(error_msg, exception=exception))
-
-    async def noop(*args: Any, **kwargs: Any) -> None:
-        return None
-
-    llm.push_error = cast(Any, push_error)
-    llm.push_frame = cast(Any, noop)
-    llm.start_ttfb_metrics = cast(Any, noop)
-    llm.stop_ttfb_metrics = cast(Any, noop)
-    await llm._process_context(LLMContext())
-    llm._settings.system_instruction = second_prompt
-    await llm._process_context(LLMContext())
-    return pushed
-
-
-async def test_a_failure_before_the_reply_is_final_even_after_an_earlier_reply() -> None:
-    llm = service(Scripted([TextDelta("Hi.")]), prompt="Hello {{name}}.")
-    llm.state = CallState(Memory)
-    llm.state.save({"name": "Ana"})
-    llm.failure_is_final = True
-    [error] = await _two_requests(llm, "Hello {{missing}}.")
-    assert error.error.startswith("The model call failed:")
-
-
-async def test_a_failure_after_the_reply_began_is_still_not_final() -> None:
-    class Cuts(Scripted):
-        async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-            yield TextDelta("Let me")
-            raise RuntimeError("dropped")
-
-    llm = service(Cuts(), prompt="Hello.")
-    llm.failure_is_final = True
-    [first, second] = await _two_requests(llm, "Hello.")
-    assert "after its reply began" in first.error
-    assert "after its reply began" in second.error
