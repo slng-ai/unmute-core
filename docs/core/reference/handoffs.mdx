@@ -106,7 +106,13 @@ Pipecat. Call it from the handoff tool's handler.
 
 The new spec's tools, tasks, `save_values` and `summarizer` replace the old agent's. They do not carry over. The line is said in the old voice, and a summary is written by the old agent's summarizer or model. The new model, voice and summarizer take over after both.
 
-`hand_off` raises `ValueError` when the spec lists a handoff that is not one of `native_tools`, a task names a model or transfers to an agent `then_targets` lacks, the spec has a model without a `ModelCallLLMService`, `tts` is not one of the call's voices, or `opens_with` names a tool the spec lacks or the model is a realtime one. The agent that holds the call keeps it.
+`hand_off` raises `ValueError` in these cases. The agent that holds the call keeps it.
+
+- The spec lists a handoff that is not one of `native_tools`.
+- A task names a model, or transfers to an agent `then_targets` lacks.
+- The spec has a model without a `ModelCallLLMService`.
+- `tts` is not one of the call's voices.
+- `opens_with` names a tool the spec lacks, or the model is a realtime one.
 
 ## History rules
 
