@@ -1,6 +1,6 @@
 {
   "name": "group_step_history",
-  "about": "In a shared group, each step opens on its own history value. The first step uses the group's history. The step after the tool step uses full and hears the tool call and result. The last step uses messages and hears only what was said.",
+  "about": "In a shared group, each step opens on its own history value. The first step uses the group's history. The step after the tool step uses full and hears the tool call and result. The next step uses messages and hears only what was said. The last step uses full again and still hears the earlier tool call and result.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",
@@ -69,6 +69,20 @@
           }
         ],
         "history": "messages"
+      },
+      {
+        "name": "close_order",
+        "instructions": "Close the order.",
+        "assign": [
+          {
+            "variable": "status",
+            "path": [
+              "status"
+            ],
+            "optional": true
+          }
+        ],
+        "history": "full"
       }
     ],
     "groups": [
@@ -78,7 +92,8 @@
         "steps": [
           "find_order",
           "take_note",
-          "tag_order"
+          "tag_order",
+          "close_order"
         ],
         "context_scope": "shared"
       }
@@ -223,6 +238,50 @@
           ]
         },
         {
+          "site": "task:close_order",
+          "heard": [
+            "I need help with my order.",
+            "It is A-12.",
+            "Mark it urgent.",
+            "Tag it rush."
+          ],
+          "order": [
+            "user",
+            "assistant",
+            "assistant",
+            "user",
+            "tool",
+            "assistant",
+            "user",
+            "assistant",
+            "assistant",
+            "user",
+            "assistant"
+          ],
+          "text": "Shall I close it?"
+        }
+      ],
+      "spoken": [
+        "Tagged.",
+        "Shall I close it?"
+      ]
+    },
+    {
+      "caller": "Yes.",
+      "model": [
+        {
+          "site": "task:close_order",
+          "text": "Closed.",
+          "calls": [
+            {
+              "name": "finish",
+              "arguments": {
+                "status": "closed"
+              }
+            }
+          ]
+        },
+        {
           "site": "",
           "heard": [
             "I need help with my order."
@@ -237,7 +296,7 @@
         }
       ],
       "spoken": [
-        "Tagged.",
+        "Closed.",
         "Anything else?"
       ]
     }
@@ -245,7 +304,7 @@
   "expect": {
     "state": {
       "order_id": "A-12",
-      "status": "open",
+      "status": "closed",
       "note": "urgent",
       "tags": [
         "rush"
@@ -271,6 +330,9 @@
       "group.step_started group=order_flow task=tag_order step=2",
       "task.started group=order_flow task=tag_order step=2",
       "task.completed group=order_flow task=tag_order step=2 saved=tags",
+      "group.step_started group=order_flow task=close_order step=3",
+      "task.started group=order_flow task=close_order step=3",
+      "task.completed group=order_flow task=close_order step=3 saved=status",
       "group.completed group=order_flow"
     ]
   }
