@@ -34,4 +34,4 @@ scripts/check-examples.sh
 
 ## Releases
 
-Maintainers release by pushing a tag `vX.Y.Z` that matches `version` in `pyproject.toml`. The release workflow runs CI and the live tests, publishes to TestPyPI, then waits for a maintainer to approve the upload to PyPI.
+Maintainers release with a pull request that sets the version and the release notes, then a tag `vX.Y.Z` on main that matches `version` in `pyproject.toml`. The release workflow runs CI and the live tests, publishes to TestPyPI, then to PyPI, and creates the GitHub release.
