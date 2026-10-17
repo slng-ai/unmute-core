@@ -1,6 +1,6 @@
 {
   "name": "step_announce_cue",
-  "about": "The first request of a step that follows an announce line must not end on that line: the announce is the agent's own, and a request that ends on it gives the model nothing to answer.",
+  "about": "A caller asks about an order and the step says \"Let me look.\" as it opens. The step's first request holds that line, so the model does not say it again, and does not end on it: the announce is the agent's own, and a request that ends on it gives the model nothing to answer.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",
@@ -98,6 +98,9 @@
           "site": "task:find_order",
           "heard": [],
           "text": "What is the order number?",
+          "order": [
+            "assistant"
+          ],
           "not_last_role": "assistant"
         }
       ],

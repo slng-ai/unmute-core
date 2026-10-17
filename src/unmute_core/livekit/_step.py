@@ -33,6 +33,7 @@ from unmute_core.tasks import (
     EMPTY_REPLY_ATTEMPTS,
     FINISH_TOOL_NAME,
     GO_BACK_TOOL_NAME,
+    STEP_START_CUE,
     AfterReply,
     StepRun,
     ToolStatus,
@@ -156,6 +157,7 @@ class StepTask(AgentTask[None]):
         self._models = models
         self._replies = ReplyTracker(step)
         self._finishes = FinishChecker(step, models, self)
+        self._announced: str | None = None
         super().__init__(
             instructions=step.instructions(),
             tools=self._step_tools(),
@@ -273,7 +275,23 @@ class StepTask(AgentTask[None]):
         if self.step.announce:
             say(self.session, self.step.announce)
         if not self.step.listens:
+            self._announced = self.step.announce
             self.session.generate_reply()
+
+    def _with_announce(self, chat_ctx: llm.ChatContext) -> llm.ChatContext:
+        """Add the announce to the opening request, which LiveKit builds before it plays.
+
+        The line joins the chat once it has played. Until then the model would not know
+        it was said. A request must not end on the agent's own line, so the step-start
+        cue follows it as a developer message, as on Pipecat.
+        """
+        announce, self._announced = self._announced, None
+        if not announce:
+            return chat_ctx
+        chat_ctx = chat_ctx.copy()
+        chat_ctx.add_message(role="assistant", content=announce)
+        chat_ctx.add_message(role="developer", content=STEP_START_CUE)
+        return chat_ctx
 
     def _end(self, call: llm.FunctionCall) -> llm.ToolResult:
         """Complete the task on the call that ended the step.
@@ -380,6 +398,7 @@ class StepTask(AgentTask[None]):
         note to the prompt. When every reply stays empty, the step says a short line or
         fails (``StepRun.gave_up``).
         """
+        chat_ctx = self._with_announce(chat_ctx)
         answered, unheard = self._replies.unheard(chat_ctx)
         answers_result = _ends_with_tool_result(chat_ctx)
         turns = CallerHistory(chat_ctx).turns
