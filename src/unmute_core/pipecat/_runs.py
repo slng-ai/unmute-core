@@ -53,6 +53,7 @@ from unmute_core.pipecat._history import (
     set_tool_reply,
     shape_history,
     tool_pair,
+    without_call,
     without_calls_to,
 )
 from unmute_core.pipecat._model import ModelCallLLMService
@@ -177,6 +178,10 @@ class ActiveRun:
         step: The step running now.
         shape_next: The task whose history applies once a move's result is recorded.
         carried: The caller's turn a step answered, for the main agent to read.
+        running: Everything the run's steps said and did so far, after the main agent's
+            messages. Each step opens on its own history of it, as on LiveKit, so a
+            ``messages`` step does not take the tool calls away from a ``full`` step after it.
+        opened_at: Where the live context's messages that ``running`` lacks begin.
     """
 
     run: DelegateRun
@@ -189,6 +194,8 @@ class ActiveRun:
     step: ActiveStep | None = None
     shape_next: TaskSpec | None = None
     carried: dict[str, Any] | None = None
+    running: list[Any] = field(default_factory=list)
+    opened_at: int = 0
 
 
 @dataclass
@@ -346,6 +353,8 @@ class RunLifecycle:
                 await run.worker.queue_frame(TTSSpeakFrame(run.run.announce))
             live = list(context_messages(self._context))
             run.snapshot = copy.deepcopy(live)
+            seed = tool_pair(live, run.call_id) if via is not None else []
+            run.running = [*without_call(live, run.call_id), *seed]
             run.snapshot_tools = self._context.tools
             step = run.run.next_step()
             if step is None:
@@ -354,11 +363,11 @@ class RunLifecycle:
             shaped = (
                 []
                 if step.history in FRESH_HISTORY
-                else await self._opening_history(step.task, live)
+                else await self._opening_history(step.task, run.running)
             )
-            if via is not None:
-                shaped.extend(m for m in tool_pair(live, run.call_id) if m not in shaped)
+            shaped.extend(m for m in seed if m not in shaped)
             replace_messages(self._context, shaped)
+            run.opened_at = len(shaped)
             self._replies.count_caller(context_messages(self._context))
             run.baseline = caller_turns(shaped)
             flow = await self._flow_for(run.worker)
@@ -417,25 +426,31 @@ class RunLifecycle:
         return shape_history(task, messages)
 
     async def _shape_entry(self, run: ActiveRun) -> None:
-        """Give the step being entered its own history of the shared context.
+        """Give the step being entered its own history of everything the run did so far.
 
+        The messages the step being left added join ``running`` first. A fresh step's node
+        replaces the live context with its own messages, so its additions start at 0.
         It never keeps an earlier finish, which it would read as its own work, nor an
         earlier step's cue, which it would read as the caller. The caller turns the step
         opens on are counted again on what it now reads, as LiveKit counts them once the
         history is set: a ``last_n`` window can keep fewer than the step being left held.
         """
         task, run.shape_next = run.shape_next, None
+        messages = context_messages(self._context)
+        run.running.extend(messages[run.opened_at :])
+        fresh = run.step is not None and run.step.step.history in FRESH_HISTORY
+        run.opened_at = 0 if fresh else len(messages)
         if task is None:
             return
         shaped = [
             message
             for message in without_calls_to(
-                await self._opening_history(task, context_messages(self._context)),
-                {FINISH_TOOL_NAME},
+                await self._opening_history(task, run.running), {FINISH_TOOL_NAME}
             )
             if message != STEP_START_MESSAGE
         ]
         replace_messages(self._context, shaped)
+        run.opened_at = len(shaped)
         if run.step is not None:
             run.step.step.opened(caller_turns=caller_turns(shaped))
 
