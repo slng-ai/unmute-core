@@ -180,6 +180,7 @@ class TaskPlan:
                 )
         self._check_reads(task, where, values)
         self._check_results(task, where)
+        self._check_inputs(task, where)
         for rule in task.finish:
             schema = self.tools.get(rule.tool).model_parameters
             if schema.get("additionalProperties") is not False and not schema.get("properties"):
@@ -189,6 +190,34 @@ class TaskPlan:
                     f"{where} asks about '{stray[0]}' before '{rule.tool}' runs, which is not "
                     "an input the model gives it. Ask about an input the tool takes"
                 )
+
+    def _check_inputs(self, task: TaskSpec, where: str) -> None:
+        """Check that every ``assign`` row read from an input names one a closing tool takes.
+
+        One closing tool is enough: the row is saved when that tool ends the step.
+
+        Raises:
+            ValueError: Naming the task, the value and the tools.
+        """
+        for row in (row for row in task.assign if row.source == "input"):
+            if not task.finish:
+                raise ValueError(
+                    f"{where} saves '{row.variable}' from a tool's input, but no finish rule "
+                    "names a tool. Add a finish rule, or read the value from a result"
+                )
+            if not row.path or any(self._takes(rule.tool, row.path[0]) for rule in task.finish):
+                continue
+            tools = ", ".join(f"'{rule.tool}'" for rule in task.finish)
+            raise ValueError(
+                f"{where} saves '{row.variable}' from the input '{row.path[0]}', which no "
+                f"closing tool takes ({tools}). Name an input one of them takes"
+            )
+
+    def _takes(self, tool: str, field: str) -> bool:
+        """Return True when the tool's input has the field, or is open to any field."""
+        schema = self.tools.get(tool).model_parameters
+        inputs = schema.get("properties", {})
+        return field in inputs or (schema.get("additionalProperties") is not False and not inputs)
 
     def _check_results(self, task: TaskSpec, where: str) -> None:
         """Check every result field a task's lines and rules read against its tool's output.

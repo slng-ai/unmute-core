@@ -280,9 +280,11 @@ def with_derived_values(task: TaskSpec, arguments: Mapping[str, Any]) -> dict[st
     }
 
 
-def values_from_result(task: TaskSpec, result: Mapping[str, Any]) -> dict[str, Any]:
-    """Return the finish arguments a closing tool's result carries (``TaskSpec.values_from_result``)."""
-    return task.values_from_result(result)
+def values_from_result(
+    task: TaskSpec, result: Mapping[str, Any], given: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
+    """Return the finish arguments a closing tool's call carries (``TaskSpec.values_from_result``)."""
+    return task.values_from_result(result, given)
 
 
 def success_matches(rule: FinishRule, result: object) -> bool:

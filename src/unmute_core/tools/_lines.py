@@ -159,12 +159,17 @@ class Assign(_Row):
         optional: A step may finish without it (Unmute's ``?``). Otherwise a served
             finish must carry it, unless it appends. A tool's own save skips it when the
             result holds no value there.
+        source: ``result`` reads the path from what the tool returned. ``input`` reads it
+            from the input the model gave the step's closing tool, saved when that tool
+            succeeds: the booking the caller said yes to, when the result does not echo
+            it. Only a task's ``assign`` takes ``input``.
     """
 
     variable: VariableName
     path: Annotated[tuple[FieldName, ...], Field(max_length=8)]
     append: bool = False
     optional: bool = False
+    source: Literal["result", "input"] = "result"
 
     @property
     def argument(self) -> str:

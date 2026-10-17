@@ -168,7 +168,7 @@ class ClosingTools:
         self.settled.clear()
         try:
             result = await self._invoke(name, arguments, started)
-            ended = self._end_on(name, rules, result)
+            ended = self._end_on(name, rules, result, arguments)
             if ended is result:
                 return self._tools.for_model(name, result)
             if (
@@ -305,8 +305,17 @@ class ClosingTools:
         logger.info("%s: asked the caller %r", name, line)
         return confirm_asked(name, line)
 
-    def _end_on(self, name: str, rules: Sequence[FinishRule], result: object) -> object:
-        """End the step on a closing tool's successful result, or hand the result back."""
+    def _end_on(
+        self,
+        name: str,
+        rules: Sequence[FinishRule],
+        result: object,
+        arguments: str | Mapping[str, Any],
+    ) -> object:
+        """End the step on a closing tool's successful result, or hand the result back.
+
+        The step's ``assign`` rows read the result, or the input the tool just ran with.
+        """
         matched = [rule for rule in rules if success_matches(rule, result)]
         if self._step.done:
             if matched:
@@ -323,8 +332,13 @@ class ClosingTools:
         self._terminal = (name, result)
         self._step.carries_turn = True
         try:
+            given = (
+                self._tools.check(name, arguments, self._tasks.state)
+                if any(row.source == "input" for row in self._task.assign)
+                else None
+            )
             outcome = self._values.save(
-                self._task.values_from_result(result), state=self._tasks.state
+                self._task.values_from_result(result, given), state=self._tasks.state
             )
         except TaskValueRefused as error:
             logger.warning("closing tool %s: not recorded: %s", name, error.message)
