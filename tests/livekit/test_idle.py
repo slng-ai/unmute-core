@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from livekit.agents import AgentSession, AgentStateChangedEvent, UserInputTranscribedEvent
 
+from unmute_core.call import IDLE, CallHooks
 from unmute_core.idle import IdleNudges
 from unmute_core.livekit import idle_nudges
 
@@ -65,7 +66,8 @@ async def _settle() -> None:
 
 async def test_a_quiet_caller_hears_the_three_lines_then_the_session_closes() -> None:
     session = Session()
-    controller = idle_nudges(cast(AgentSession, cast(Any, session)), CONFIG)
+    hooks = CallHooks()
+    controller = idle_nudges(cast(AgentSession, cast(Any, session)), CONFIG, call=hooks)
     controller._sleep = _no_wait
 
     session.emit(
@@ -75,6 +77,7 @@ async def test_a_quiet_caller_hears_the_three_lines_then_the_session_closes() ->
 
     assert session.said == ["Are you still there?", "Still here when you are.", "Goodbye."]
     assert session.closed
+    assert (await hooks.end("ended")).reason == IDLE
 
 
 async def test_the_callers_words_start_the_wait_over() -> None:

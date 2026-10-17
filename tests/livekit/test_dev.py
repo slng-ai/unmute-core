@@ -512,24 +512,6 @@ async def test_a_control_tool_is_a_handoff_operation_and_a_hang_up_is_not_a_fail
     assert timed == [records.ids("operation", type="tool")[0]]
 
 
-async def test_only_the_current_agents_handoff_tools_draw_as_handoffs() -> None:
-    records = Records()
-    session = AgentSession()
-    observer = DevObserver(records.recorder, controls={"transfer_to_sales"})
-    observer.attach(session)
-
-    class Agent:
-        """An agent with handoff tools."""
-
-        def __init__(self, *handoffs: str) -> None:
-            self.handoffs = handoffs
-
-    observer.entered(Agent("to_billing"))
-    assert observer._tools.controls == {"transfer_to_sales", "to_billing"}
-    observer.entered(Agent())
-    assert observer._tools.controls == {"transfer_to_sales"}
-
-
 class Playback(AudioOutput):
     """An audio output that sends no audio and says when playback starts."""
 

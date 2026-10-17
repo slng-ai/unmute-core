@@ -59,11 +59,6 @@ class ToolRuns:
         """Whether a task or group handoff tool is running."""
         return bool(self._delegates)
 
-    @property
-    def controls(self) -> set[str]:
-        """The tools that draw as a handoff now."""
-        return self._controls
-
     def add_handoffs(self, names: Iterable[str]) -> None:
         """Draw these tools as a task or group handoff from now on."""
         self._handoffs |= set(names)

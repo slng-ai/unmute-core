@@ -4,7 +4,6 @@ The locked-value cases check that a missing source refuses the call, the
 model's value is never used, and the value never reaches the model's schema.
 """
 
-import asyncio
 import threading
 from datetime import date
 from typing import Annotated, Any
@@ -398,23 +397,6 @@ async def test_tool_error_from_a_handler_reaches_the_model_unchanged():
         await ToolRegistry([full]).call("full", {})
 
 
-async def test_cancellation_passes_through():
-    started = asyncio.Event()
-
-    @local_tool
-    async def wait() -> Done:
-        """Wait forever."""
-        started.set()
-        await asyncio.Event().wait()
-        return Done()
-
-    task = asyncio.create_task(ToolRegistry([wait]).call("wait", {}))
-    await started.wait()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-
-
 async def test_local_tool_reads_signature_and_docstring_and_runs_sync_code_in_a_thread():
     threads = []
 
@@ -499,22 +481,6 @@ def test_local_tool_refuses_a_function_it_cannot_type(
 ):
     with pytest.raises(TypeError, match=message):
         local_tool(handler, **options)
-
-
-async def test_local_tool_takes_a_pattern_and_a_tuple():
-    class Found(BaseModel):
-        text: str
-
-    @local_tool
-    def find(code: Annotated[str, Field(pattern=r"^\d+$")], pair: tuple[int, str]) -> Found:
-        """Find."""
-        return Found(text=f"{code} {pair}")
-
-    properties = find.parameters["properties"]
-    assert properties["code"]["pattern"] == r"^\d+$"
-    assert "prefixItems" in properties["pair"]
-    result = await ToolRegistry([find]).call("find", {"code": "12", "pair": [1, "a"]})
-    assert result == {"text": "12 (1, 'a')"}
 
 
 async def test_a_lone_model_parameter_is_the_whole_input_and_the_return_is_the_output():

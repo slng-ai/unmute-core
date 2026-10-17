@@ -2,6 +2,8 @@
 
 from itertools import pairwise
 
+import pytest
+
 from unmute_core.tools import LinePicker
 
 
@@ -12,13 +14,20 @@ def test_a_site_never_repeats_its_last_line():
     assert all(first != second for first, second in pairwise(said))
 
 
-def test_two_sites_sharing_a_line_do_not_say_it_twice_in_a_row():
+@pytest.mark.parametrize(
+    ("picks", "said"),
+    [
+        (
+            [("task:a", ["Let me look."]), ("tool:b", ["Let me look.", "One moment."])],
+            ["Let me look.", "One moment."],
+        ),
+        ([("tool:x", ["Hold on."]), ("tool:x", ["Hold on."])], ["Hold on.", "Hold on."]),
+        ([("tool:x", [])], [None]),
+    ],
+    ids=["two-sites-share-a-line", "a-single-line-repeats", "no-lines-say-nothing"],
+)
+def test_a_line_is_picked_for_each_site(
+    picks: list[tuple[str, list[str]]], said: list[str | None]
+) -> None:
     pick = LinePicker()
-    assert pick.pick("task:a", ["Let me look."]) == "Let me look."
-    assert pick.pick("tool:b", ["Let me look.", "One moment."]) == "One moment."
-
-
-def test_a_single_line_is_said_each_time_and_no_lines_say_nothing():
-    pick = LinePicker()
-    assert [pick.pick("tool:x", ["Hold on."]) for _ in range(2)] == ["Hold on.", "Hold on."]
-    assert pick.pick("tool:x", []) is None
+    assert [pick.pick(site, lines) for site, lines in picks] == said

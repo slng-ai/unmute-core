@@ -1,6 +1,6 @@
 {
   "name": "greeting_worded_waits",
-  "about": "A greeting the model words waits for a slow background lookup, and its request carries the saved value.",
+  "about": "A greeting the model words waits for a slow background lookup. Its prompt is filled with the saved value: a cascade request carries it as a variable, and a realtime model reads the filled instructions.",
   "instructions": "You help callers with their orders. Caller: {{note}}.",
   "tasks": {
     "mode": "record",
@@ -27,9 +27,7 @@
     {
       "site": "",
       "text": "Hello Ana, how can I help?",
-      "variables": {
-        "note": "Ana"
-      }
+      "filled": "You help callers with their orders. Caller: Ana."
     }
   ],
   "turns": [],
@@ -50,5 +48,6 @@
         "name": "lookup_customer"
       }
     ]
-  }
+  },
+  "realtime": true
 }

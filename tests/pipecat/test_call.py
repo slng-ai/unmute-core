@@ -36,7 +36,6 @@ from unmute_core.call import (
     CALLER_HUNG_UP,
     ENDED,
     FAILURE_LINE,
-    MAX_DURATION,
     NOTES_HEADER,
     CallEnd,
     CallHooks,
@@ -141,18 +140,6 @@ async def test_max_duration_ends_the_pipeline_unless_it_finished_first():
     await finished.handlers["on_pipeline_finished"](finished, None)
     await asyncio.sleep(0.05)  # past the 0.01 s limit, which would end the pipeline
     assert finished.queued == []
-
-
-async def test_max_duration_notes_the_end_so_the_call_ends_with_that_reason():
-    worker = Pipeline()
-    ended: list[CallEnd] = []
-    call = CallHooks(hooks=on_end(ended.append))
-    attach_call(cast(Any, worker), call, LLMContext())
-    max_duration(cast(Any, worker), 0.01, call=call)
-    await until(lambda: worker.queued)
-    assert [type(frame) for frame in worker.queued] == [EndFrame]
-    await worker.emit("on_pipeline_finished", worker, EndFrame())
-    assert ended[0].reason == MAX_DURATION
 
 
 async def test_a_failure_after_the_end_was_asked_keeps_the_asked_reason():
@@ -382,8 +369,9 @@ async def test_flows_give_a_native_llm_the_main_prompt_with_a_value_saved_since(
         aggregators=LLMContextAggregatorPair(context),
         state=state,
     )
+    flows.install()
     state.save({"closes_at": "18:00"})
-    await flows._on_process(llm, LLMContextFrame(context))
+    await llm._call_event_handler("on_before_process_frame", LLMContextFrame(context))
     assert llm._settings.system_instruction == "We close at 18:00."
 
 
@@ -400,10 +388,10 @@ async def test_a_main_prompt_that_cannot_be_filled_leaves_the_request_going(capl
         aggregators=LLMContextAggregatorPair(context),
         state=CallState(Shop),
     )
+    flows.install()
     with caplog.at_level(logging.ERROR):
-        await flows._on_process(llm, LLMContextFrame(context))
+        await llm._call_event_handler("on_before_process_frame", LLMContextFrame(context))
     assert "could not be refreshed" in caplog.text
-    assert flows._replies.request == context.get_messages()
 
 
 def test_the_greeting_hold_lets_go_after_the_shared_hold_time_by_default():

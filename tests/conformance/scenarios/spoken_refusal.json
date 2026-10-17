@@ -23,16 +23,16 @@
       "spoken": ["Your note: a call back. Is that right?"]
     },
     {
-      "caller": "Yes, that's right.",
+      "caller": "Yes, in the morning.",
       "model": [
-        {"site": "task:take_note", "calls": [{"name": "finish", "arguments": {"note": "a call back"}}]},
+        {"site": "task:take_note", "calls": [{"name": "finish", "arguments": {"note": "a call back in the morning"}}]},
         {"site": "", "text": "I have noted it."}
       ],
       "spoken": ["I have noted it."]
     }
   ],
   "expect": {
-    "state": {"order_id": null, "status": null, "note": "a call back", "tags": []},
+    "state": {"order_id": null, "status": null, "note": "a call back in the morning", "tags": []},
     "tool_calls": [],
     "events": [
       "task.started task=take_note",

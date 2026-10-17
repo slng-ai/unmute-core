@@ -192,31 +192,16 @@ class Shape(BaseModel):
         ({"meta": {"a": {"b": 1}}}, "Checking {{meta}}.", ('Checking {"a":{"b":1}}.',)),
         ({"name": "  "}, "{{name}}", ()),
         ({"name": "{{meta}}"}, "Hi {{name}}.", ("Hi {{meta}}.",)),
+        ({"name": "Ana"}, "You said {{call.first_user_message}}.", ("You said use {{name}}.",)),
     ],
 )
 async def test_a_filled_line_is_never_checked_again_or_filled_twice(values, line, said):
-    state = CallState(Shape)
+    state = CallState(Shape, call=CallInfo(first_user_message="use {{name}}"))
     state.save(values)
     heard: list[object] = []
     tool = ToolSpec("check", "Check.", NO_ARGUMENTS, AnyResult, Answer({}), announce=line)
     await ToolRegistry([tool]).call("check", {}, state, started=lambda t: heard.append(t.announce))
     assert heard == [said]
-
-
-async def test_a_call_value_that_holds_braces_is_said_as_it_is():
-    state = CallState(Shape, call=CallInfo(first_user_message="use {{name}}"))
-    state.save({"name": "Ana"})
-    heard: list[object] = []
-    tool = ToolSpec(
-        "check",
-        "Check.",
-        NO_ARGUMENTS,
-        AnyResult,
-        Answer({}),
-        announce="You said {{call.first_user_message}}.",
-    )
-    await ToolRegistry([tool]).call("check", {}, state, started=lambda t: heard.append(t.announce))
-    assert heard == [("You said use {{name}}.",)]
 
 
 async def test_a_cancelled_call_ends_its_events():
@@ -295,11 +280,3 @@ def test_only_reads_a_generator_once_and_the_registry_knows_its_names():
     assert "check" not in only
     with pytest.raises(ValueError, match="there is no tool 'ghost'"):
         registry.only(name for name in ["ghost"])
-
-
-async def test_a_filled_announce_line_may_hold_braces_from_the_callers_words():
-    state = CallState(Booking)
-    state.save({"day": "{{x}}"})
-    later = ToolSpec("later", "Later.", NO_ARGUMENTS, AnyResult, Answer({}), announce="On {{day}}.")
-    assert later.spoken(state).announce == ("On {{x}}.",)
-    assert later.announce == ("On {{day}}.",)

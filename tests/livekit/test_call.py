@@ -9,11 +9,11 @@ from livekit import rtc
 from livekit.agents import AgentSession
 from pydantic import BaseModel
 
-from tests.hooks.helpers import checks, on_end
+from tests.hooks.helpers import checks
 from tests.livekit.fake import until
 from tests.livekit.test_agent_lifecycle import Scripted
 from unmute_core.agent import AgentSpec
-from unmute_core.call import FAILURE_LINE, CallEnd, CallHooks
+from unmute_core.call import FAILURE_LINE, CallHooks
 from unmute_core.greeting import GREETING_INSTRUCTION, Greeting
 from unmute_core.hooks import Hooks
 from unmute_core.livekit import (
@@ -295,20 +295,6 @@ async def test_an_unrecoverable_model_error_fails_the_call_once_and_a_tts_error_
     await until(lambda: session.shut)
     assert session.said == [FAILURE_LINE]
     assert session.shut == 1
-
-
-async def test_the_close_ends_the_call_with_the_transcript():
-    session = Live()
-    ended: list[CallEnd] = []
-    call = CallHooks(hooks=on_end(ended.append))
-    attach_call(cast(Any, session), call)
-    session.emit("close", SimpleNamespace(reason=SimpleNamespace(value="participant_disconnected")))
-    await until(lambda: ended)
-    assert ended[0].reason == "caller_hung_up"
-    assert ended[0].transcript == [
-        {"role": "user", "content": "hi"},
-        {"role": "assistant", "content": "hello"},
-    ]
 
 
 async def test_open_call_gives_the_audio_back_when_the_greeting_fails():

@@ -77,9 +77,9 @@ async def test_after_model_hears_the_reply_or_that_it_was_cut_off() -> None:
 
     await requests.before(LLMContextFrame(LLMContext()))
     for frame in (LLMFullResponseStartFrame(), LLMTextFrame("Hi."), LLMFullResponseEndFrame()):
-        await requests._pushed(llm, frame)
+        await llm._call_event_handler("on_before_push_frame", frame)
     await requests.before(LLMContextFrame(LLMContext()))
-    await requests._processed(llm, InterruptionFrame())
+    await llm._call_event_handler("on_after_process_frame", InterruptionFrame())
     await asyncio.sleep(0)
 
     assert [(r.text, r.interrupted) for r in heard] == [("Hi.", False), ("", True)]
@@ -97,7 +97,7 @@ async def test_after_model_hears_the_provider_data_a_model_call_sent_with_a_call
     await requests.before(LLMContextFrame(LLMContext()))
     calls = [FunctionCallFromLLM("find", call_id, {}, LLMContext()) for call_id in ("c1", "c2")]
     for frame in (FunctionCallsStartedFrame(calls), LLMFullResponseEndFrame()):
-        await requests._pushed(llm, frame)
+        await llm._call_event_handler("on_before_push_frame", frame)
     await asyncio.sleep(0)
 
     [response] = heard
@@ -117,7 +117,7 @@ async def test_after_model_hears_a_calls_arguments_without_unicode_escapes() -> 
     await requests.before(LLMContextFrame(LLMContext()))
     calls = [FunctionCallFromLLM("find", "c1", {"name": "José"}, LLMContext())]
     for frame in (FunctionCallsStartedFrame(calls), LLMFullResponseEndFrame()):
-        await requests._pushed(llm, frame)
+        await llm._call_event_handler("on_before_push_frame", frame)
     await asyncio.sleep(0)
 
     [response] = heard
@@ -142,7 +142,7 @@ async def test_an_interruption_gives_back_the_borrowed_params() -> None:
     requests = RequestHooks(llm, CallHooks(hooks=hooks))
     await requests.before(LLMContextFrame(LLMContext()))
     assert "extra_body" in llm._settings.extra
-    await requests._processed(llm, InterruptionFrame())
+    await llm._call_event_handler("on_after_process_frame", InterruptionFrame())
     assert "extra_body" not in llm._settings.extra
 
 

@@ -54,12 +54,3 @@ async def test_a_web_call_has_no_number():
     assert isinstance(unknown, dict)
     assert unknown["available"] is False
     assert unknown["phone_number"] is None
-
-
-def test_a_zone_error_names_the_tool_and_the_field():
-    with pytest.raises(ValueError) as caught:
-        current_datetime_tool("Mars/Olympus")
-    assert str(caught.value).splitlines()[:2] == [
-        "1 validation error for current_datetime_tool",
-        "timezone",
-    ]

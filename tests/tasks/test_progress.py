@@ -31,25 +31,27 @@ def _run_through(progress: GroupProgress, outcomes: dict[int, Status]) -> list[i
     return order
 
 
-def test_a_group_runs_its_steps_in_order_and_completes() -> None:
-    progress = _progress()
-    assert _run_through(progress, {}) == [0, 1, 2]
-    assert progress.status() == "completed"
-
-
-def test_an_unserved_step_stops_the_group_even_when_non_blocking() -> None:
-    progress = _progress(non_blocking=("step_1",))
-    assert _run_through(progress, {1: "unserved"}) == [0, 1]
-    assert progress.status() == "unserved"
-
-
-def test_a_blocking_failure_stops_the_group_and_a_non_blocking_one_does_not() -> None:
-    blocking = _progress()
-    assert _run_through(blocking, {1: "failed"}) == [0, 1]
-    assert blocking.status() == "failed"
-    lenient = _progress(non_blocking=("step_1",))
-    assert _run_through(lenient, {1: "failed"}) == [0, 1, 2]
-    assert lenient.status() == "completed"
+@pytest.mark.parametrize(
+    ("non_blocking", "outcomes", "order", "status"),
+    [
+        ((), {}, [0, 1, 2], "completed"),
+        (("step_1",), {1: "unserved"}, [0, 1], "unserved"),
+        ((), {1: "failed"}, [0, 1], "failed"),
+        (("step_1",), {1: "failed"}, [0, 1, 2], "completed"),
+    ],
+    ids=[
+        "in-order",
+        "unserved-stops-non-blocking",
+        "failure-stops",
+        "non-blocking-failure-goes-on",
+    ],
+)
+def test_a_group_runs_its_steps_until_one_stops_it(
+    non_blocking: tuple[str, ...], outcomes: dict[int, Status], order: list[int], status: str
+) -> None:
+    progress = _progress(non_blocking=non_blocking)
+    assert _run_through(progress, outcomes) == order
+    assert progress.status() == status
 
 
 def test_going_back_runs_the_targets_then_the_interrupted_step_then_the_rest() -> None:
@@ -159,13 +161,6 @@ def test_a_step_gone_back_from_before_its_redo_ended_still_redoes() -> None:
     assert notes == [(1, REENTRY_REDO), (0, REENTRY_REDO), (2, REENTRY_RESUME)]
 
 
-def test_go_back_targets_read_the_steps_argument() -> None:
-    assert go_back_targets({"steps": ["a", "b"]}) == ["a", "b"]
-    assert go_back_targets({"steps": "a"}) == ["a"]
-    assert go_back_targets({"steps": [1, "a"]}) == ["a"]
-    assert go_back_targets(None) == []
-
-
 def test_a_refused_go_back_names_the_steps_it_can_go_back_to() -> None:
     progress = _progress()
     progress.next_step()
@@ -178,11 +173,13 @@ def test_a_refused_go_back_names_the_steps_it_can_go_back_to() -> None:
 @pytest.mark.parametrize(
     ("arguments", "targets"),
     [
+        ({"steps": ["a", "b"]}, ["a", "b"]),
         ({"steps": "a"}, ["a"]),
         ({"steps": ["a", 3, "b"]}, ["a", "b"]),
         ({"steps": 3}, []),
         ({}, []),
         ("steps", []),
+        (None, []),
     ],
 )
 def test_go_back_targets_read_what_the_model_wrote(arguments: object, targets: list[str]) -> None:

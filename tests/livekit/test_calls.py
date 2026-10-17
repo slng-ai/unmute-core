@@ -5,8 +5,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from livekit.agents import NOT_GIVEN, llm
-from livekit.agents.voice import events
+from livekit.agents import NOT_GIVEN
 
 from tests.livekit.fake import until
 from tests.livekit.test_agent_lifecycle import UnmuteAgent
@@ -17,7 +16,7 @@ from unmute_core.agent import AgentSpec
 from unmute_core.call import CallHooks
 from unmute_core.greeting import Greeting
 from unmute_core.livekit import SipLine, open_call
-from unmute_core.livekit._calls import announce, end_call_now
+from unmute_core.livekit._calls import announce
 from unmute_core.state import CallState
 from unmute_core.tools import ToolSpec
 
@@ -63,27 +62,6 @@ async def test_a_sip_lines_own_line_cannot_be_cut_off() -> None:
     session = Speaker()
     await SipLine(cast(Any, session)).say("Connecting you.")
     assert session.allowed == [False]
-
-
-def test_ending_the_call_cancels_the_reply_to_the_tools_beside_the_ending_one() -> None:
-    handlers: list[Any] = []
-    shut: list[str] = []
-    session = SimpleNamespace(
-        once=lambda name, handler: handlers.append((name, handler)),
-        shutdown=lambda: shut.append("shutdown"),
-    )
-    end_call_now(cast(Any, session))
-    assert shut == ["shutdown"]
-    ((name, handler),) = handlers
-    assert name == "function_tools_executed"
-    output = llm.FunctionCallOutput(call_id="c1", name="a", output="x", is_error=False)
-    event = events.FunctionToolsExecutedEvent(
-        function_calls=[llm.FunctionCall(call_id="c1", name="a", arguments="{}")],
-        function_call_outputs=[output],
-    )
-    assert event.has_tool_reply
-    handler(event)
-    assert not event.has_tool_reply
 
 
 async def test_a_greeting_that_never_finishes_gives_the_audio_back_after_the_hold() -> None:

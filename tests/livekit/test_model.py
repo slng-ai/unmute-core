@@ -25,7 +25,6 @@ from unmute_core.livekit import UnmuteAgent
 from unmute_core.livekit._model import (
     RUNNING_PLACEHOLDER_KEY,
     ModelCallLLM,
-    _chat_context,
     request_context,
 )
 from unmute_core.model import (
@@ -191,27 +190,34 @@ async def test_a_routed_calls_signature_goes_back_with_the_call() -> None:
     assert find["extra_content"] == SIGNED
 
 
-def test_a_hook_written_call_keeps_its_provider_data() -> None:
-    source = llm.ChatContext()
-    source.add_message(role="user", content="hi")
-    sent = source.to_provider_format("openai")[0]
+async def _hooked_native_request(added: list[dict[str, Any]]) -> tuple[Any, llm.ChatContext]:
+    """Run one turn on a native LLM whose ``before_model`` hook adds ``added`` to the chat."""
+    hooks = Hooks()
+    hooks.before_model(lambda request: replace(request, messages=[*request.messages, *added]))
+    native = ScriptedLLM("Hi.")
+    agent = UnmuteAgent(AgentSpec("Orders."), call=CallHooks(hooks=hooks))
+    async with AgentSession(llm=native) as session:
+        await session.start(agent)
+        await session.run(user_input="hi")
+        asked = next(item for item in session.history.items if item.type == "message")
+    return asked, native.requests[0].chat_ctx
+
+
+async def test_a_hook_written_call_keeps_its_provider_data() -> None:
     call = {
         "id": "c9",
         "type": "function",
         "function": {"name": "find", "arguments": "{}"},
         "extra_content": SIGNED,
     }
-    hooked = [
-        *sent,
-        {"role": "assistant", "tool_calls": [call]},
-        {"role": "tool", "tool_call_id": "c9", "content": "{}"},
-    ]
-
-    ctx = _chat_context(hooked, sent, source)
-
-    [written] = [item for item in ctx.items if isinstance(item, llm.FunctionCall)]
+    _, sent = await _hooked_native_request(
+        [
+            {"role": "assistant", "tool_calls": [call]},
+            {"role": "tool", "tool_call_id": "c9", "content": "{}"},
+        ]
+    )
+    [written] = [item for item in sent.items if isinstance(item, llm.FunctionCall)]
     assert written.extra == SIGNED
-    assert ctx.to_provider_format("openai")[0][-2]["tool_calls"][0]["extra_content"] == SIGNED
 
 
 def test_a_request_drops_the_running_call_livekit_adds_and_reads_the_prompt_now() -> None:
@@ -263,14 +269,10 @@ async def test_a_before_model_hook_that_raises_fails_the_call() -> None:
     assert failed == ["llm"]
 
 
-def test_a_hook_that_adds_a_message_keeps_every_other_item_as_it_was() -> None:
-    ctx = llm.ChatContext()
-    ctx.add_message(role="system", content="Help.")
-    asked = ctx.add_message(role="user", content="hi")
-    sent = ctx.to_provider_format("openai")[0]
-    rebuilt = _chat_context([*sent, {"role": "system", "content": "Note."}], sent, ctx)
-    assert rebuilt.items[1] is asked
-    note = rebuilt.items[-1]
+async def test_a_hook_that_adds_a_message_keeps_every_other_item_as_it_was() -> None:
+    asked, sent = await _hooked_native_request([{"role": "system", "content": "Note."}])
+    assert asked.id in [item.id for item in sent.items]
+    note = sent.items[-1]
     assert isinstance(note, llm.ChatMessage)
     assert note.text_content == "Note."
 

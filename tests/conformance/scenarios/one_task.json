@@ -36,7 +36,7 @@
       "caller": "It is A-12.",
       "model": [
         {"site": "task:find_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]},
-        {"site": "", "text": "Order A-12 is open."}
+        {"site": "", "tools": ["search_web", "normalize", "find_order"], "text": "Order A-12 is open."}
       ],
       "spoken": ["Order A-12 is open."]
     }

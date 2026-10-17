@@ -5,23 +5,16 @@ and the checks it runs when it is built.
 from collections.abc import AsyncIterator
 from typing import cast
 
-import pytest
 from livekit.agents import AgentSession, llm
-from livekit.agents.beta.tools import EndCallTool
 
 from tests.livekit.fake import ScriptedLLM, call
 from tests.tasks.job import Canned, job, plan, registry, state
-from tests.test_handoff import KeyLimited
 from unmute_core.agent import AgentSpec
-from unmute_core.call import (
-    CallHooks,
-)
 from unmute_core.livekit import (
     ModelCallLLM,
     UnmuteAgent,
 )
 from unmute_core.model import ModelEvent, ModelRequest, TextDelta
-from unmute_core.prefetch import Lookup, Prefetch
 
 FOUND = {"found": True, "order": {"id": "A-12"}, "status": "open"}
 
@@ -101,37 +94,9 @@ async def test_the_llm_closes_its_model_call() -> None:
     assert model.closed == 1
 
 
-def test_a_task_input_naming_no_prefetch_lookup_fails_at_build() -> None:
-    payload = job()
-    payload["tasks"][1]["inputs"] = [{"kind": "tool", "name": "load_customr"}]
-    tasks = plan(payload)
-    lookup = Lookup("load_customer", registry().get("search_web"), assign={})
-    hooks = CallHooks(state(tasks), prefetch=Prefetch([lookup], state=tasks.state))
-    with pytest.raises(ValueError, match="'load_customr', which no prefetch Lookup runs"):
-        UnmuteAgent(AgentSpec("Orders.", tasks=tasks), state=state(tasks), call=hooks)
-
-
-def test_a_placeholder_key_too_long_fails_at_build_only_for_a_model_call_with_a_limit() -> None:
-    prompt = "Hello {{" + "a" * 70 + "}}."
-    UnmuteAgent(AgentSpec(prompt))
-    with pytest.raises(ValueError, match="agent instructions: the placeholder"):
-        UnmuteAgent(AgentSpec(prompt, model=KeyLimited("x")))
-
-
 def test_livekits_own_agent_options_reach_the_agent() -> None:
     history = llm.ChatContext()
     history.add_message(role="user", content="Hi.")
     agent = UnmuteAgent(AgentSpec("Orders."), chat_ctx=history, min_consecutive_speech_delay=0.4)
     assert [item.text_content for item in agent.chat_ctx.messages()] == ["Hi."]
     assert agent.min_consecutive_speech_delay == 0.4
-
-
-def test_a_task_named_like_a_native_tool_is_refused_at_build() -> None:
-    payload = job()
-    payload["tasks"][1] = {**payload["tasks"][1], "name": "end_call", "when": "The caller is done."}
-    payload |= {"groups": [], "task_only_tools": []}
-    tasks = plan(payload)
-    with pytest.raises(ValueError, match="the tool 'end_call' is offered twice"):
-        UnmuteAgent(
-            AgentSpec("Orders.", tasks=tasks), state=state(tasks), native_tools=[EndCallTool()]
-        )

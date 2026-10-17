@@ -1,6 +1,6 @@
 {
-  "name": "handoff_full_drops_unknown_tools",
-  "about": "A full handoff gives the next agent the tool calls and results of tools it has, and drops a call to a tool it lacks with its result. Assistant text stays.",
+  "name": "handoff_full_tools",
+  "about": "A full handoff gives the next agent the tool calls and results of tools it has. It drops a call to a tool it lacks, with its result. A full handoff without tool calls drops every tool call and result, even of a tool the next agent has. Assistant text stays in both.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",
@@ -17,6 +17,25 @@
   "agents": {
     "notes": {
       "instructions": "You take notes.",
+      "tools": [
+        "normalize"
+      ],
+      "tasks": {
+        "mode": "record",
+        "tasks": []
+      },
+      "handoffs": {
+        "to_desk": {
+          "to": "desk",
+          "context": {
+            "history": "full",
+            "include_tool_calls": false
+          }
+        }
+      }
+    },
+    "desk": {
+      "instructions": "You run the front desk.",
       "tools": [
         "normalize"
       ],
@@ -99,6 +118,51 @@
       "spoken": [
         "Notes desk."
       ]
+    },
+    {
+      "caller": "Tidy my note, then put me through to the front desk.",
+      "model": [
+        {
+          "site": "",
+          "text": "One moment.",
+          "calls": [
+            {
+              "name": "normalize",
+              "arguments": {
+                "text": "call me"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "to_desk"
+            }
+          ]
+        },
+        {
+          "site": "",
+          "prompt": "You run the front desk.",
+          "order": [
+            "user",
+            "assistant",
+            "user",
+            "assistant",
+            "assistant",
+            "user",
+            "assistant",
+            "user",
+            "assistant"
+          ],
+          "text": "Front desk."
+        }
+      ],
+      "spoken": [
+        "One moment.",
+        "Front desk."
+      ]
     }
   ],
   "expect": {
@@ -114,9 +178,15 @@
         "arguments": {
           "q": "hours"
         }
+      },
+      {
+        "name": "normalize",
+        "arguments": {
+          "text": "call me"
+        }
       }
     ],
     "events": [],
-    "agent": "notes"
+    "agent": "desk"
   }
 }
