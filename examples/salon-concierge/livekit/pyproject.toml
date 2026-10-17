@@ -5,9 +5,9 @@ description = "Generated LiveKit Agents project (unmute livekit driver)"
 requires-python = ">=3.12"
 dependencies = [
     "httpx",
-    "livekit-agents[google]==1.8.7",
-    "livekit-plugins-silero>=1.8.7",
-    "livekit-plugins-slng>=1.8.7",
+    "livekit-agents[google]==1.8.8",
+    "livekit-plugins-silero>=1.8.8",
+    "livekit-plugins-slng>=1.8.8",
     "llama-index-core",
     "llama-index-embeddings-openai",
     "llama-index-readers-file",

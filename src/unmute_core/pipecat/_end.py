@@ -36,7 +36,7 @@ This is the final action the agent can take.
 Once called, no further interaction is possible with the user.
 Don't generate any other text or response when the tool is called.
 """  # noqa: RUF001 - LiveKit's own curly quotes, kept so the model reads the same bytes
-"""What LiveKit's ``EndCallTool`` tells the model first, word for word (LiveKit Agents 1.8.7,
+"""What LiveKit's ``EndCallTool`` tells the model first, word for word (LiveKit Agents 1.8.8,
 ``livekit/agents/beta/tools/end_call.py``). The same text on both frameworks gives the same
 choice: without it, Gemini says its goodbye and never calls the tool.
 """

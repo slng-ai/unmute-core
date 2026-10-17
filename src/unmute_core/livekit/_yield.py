@@ -1,7 +1,7 @@
 """Drop a reply the agent has not started saying when the caller speaks again.
 
 A caller pauses ("Hi." … "I'd like to book a haircut"), and LiveKit ends their turn at
-the pause. When they go on before the reply has played, LiveKit 1.8.7 keeps the reply: the
+the pause. When they go on before the reply has played, LiveKit 1.8.8 keeps the reply: the
 commit never checks that the caller is speaking (voice/agent_activity.py:2658-2743),
 resumed speech only pauses a reply (:2404-2435), and the pause lifts after a short silence
 inside their sentence (:2492-2496). The reply then plays over them.

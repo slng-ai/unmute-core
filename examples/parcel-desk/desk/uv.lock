@@ -1059,7 +1059,7 @@ requires-dist = [
     { name = "email-validator", specifier = ">=2.2,<3" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
-    { name = "livekit-agents", marker = "extra == 'livekit'", specifier = ">=1.8.7,<1.9" },
+    { name = "livekit-agents", marker = "extra == 'livekit'", specifier = ">=1.8.8,<1.9" },
     { name = "llama-index-core", marker = "extra == 'knowledge'", specifier = ">=0.14,<0.15" },
     { name = "llama-index-readers-file", marker = "extra == 'knowledge'", specifier = ">=0.5,<0.8" },
     { name = "llama-index-retrievers-bm25", marker = "extra == 'knowledge'", specifier = ">=0.6,<0.9" },
