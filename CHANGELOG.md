@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Fixed
+
+- A step tool whose own reply reads a State value, like `{{deadline}}`, no longer fails when the plan is built. `ToolRegistry.only()` now keeps the registry's State, as every step's tools are narrowed with it.
+
 ## 0.16.0
 
 This release ships the scenario runner as `unmute_core.testing`, and lets a step save a value from its closing tool's input. No API changed. Change `unmute_core.require("0.15.0")` to `require("0.16.0")` when you upgrade.

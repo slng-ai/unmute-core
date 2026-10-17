@@ -1,0 +1,52 @@
+{
+  "name": "step_tool_reply_reads_state",
+  "about": "A payment reminder whose step tool refuses a day after the deadline, and its own reply says the deadline the call started with, a State value. The step's narrowed tools keep the State, so the line fills and code says it with no model request.",
+  "instructions": "You remind callers about a payment.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "promise",
+        "when": "The caller wants to promise a payment.",
+        "instructions": "Ask which day they will pay.",
+        "tools": ["search_web", "lookup_order"],
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}]
+      }
+    ]
+  },
+  "call_start": {"note": "the 30th of October"},
+  "tool_options": {
+    "search_web": {
+      "output": {"status": "Literal[\"ok\", \"after_deadline\"]"},
+      "replies": [
+        {"when": {"status": ["after_deadline"]}, "say": ["That is after {{note}}. Which day before then works?"]}
+      ]
+    }
+  },
+  "tool_results": {
+    "search_web": [{"status": "after_deadline"}]
+  },
+  "turns": [
+    {
+      "caller": "I want to promise a payment.",
+      "model": [
+        {"site": "", "calls": [{"name": "promise"}]},
+        {"site": "task:promise", "text": "Which day will you pay?"}
+      ],
+      "spoken": ["Which day will you pay?"]
+    },
+    {
+      "caller": "The 5th of November.",
+      "model": [
+        {"site": "task:promise", "calls": [{"name": "search_web", "arguments": {"q": "the 5th of November"}}]}
+      ],
+      "spoken": ["That is after the 30th of October. Which day before then works?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": null, "note": "the 30th of October", "tags": []},
+    "tool_calls": [{"name": "search_web", "arguments": {"q": "the 5th of November"}}],
+    "events": ["task.started task=promise"],
+    "agent": "a step"
+  }
+}
