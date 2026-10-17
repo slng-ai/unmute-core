@@ -35,6 +35,7 @@ __all__ = [
     "speech_only",
     "tool_pair",
     "trailing_results",
+    "without_call",
     "without_calls_to",
     "without_instructions",
     "without_text_signatures",
@@ -100,6 +101,25 @@ def below_replies(messages: Sequence[Any], call_id: str, carried: Sequence[Any])
                 end += 1
             return [*messages[:end], *carried, *messages[end:]]
     return [*messages, *carried]
+
+
+def without_call(messages: Sequence[Any], call_id: str) -> list[Any]:
+    """Return the messages without the call ``call_id`` and its reply. Calls beside it stay."""
+    kept: list[Any] = []
+    for message in messages:
+        if _is_tool_reply(message) and message.get("tool_call_id") == call_id:
+            continue
+        calls = message.get("tool_calls") if isinstance(message, dict) else None
+        if not calls or all(call.get("id") != call_id for call in calls):
+            kept.append(message)
+            continue
+        others = [call for call in calls if call.get("id") != call_id]
+        rest = {key: value for key, value in message.items() if key != "tool_calls"}
+        if others:
+            kept.append({**rest, "tool_calls": others})
+        elif rest.get("content"):
+            kept.append(rest)
+    return kept
 
 
 def set_tool_reply(messages: Sequence[Any], call_id: str, content: str) -> None:
