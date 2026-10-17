@@ -1,6 +1,6 @@
 {
   "name": "group_step_history",
-  "about": "In a shared group, each step opens on its own history value. The first step uses the group's history. The step after the tool step uses full and hears the tool call and result. The next step uses messages and hears only what was said. The last step uses full again and still hears the earlier tool call and result.",
+  "about": "In a shared group, each step opens on its own history value. The first step uses full and does not hear the group's own call, which is still running. The step after the tool step uses full and hears the tool call and result. The next step uses messages and hears only what was said. The last step uses full again and still hears the earlier tool call and result.",
   "instructions": "You help callers with their orders.",
   "tasks": {
     "mode": "record",
@@ -40,7 +40,8 @@
         ],
         "announce": [
           "Let me look."
-        ]
+        ],
+        "history": "full"
       },
       {
         "name": "take_note",
@@ -129,6 +130,10 @@
           "site": "task:find_order",
           "heard": [
             "I need help with my order."
+          ],
+          "order": [
+            "user",
+            "assistant"
           ],
           "text": "What is the order number?"
         }
