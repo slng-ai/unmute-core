@@ -4,6 +4,27 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## 0.15.0
+
+This release makes task steps open on the same request on LiveKit and Pipecat, and times every turn the caller hears. No API changed. Change `unmute_core.require("0.14.0")` to `require("0.15.0")` when you upgrade.
+
+### Highlights
+
+- **Every spoken turn is timed.** On LiveKit, a turn whose line code spoke now has `turn.e2e_seconds` too. Examples are a tool reply rule, a confirm read-back and a step receipt.
+- **Every turn counts its model requests.** `turn.llm_requests` is the number of model requests in the turn, 0 when code spoke the reply. `turn.llm_requests_cut` counts the ones cut off, like a LiveKit preemptive request the caller spoke over. Both frameworks send them.
+- **Steps open on the same request on both frameworks.** A step's `announce` line and a shared group's chat now reach the model the same way on LiveKit and Pipecat.
+
+### Added
+
+- `turn.llm_requests` and `turn.llm_requests_cut` on every turn span, on both frameworks (#18).
+
+### Fixed
+
+- LiveKit: a turn that code answered had no `turn.e2e_seconds`. It is now the time from the caller's end of speech to the agent's first audio (#18).
+- LiveKit: a step with an `announce` line opened on a request without that line. The model could repeat it, and a step with a fresh history sent only the system prompt. The opening request now holds the line and the step-start cue, as on Pipecat (#23).
+- Pipecat: in a shared group, a step with `history: full` after a step with `history: messages` lost the earlier tool calls and their results. Pipecat now keeps the group's whole chat, as LiveKit does (#22).
+- Pipecat: a shared group's first step with `history: full` heard the group's own running call and its placeholder result. It no longer does, as on LiveKit (#22, #24).
+
 ## 0.14.0
 
 This is the first release since 0.10.0. Versions 0.11, 0.12 and 0.13 were never released, so their changes are listed here too.
