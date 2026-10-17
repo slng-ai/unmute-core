@@ -118,6 +118,26 @@ def test_values_from_a_tool_result_follow_their_paths() -> None:
     assert values == {"order_id": "A-12", "status": "open"}
 
 
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ({"order_id": "B-7"}, {"order_id": "B-7", "status": "open"}),
+        ({"note": "call back"}, {"status": "open"}),
+    ],
+)
+def test_an_input_row_is_saved_only_when_the_tool_that_ran_took_that_input(
+    given: dict[str, Any], expected: dict[str, Any]
+) -> None:
+    payload = job()
+    payload["tasks"][0]["assign"][0] = {
+        "variable": "order_id",
+        "path": ["order_id"],
+        "source": "input",
+    }
+    task = plan(payload).tasks["find_order"]
+    assert values_from_result(task, {"status": "open", "found": True}, given) == expected
+
+
 def test_saving_is_all_or_nothing_and_typed() -> None:
     task_plan = plan()
     call_state = state(task_plan)

@@ -262,7 +262,7 @@ def test_a_step_saves_only_inputs_its_closing_tool_takes() -> None:
         "path": ["order_number"],
         "source": "input",
     }
-    with pytest.raises(ValueError, match="input 'order_number', which 'lookup_order' does not"):
+    with pytest.raises(ValueError, match="input 'order_number', which no closing tool takes"):
         plan(payload, tools=_typed_lookup())
     payload["tasks"][0]["assign"][0]["path"] = ["order_id"]
     assert plan(payload, tools=_typed_lookup())

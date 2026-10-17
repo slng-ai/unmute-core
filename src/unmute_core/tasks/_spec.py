@@ -519,13 +519,15 @@ class TaskSpec(_Spec):
 
         Args:
             result: What the tool returned.
-            given: The input the model gave the tool. Without it, a row that reads the
-                input is left out.
+            given: The input the model gave the tool. A row that reads an input this
+                call did not carry is left out, like the day of a booking when the step
+                ended on a different tool.
         """
         return {
             row.argument: read_path(result if row.source == "result" else given, row.path)
             for row in self.assign
-            if row.source == "result" or given is not None
+            if row.source == "result"
+            or (given is not None and (not row.path or row.path[0] in given))
         }
 
 

@@ -88,7 +88,7 @@ One value a step saves. Guide: [Your first task in code](/core/build/tasks/first
   The step may finish without it. This is Unmute's `?`. Otherwise a served finish must carry it, unless it appends.
 </ParamField>
 <ParamField path="source" type="&quot;result&quot; | &quot;input&quot;" default="&quot;result&quot;">
-  `input` reads the path from the input the model gave the step's closing tool, not from what the tool returned. It is saved when the tool succeeds, so a value is saved only once the caller said yes to its read-back. Use it when the result does not echo what the tool was given, like the time of a booking. Each closing tool of the step must take that input. A `ToolRegistry`'s own `assign` refuses it: it only has the result.
+  `input` reads the path from the input the model gave the step's closing tool, not from what the tool returned. It is saved when the tool succeeds, so a value is saved only once the caller said yes to its read-back. Use it when the result does not echo what the tool was given, like the time of a booking. One closing tool of the step must take that input. When the step ends on a tool that does not take it, the value is not saved. A `ToolRegistry`'s own `assign` refuses it: it only has the result.
 </ParamField>
 
 The finish parameter is the field itself for a one-part path. For a longer or an
