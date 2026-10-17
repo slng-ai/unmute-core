@@ -512,9 +512,21 @@ class TaskSpec(_Spec):
         """Return the finish parameters read from a parent, so the model is not offered them."""
         return {row.argument for row in self.assign if self.derived_from(row) is not None}
 
-    def values_from_result(self, result: Mapping[str, Any]) -> dict[str, Any]:
-        """Return the finish arguments a closing tool's result carries, by their paths."""
-        return {row.argument: read_path(result, row.path) for row in self.assign}
+    def values_from_result(
+        self, result: Mapping[str, Any], given: Mapping[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Return the finish arguments a closing tool's call carries, by their paths.
+
+        Args:
+            result: What the tool returned.
+            given: The input the model gave the tool. Without it, a row that reads the
+                input is left out.
+        """
+        return {
+            row.argument: read_path(result if row.source == "result" else given, row.path)
+            for row in self.assign
+            if row.source == "result" or given is not None
+        }
 
 
 class TaskGroupSpec(_Spec):

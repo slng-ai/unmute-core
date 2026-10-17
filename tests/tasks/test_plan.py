@@ -211,6 +211,11 @@ def _opening_reads(value: str) -> dict[str, Any]:
             None,
             "reads 'nobody'",
         ),
+        (
+            _bad(["tasks", 1, "assign"], [{"variable": "note", "path": ["n"], "source": "input"}]),
+            None,
+            "saves 'note' from a tool's input, but no finish rule names a tool",
+        ),
         (job(), {"note": "take_note"}, "which the agent does not run directly"),
         (job(), {"note": "find_order"}, "must assign 'note', the value it confirms"),
         (job(), {"note": "ghost"}, "which the agent does not run directly"),
@@ -228,22 +233,39 @@ def test_a_plan_refuses_names_its_state_or_tools_do_not_have(
         plan(payload, confirm=confirm)
 
 
-def test_a_confirm_line_reads_only_inputs_the_tool_takes() -> None:
-    payload = job()
-    payload["tasks"][0]["finish"][0]["confirm"] = ["Close {{input.order_number}}?"]
+def _typed_lookup() -> ToolRegistry:
+    """The job's tools, with ``lookup_order`` taking one typed input, ``order_id``."""
     schema = {"type": "object", "properties": {"order_id": {"type": "string"}}}
     tools = registry()
-    typed = ToolRegistry(
+    return ToolRegistry(
         [
             ToolSpec("lookup_order", "Find an order.", schema, AnyResult, Canned()),
             tools.get("search_web"),
             tools.get("normalize"),
         ]
     )
+
+
+def test_a_confirm_line_reads_only_inputs_the_tool_takes() -> None:
+    payload = job()
+    payload["tasks"][0]["finish"][0]["confirm"] = ["Close {{input.order_number}}?"]
     with pytest.raises(ValueError, match="asks about 'order_number' before 'lookup_order' runs"):
-        plan(payload, tools=typed)
+        plan(payload, tools=_typed_lookup())
     payload["tasks"][0]["finish"][0]["confirm"] = ["Close {{input.order_id}}?"]
-    assert plan(payload, tools=typed)
+    assert plan(payload, tools=_typed_lookup())
+
+
+def test_a_step_saves_only_inputs_its_closing_tool_takes() -> None:
+    payload = job()
+    payload["tasks"][0]["assign"][0] = {
+        "variable": "order_id",
+        "path": ["order_number"],
+        "source": "input",
+    }
+    with pytest.raises(ValueError, match="input 'order_number', which 'lookup_order' does not"):
+        plan(payload, tools=_typed_lookup())
+    payload["tasks"][0]["assign"][0]["path"] = ["order_id"]
+    assert plan(payload, tools=_typed_lookup())
 
 
 class _Order(BaseModel):

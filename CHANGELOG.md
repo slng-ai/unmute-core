@@ -9,6 +9,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Added
 
 - `unmute_core.testing`: the scenario runner the examples use now ships in the library. `python -m unmute_core.testing converse livekit agent scenarios/*.json` runs whole calls through your own project on its real model, and `smoke` runs one offline turn. `unmute_core.testing.Scenario` is the scenario format, and it refuses a key it does not know. See `docs/core/reference/testing.mdx`.
+- `Assign(source="input")`: a step saves a value from the input its closing tool ran with, once the tool succeeds. A receipt line can then read it as a State value, like `{{order_id}}`, when the result does not echo it.
 
 ## 0.15.0
 

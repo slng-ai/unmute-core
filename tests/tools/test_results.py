@@ -68,6 +68,10 @@ def _assign(*rows: Assign) -> dict[str, Any]:
         ),
         (_assign(Assign(variable="order", path=("dew",))), "reads result.dew"),
         (
+            _assign(Assign(variable="order_number", path=("order_id",), source="input")),
+            "a tool's own save reads its result",
+        ),
+        (
             _assign(Assign(variable="count", path=("due",))),
             "the result holds Date and the State value holds int",
         ),

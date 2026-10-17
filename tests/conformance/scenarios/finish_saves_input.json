@@ -1,0 +1,58 @@
+{
+  "name": "finish_saves_input",
+  "about": "A caller books a closing tool whose result does not echo what was booked. The step saves the order id from the input the caller said yes to, read back first, once the tool succeeds.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "close_order",
+        "when": "The caller wants to close an order.",
+        "instructions": "Close the order the caller names.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order_id"], "source": "input"},
+          {"variable": "status", "path": ["status"], "optional": true}
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {"found": [true]},
+            "confirm": ["Shall I close order {{input.order_id}}?"],
+            "say": ["Order {{order_id}} is {{result.status}}."]
+          }
+        ]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [{"found": true, "status": "closed"}]
+  },
+  "turns": [
+    {
+      "caller": "Please close order B-7.",
+      "model": [
+        {"site": "", "calls": [{"name": "close_order"}]},
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
+      ],
+      "spoken": ["Shall I close order B-7?"]
+    },
+    {
+      "caller": "Yes.",
+      "model": [
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}]}
+      ],
+      "spoken": ["Order B-7 is closed."]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": "B-7", "status": "closed", "note": null, "tags": []},
+    "tool_calls": [{"name": "lookup_order", "arguments": {"order_id": "B-7"}}],
+    "events": [
+      "task.started task=close_order",
+      "task.ended_on_tool task=close_order saved=order_id,status",
+      "task.completed task=close_order saved=order_id,status"
+    ]
+  }
+}

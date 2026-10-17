@@ -967,6 +967,11 @@ class ToolRegistry:
                 )
             for row in rows:
                 where = f"assign: {name} saves {row.variable}"
+                if row.source == "input":
+                    raise ValueError(
+                        f"{where} from its input, but a tool's own save reads its result. "
+                        "Save an input in the assign of the step that runs the tool"
+                    )
                 source = tool.check_result_path(row.path, where)
                 target = _state_annotation(self.state, row.variable, where)
                 if source is not None and (unfit := _unfit(source, target, append=row.append)):
