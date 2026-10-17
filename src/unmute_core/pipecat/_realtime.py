@@ -105,6 +105,10 @@ class RealtimeVoice:
     _replies: ClassVar[weakref.WeakKeyDictionary[LLMService[Any], _Replies]] = (
         weakref.WeakKeyDictionary()
     )
+    _line_next: ClassVar[weakref.WeakKeyDictionary[LLMService[Any], bool]] = (
+        weakref.WeakKeyDictionary()
+    )
+    """Per wrapped service: True while its next reply must call no tool."""
 
     def __init__(self, service: LLMService[Any]) -> None:
         """Wrap the service."""
@@ -159,7 +163,33 @@ class RealtimeVoice:
         service._llm_needs_conversation_setup = bool(context.get_messages())
         await service.queue_frame(LLMSetToolsFrame(tools=context.tools))
 
-    async def ask(self, instruction: str | None, *, wait: bool = False) -> None:
+    def line_next(self) -> None:
+        """Make the next reply the service asks for itself call no tool: it says a line.
+
+        A realtime service asks for its first reply when the context reaches it, with no
+        way to pass a ``tool_choice``. A greeting with a fixed line is that reply. With
+        its tools on, the model may call one instead of, or after, saying the line.
+        """
+        service = self.service
+        if not isinstance(service, OpenAIRealtimeLLMService):
+            return
+        marks = self._line_next
+        if service not in marks:
+            send = service.send_client_event
+
+            async def send_client_event(event: realtime_events.ClientEvent) -> None:
+                """Send the event. The reply it asks for calls no tool once marked."""
+                if isinstance(event, realtime_events.ResponseCreateEvent) and marks[service]:
+                    marks[service] = False
+                    response = event.response or realtime_events.ResponseProperties()
+                    no_tool = response.model_copy(update={"tool_choice": "none"})
+                    event = event.model_copy(update={"response": no_tool})
+                await send(event)
+
+            service.send_client_event = send_client_event  # ty: ignore[invalid-assignment]
+        marks[service] = True
+
+    async def ask(self, instruction: str | None, *, wait: bool = False, tools: bool = True) -> None:
         """Have the model reply now, told ``instruction`` on top of its own instructions.
 
         A realtime reply carries it for that reply only, as LiveKit's ``generate_reply``
@@ -170,6 +200,7 @@ class RealtimeVoice:
             instruction: What the model is told. None replies on its own instructions: a
                 live model has nothing to read, so it is skipped.
             wait: Return once the reply has ended, at most ``REPLY_WAIT_SECONDS`` later.
+            tools: False makes a realtime reply call no tool, as a fixed line needs.
 
         Raises:
             TypeError: If the service is neither.
@@ -190,7 +221,10 @@ class RealtimeVoice:
             system = llm_settings(service).system_instruction
             parts = [part for part in (system, instruction) if isinstance(part, str) and part]
             event = realtime_events.ResponseCreateEvent(
-                response=realtime_events.ResponseProperties(instructions="\n".join(parts) or None)
+                response=realtime_events.ResponseProperties(
+                    instructions="\n".join(parts) or None,
+                    tool_choice=None if tools else "none",
+                )
             )
         started = replies.started
         await cast(Any, service).send_client_event(event)
@@ -201,7 +235,7 @@ class RealtimeVoice:
     async def speak(self, line: str, *, wait: bool = False) -> None:
         """Have the model say ``line``, word for word as far as it can. See ``ask``."""
         live = isinstance(self.service, OpenAILiveLLMService)
-        await self.ask(line if live else say_line(line), wait=wait)
+        await self.ask(line if live else say_line(line), wait=wait, tools=False)
 
 
 def is_realtime(service: object) -> bool:
@@ -220,6 +254,11 @@ def speaks_itself(service: object) -> bool:
     A realtime service set to answer in text only has a TTS after it: a half cascade.
     """
     return is_realtime(service) and RealtimeVoice(cast(LLMService[Any], service)).speaks_itself
+
+
+def line_next(service: LLMService[Any]) -> None:
+    """Make the service's next reply call no tool: it says a line. See ``RealtimeVoice``."""
+    RealtimeVoice(service).line_next()
 
 
 async def wait_for_caller(service: LLMService[Any], context: LLMContext) -> None:

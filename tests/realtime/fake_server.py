@@ -71,6 +71,8 @@ class FakeRealtimeServer:
         refused: How many ``response.create`` came while a response ran. The server
             refuses them, as OpenAI's does, and the client never gets that reply.
         done: How many ``response.done`` the server has sent: one per response.
+        tools_on_lines: How many replies to a ``SAY_LINE`` instruction let the model call
+            a tool. A real model may call one instead of saying the line.
     """
 
     def __init__(self, model: ModelCall) -> None:
@@ -80,6 +82,7 @@ class FakeRealtimeServer:
         self.received: list[dict[str, Any]] = []
         self.refused = 0
         self.done = 0
+        self.tools_on_lines = 0
         self._runner: web.AppRunner | None = None
         self._port = 0
         self._connections: list[_Connection] = []
@@ -340,6 +343,9 @@ class FakeRealtimeServer:
         told = [str(message.get("content")) for message in newest if message["role"] != "assistant"]
         if said := next((text for text in [instructions, *told] if SAY_MARKER in text), None):
             text.append(said.partition(SAY_MARKER)[2])
+            offered = self._request(conn, params, instructions)
+            if offered.tools and offered.tool_choice != "none":
+                self.tools_on_lines += 1
         else:
             request = self._request(conn, params, instructions)
             self.requests.append(request)

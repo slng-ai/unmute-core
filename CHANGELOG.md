@@ -9,6 +9,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Fixed
 
 - A step tool whose own reply reads a State value, like `{{deadline}}`, no longer fails when the plan is built. `ToolRegistry.only()` now keeps the registry's State, as every step's tools are narrowed with it.
+- A fixed line said by a realtime model that speaks itself calls no tool now. This covers the greeting, announce lines, finish lines, handoff lines and idle nudges. Before, the model could call a tool while it said hello, and answer a question nobody had asked yet. LiveKit's `speak` and Pipecat's line requests send `tool_choice: "none"`. On Pipecat, `open_call` marks the first reply the service creates, which is the greeting's.
 
 ## 0.16.0
 
