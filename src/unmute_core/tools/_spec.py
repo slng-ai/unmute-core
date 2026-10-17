@@ -1017,8 +1017,7 @@ class ToolRegistry:
 
         The rows of a tool it leaves out are dropped. Everything kept was checked already.
         """
-        copied = ToolRegistry(tools)
-        copied.state = self.state
+        copied = ToolRegistry(tools, state=self.state)
         copied.assign = MappingProxyType(
             {name: rows for name, rows in self.assign.items() if name in copied}
         )
