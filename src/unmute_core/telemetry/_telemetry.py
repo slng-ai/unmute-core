@@ -10,6 +10,7 @@ import json
 import logging
 import math
 import time
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from datetime import UTC, datetime
@@ -193,6 +194,8 @@ class Telemetry:
         self._described: dict[str, str] = {}
         self._turn: Span | None = None
         self._transcript: list[dict[str, str]] = []
+        self._requests: Counter[int] = Counter()
+        self._cut: Counter[int] = Counter()
 
     def _start(
         self,
@@ -299,9 +302,13 @@ class Telemetry:
             llm_ttft: From the model request to its first token.
             tts_ttfb: From the first text sent to TTS to its first audio.
             error: The error type, when the turn failed.
+
+        The turn also shows how many model requests it made, ``turn.llm_requests``, and how
+        many of them were cut off, ``turn.llm_requests_cut``. A line code spoke needs none.
         """
         if span is self._turn:
             self._turn = None
+        turn = span.get_span_context().span_id
         lines = [line for line in agent_lines if line]
         if user_text:
             self._transcript.append({"role": "user", "content": user_text})
@@ -317,6 +324,8 @@ class Telemetry:
                 "turn.eou_seconds": _seconds(eou),
                 "turn.llm_ttft_seconds": _seconds(llm_ttft),
                 "turn.tts_ttfb_seconds": _seconds(tts_ttfb),
+                "turn.llm_requests": self._requests.pop(turn, 0),
+                "turn.llm_requests_cut": self._cut.pop(turn, 0),
             },
             error,
         )
@@ -344,6 +353,8 @@ class Telemetry:
             started_at: When the request started, in seconds since the epoch, for a
                 request reported once it is over, like a realtime model's reply. None is now.
         """
+        if parent is not None:
+            self._requests[parent.get_span_context().span_id] += 1
         return self._start(
             MODEL_SPAN,
             parent,
@@ -389,6 +400,8 @@ class Telemetry:
             interrupted: True when the reply was cut off before it finished, like a reply
                 the caller spoke over. Langfuse shows the span as a warning that says so.
         """
+        if interrupted and (parent := getattr(span, "parent", None)) is not None:
+            self._cut[parent.span_id] += 1
         output = (
             _json({"role": "assistant", "content": text, "tool_calls": list(tool_calls)})
             if tool_calls

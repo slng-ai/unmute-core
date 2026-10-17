@@ -49,6 +49,8 @@ DEFAULT_ATTRIBUTES = frozenset(
         "turn.eou_seconds",
         "turn.llm_ttft_seconds",
         "turn.tts_ttfb_seconds",
+        "turn.llm_requests",
+        "turn.llm_requests_cut",
         "unmute.prompt.site",
         "unmute.upstream.provider",
         "unmute.task.name",

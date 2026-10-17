@@ -266,6 +266,7 @@ async def run(scenario: Scenario, *, voice: bool = False) -> dict[str, Any]:
         voice: Speak each caller line instead of typing it.
     """
     run = new_run(scenario)
+    run.voice = voice
     context = LLMContext()
     stop = SpeechTimeoutUserTurnStopStrategy(user_speech_timeout=0.01)
     aggregators = LLMContextAggregatorPair(

@@ -1,20 +1,24 @@
 """Run a conformance scenario on the LiveKit adapter: a text-only ``AgentSession``.
 
 No STT, TTS or room. The session's transcription output stands in for the speaker: LiveKit
-sends both ``say()`` lines and model replies to it when there is no audio.
+sends both ``say()`` lines and model replies to it when there is no audio. ``run`` speaks
+each caller line: it ends the caller's turn the way LiveKit does once STT heard it, with
+the speech timings. ``run_plain`` types it.
 """
 
 import asyncio
 import contextlib
 import json
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 import pytest
 from livekit import rtc
-from livekit.agents import NOT_GIVEN, Agent, AgentSession, RunContext, function_tool, llm
+from livekit.agents import NOT_GIVEN, Agent, AgentSession, RunContext, RunResult, function_tool, llm
 from livekit.agents.llm._realtime.openai import RealtimeModel
-from livekit.agents.voice.events import CloseReason
+from livekit.agents.voice.audio_recognition import _EndOfTurnInfo, _EndOfTurnMetrics
+from livekit.agents.voice.events import CloseReason, SpeechCreatedEvent
 from livekit.agents.voice.io import AudioOutput, AudioOutputCapabilities, TextOutput
 
 from tests.conformance.scenario import (
@@ -111,8 +115,10 @@ async def run_realtime(scenario: Scenario) -> dict[str, Any]:
 
 
 async def run(scenario: Scenario) -> dict[str, Any]:
-    """Run every turn of the scenario and return what the agent did."""
-    return await run_on(scenario, new_run(scenario))
+    """Run every turn of the scenario, the caller speaking, and return what the agent did."""
+    run = new_run(scenario)
+    run.voice = True
+    return await run_on(scenario, run)
 
 
 async def run_on(
@@ -229,7 +235,7 @@ async def _turns(
     for number, turn in enumerate(scenario.turns):
         run.model.script(turn.model)
         said = len(lines.lines)
-        await session.run(user_input=turn.caller)
+        await (_speak(session, turn.caller) if run.voice else session.run(user_input=turn.caller))
         if settle is not None:
             await settle()
             if isinstance(agent := session.current_agent, UnmuteAgent):
@@ -239,6 +245,43 @@ async def _turns(
             await _taken(run)
         run.spoken.append(lines.lines[said:])
         run.model.problems += run.unused()
+
+
+async def _speak(session: AgentSession, text: str) -> None:
+    """End a spoken caller turn as LiveKit does once STT heard it, and wait for the reply.
+
+    The caller stopped speaking just now, so the caller's message carries the timings a
+    real call has. LiveKit's run watches only the speech it starts itself, so it watches
+    the turn's speech here.
+    """
+    stopped = time.time()
+    run: RunResult[None] = RunResult(user_input=text, output_type=None, session=session)
+    session._global_run_state = run
+
+    def watch(event: SpeechCreatedEvent) -> None:
+        """Let the run wait for this speech too."""
+        run._watch_handle(event.speech_handle)
+
+    activity = session._activity
+    assert activity is not None
+    session.on("speech_created", watch)
+    activity.on_end_of_turn(
+        _EndOfTurnInfo(
+            skip_reply=False,
+            new_transcript=text,
+            transcript_confidence=1.0,
+            metrics=_EndOfTurnMetrics(
+                started_speaking_at=stopped - 1.0,
+                stopped_speaking_at=stopped,
+                transcription_delay=0.0,
+                end_of_turn_delay=0.0,
+            ),
+        )
+    )
+    try:
+        await run
+    finally:
+        session.off("speech_created", watch)
 
 
 async def _closing(session: AgentSession) -> None:

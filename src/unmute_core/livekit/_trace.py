@@ -3,8 +3,9 @@
 ``conversation`` starts with the agent and ends when the session closes, with the transcript
 and the call state. A ``turn`` opens when the agent starts a reply or the caller speaks,
 whichever LiveKit reports first, and the agent's message ends it, with the latencies LiveKit
-puts on each message. The caller's message also gives the ``stt`` span, from its own
-timings. A tool run is an ``llm_tool_call``. The ``llm`` spans come from ``llm_node``, the
+puts on each message. The turn's e2e runs from the caller's end of speech to the agent's
+first speech, whoever wrote the line: LiveKit puts ``e2e_latency`` only on a model's reply.
+The caller's message also gives the ``stt`` span, from its own timings. A tool run is an ``llm_tool_call``. The ``llm`` spans come from ``llm_node``, the
 ``tts`` spans from ``tts_node`` and the ``task_step`` spans from the step loop.
 
 When the caller speaks over the agent, LiveKit's adaptive detector judges it an
@@ -26,6 +27,7 @@ from livekit.agents.metrics import RealtimeModelMetrics
 from livekit.agents.voice import (
     Agent,
     AgentSession,
+    AgentStateChangedEvent,
     CloseEvent,
     ConversationItemAddedEvent,
     MetricsCollectedEvent,
@@ -95,6 +97,7 @@ class SessionTrace:
         self._callers: dict[str, llm.ChatMessage] = {}
         self._replies: list[llm.ChatMessage] = []
         self._lines: list[str] = []
+        self._first_speech: float | None = None
         self._language: str | None = None
         self._tools: dict[str, Span] = {}
         self._session: AgentSession | None = None
@@ -116,6 +119,7 @@ class SessionTrace:
         session.on("tool_execution_updated", self._tool_updated)
         session.on("overlapping_speech", self.over_agent)
         session.on("metrics_collected", self._metrics)
+        session.on("agent_state_changed", self._agent_state)
         session.on("close", self._closed)
 
     def _metrics(self, event: MetricsCollectedEvent) -> None:
@@ -141,6 +145,11 @@ class SessionTrace:
             ttfb=metrics.ttft if metrics.ttft >= 0 else None,
             interrupted=metrics.cancelled,
         )
+
+    def _agent_state(self, event: AgentStateChangedEvent) -> None:
+        """Keep when the agent first starts speaking in the turn, for its e2e."""
+        if event.new_state == "speaking" and self._first_speech is None:
+            self._first_speech = event.created_at
 
     def _transcribed(self, event: UserInputTranscribedEvent) -> None:
         """Keep the language of the caller's last final transcript for its ``stt`` span."""
@@ -201,6 +210,7 @@ class SessionTrace:
         if not self._turn.caller_open:
             self._end_turn()
             self._turn.start()
+            self._first_speech = None
         words = message.text_content or ""
         self._callers = {
             key: earlier
@@ -238,11 +248,14 @@ class SessionTrace:
             values = (m.metrics.get(name) for m in messages)
             return next((value for value in values if isinstance(value, float)), None)
 
+        stops = [m.metrics.get("stopped_speaking_at") for m in callers]
+        stop = max((at for at in stops if isinstance(at, float)), default=None)
+        since_stop = self._first_speech - stop if self._first_speech and stop else None
         self._turn.end(
             user_text=" ".join(m.text_content or "" for m in callers).strip() or None,
             agent_lines=self._lines,
             interrupted=any(reply.interrupted for reply in self._replies),
-            e2e=first(self._replies, "e2e_latency"),
+            e2e=since_stop if since_stop is not None else first(self._replies, "e2e_latency"),
             stt_final=first(callers, "transcription_delay"),
             eou=first(callers, "end_of_turn_delay"),
             llm_ttft=first(self._replies, "llm_node_ttft"),

@@ -9,6 +9,7 @@ agents, which handoff tools give the call to.
 
 import asyncio
 import json
+from collections import Counter
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -754,6 +755,8 @@ class Run:
         agent: The main agent that holds the call. The driver sets it at the end.
         ending: The requests made before the call's end, once it is scripted.
         ended: The agent ended the call before the driver did. The driver sets it.
+        voice: The driver speaks each caller line, so a turn the agent answers aloud has
+            its e2e: from the caller's end of speech to the agent's first speech.
     """
 
     plans: dict[str, TaskPlan]
@@ -773,6 +776,7 @@ class Run:
     opening: list[str] = field(default_factory=list)
     line_said: list[str] = field(default_factory=list)
     realtime: bool = False
+    voice: bool = False
     dev: list[dict[str, Any]] = field(default_factory=list)
     controls: set[str] = field(default_factory=set)
 
@@ -890,10 +894,27 @@ class Run:
         """Check one turn per caller line, with that line in and the lines said out.
 
         Every span of a turn's work sits in a turn. The call's input is the transcript, one
-        entry per line, and its output is how the call ended and the final state.
+        entry per line, and its output is how the call ended and the final state. Each turn
+        counts the ``llm`` spans that started in it as its model requests. A spoken caller's
+        turn has its e2e. On Pipecat, a request or a line after the call's end, like the
+        apology for a failure, comes once the last turn has ended, so it counts in neither.
         """
-        turns = [dict(span.attributes or {}) for span in spans if span.name == "turn"]
-        problems = []
+        turn_spans = [span for span in spans if span.name == "turn"]
+        turns = [dict(span.attributes or {}) for span in turn_spans]
+        ends = {span.context.span_id: span.end_time or 0 for span in turn_spans}
+        made = Counter(
+            span.parent.span_id
+            for span in spans
+            if span.name == "llm"
+            and span.parent
+            and (span.start_time or 0) <= ends.get(span.parent.span_id, 0)
+        )
+        problems = [
+            f"turn {number} shows {shown} model requests in {made[span.context.span_id]} llm spans"
+            for number, span in enumerate(turn_spans, 1)
+            if (shown := (span.attributes or {}).get("turn.llm_requests"))
+            != made[span.context.span_id]
+        ]
         callers: list[str | None] = [*([None] if self.opening else []), *self.callers]
         spoken = [*([self.opening] if self.opening else []), *self.spoken]
         if len(turns) != len(callers):
@@ -903,6 +924,15 @@ class Run:
                 problems.append(f"turn {number} shows the caller {turn.get('input.value')!r}")
             if turn.get("output.value") != (" ".join(said) or None):
                 problems.append(f"turn {number} shows the agent {turn.get('output.value')!r}")
+            last = number == len(turns)
+            if (
+                self.voice
+                and caller is not None
+                and said
+                and not (last and self.ended)
+                and "turn.e2e_seconds" not in turn
+            ):
+                problems.append(f"turn {number} has no e2e")
         names = {span.context.span_id: span.name for span in spans}
         problems += [
             f"{span.name} sits in {names.get(span.parent.span_id) if span.parent else None}"
