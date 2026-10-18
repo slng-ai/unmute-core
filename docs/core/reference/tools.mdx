@@ -629,6 +629,45 @@ checked. A second lookup cannot send it somewhere else.
 2. Turn it on only for your own internal service, or for `localhost` while you develop.
 3. Never turn it on when someone else writes the URL.
 
+## MCP servers
+
+```python
+from unmute_core.tools import McpServer, WebhookAuth
+
+search = McpServer(
+    "search",
+    url_env="SEARCH_MCP_URL",
+    auth=WebhookAuth.bearer("SEARCH_TOKEN"),
+    tools=("web_search",),
+)
+```
+
+`McpServer` holds an MCP server's settings. It is the same on both frameworks. Each adapter turns it into its own client: `mcp_toolset` on [LiveKit](/core/reference/livekit#native-tools-and-mcp) and `mcp_tools` on [Pipecat](/core/reference/pipecat#native-tools-and-mcp). Both need the `mcp` extra.
+
+<ParamField path="name" type="str" required>
+  The source's name. A LiveKit task lists it in `native_tools`.
+</ParamField>
+<ParamField path="url" type="str">
+  The server's address. Set it or `url_env`, not both.
+</ParamField>
+<ParamField path="url_env" type="str">
+  The UPPER_SNAKE environment variable that holds the address, read when the client is built.
+</ParamField>
+<ParamField path="transport" type='"sse" | "streamable_http" | None' default="None">
+  None picks streamable HTTP for a path that ends in `/mcp`, and SSE for any other.
+</ParamField>
+<ParamField path="auth" type="WebhookAuth | None" default="None">
+  The credential sent with every request, as for a [webhook](#webhookauth).
+</ParamField>
+<ParamField path="tools" type="tuple[str, ...] | None" default="None">
+  The server tools to offer. None offers every tool the server lists.
+</ParamField>
+<ParamField path="timeout" type="float" default="30">
+  Seconds to wait for the connection and for each call. LiveKit's own default is 5.
+</ParamField>
+
+A missing address or token raises `McpServerError` with the variable's name, before the call starts.
+
 ## Built-in tools
 
 ```python

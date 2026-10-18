@@ -25,6 +25,7 @@ from unmute_core.tools._executors import (
     webhook_tool,
 )
 from unmute_core.tools._lines import Assign, SpokenLines, ToolReply
+from unmute_core.tools._mcp import McpServer, McpServerError, McpTransport
 from unmute_core.tools._save import (
     SAVE_VALUES_TOOL,
     free_values,
@@ -62,6 +63,9 @@ __all__ = [
     "Done",
     "LinePicker",
     "LocalHandler",
+    "McpServer",
+    "McpServerError",
+    "McpTransport",
     "ParameterSchemaError",
     "SpokenLines",
     "ToolEffect",

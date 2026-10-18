@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- MCP tools on both frameworks. `McpServer` in `unmute_core.tools` holds a server's address, transport, credential, tool filter and timeout. `unmute_core.livekit.mcp_toolset` turns it into a LiveKit toolset and `unmute_core.pipecat.mcp_tools` into Pipecat tools. Both connect before they return, so a server that is down raises `McpServerError` before the call starts: LiveKit alone would only log it and run the agent without the tools. On LiveKit the model reads each result's text, as on Pipecat, not LiveKit's JSON of each part. The new `mcp` extra installs the `mcp` package: `unmute-core[livekit,mcp]`.
+
 ## 0.16.1
 
 This release fixes one bug from 0.16.0. No API changed. `unmute_core.require("0.16.0")` accepts 0.16.1, so code built for 0.16.0 needs no change.

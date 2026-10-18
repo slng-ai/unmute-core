@@ -1063,6 +1063,7 @@ requires-dist = [
     { name = "llama-index-core", marker = "extra == 'knowledge'", specifier = ">=0.14,<0.15" },
     { name = "llama-index-readers-file", marker = "extra == 'knowledge'", specifier = ">=0.5,<0.8" },
     { name = "llama-index-retrievers-bm25", marker = "extra == 'knowledge'", specifier = ">=0.6,<0.9" },
+    { name = "mcp", marker = "extra == 'mcp'", specifier = ">=2.2,<3" },
     { name = "openai", marker = "extra == 'slng'", specifier = ">=1.109,<4" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.40,<2" },
     { name = "opentelemetry-sdk", specifier = ">=1.40,<2" },
@@ -1071,7 +1072,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "pydantic-settings", specifier = ">=2.8,<3" },
 ]
-provides-extras = ["livekit", "pipecat", "slng", "knowledge"]
+provides-extras = ["livekit", "pipecat", "slng", "mcp", "knowledge"]
 
 [package.metadata.requires-dev]
 dev = [

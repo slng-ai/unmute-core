@@ -173,20 +173,20 @@ To hold the caller until the greeting plays, add a `GreetingHold`. On a phone ca
 
 ## Add Pipecat tools, MCP and an end-call tool
 
-`native_tools` are Pipecat `FunctionSchema`s with their own handlers. A Pipecat MCP client needs no new class:
+`native_tools` are Pipecat `FunctionSchema`s with their own handlers. `mcp_tools` turns an MCP server into them. It needs the `mcp` extra:
 
 ```python
-from pipecat.services.mcp_service import MCPClient
-from unmute_core.pipecat import end_call_tool
+from unmute_core.pipecat import end_call_tool, mcp_tools
+from unmute_core.tools import McpServer
 
-tools = await MCPClient(...).tools()
+tools = await mcp_tools(McpServer("crm", url_env="CRM_MCP_URL", tools=("get_customer",)))
 ending = end_call_tool(
     "End the call once the caller says they are done. In the same reply as this call, "
     "and before it, say one short goodbye in your own words.",
     "Thanks for calling. Goodbye.",
     lambda: flows.reply_text,
 )
-flows = UnmuteFlows(..., native_tools=[*tools.standard_tools, ending])
+flows = UnmuteFlows(..., native_tools=[*tools, ending])
 ```
 
 1. The main agent gets every tool you pass, like a handoff tool. A step gets only the names its task lists: `TaskSpec(native_tools=("get_customer",), ...)`.

@@ -136,17 +136,21 @@ On a phone call, read the caller's number with `sip_call_info`. See [Phone calls
 
 ## Add LiveKit tools and MCP
 
-`native_tools` gives the main agent LiveKit tools as they are. A LiveKit MCP toolset is one:
+`native_tools` gives the main agent LiveKit tools as they are. `mcp_toolset` turns an MCP server into one. It needs the `mcp` extra:
 
 ```python
-from livekit.agents import mcp
+from unmute_core.livekit import mcp_toolset
+from unmute_core.tools import McpServer, WebhookAuth
 
-crm = mcp.MCPToolset(id="crm", mcp_server=mcp.MCPServerHTTP(url="https://crm.example.com/mcp"))
+crm = await mcp_toolset(
+    McpServer("crm", url_env="CRM_MCP_URL", auth=WebhookAuth.bearer("CRM_TOKEN"), tools=("get_customer",))
+)
 agent = UnmuteAgent(spec, state=state, native_tools=[crm])
 ```
 
 1. The main agent gets every tool you pass.
 2. A step gets only the toolsets its task lists, by id: `TaskSpec(native_tools=("crm",), ...)`.
+3. `mcp_toolset` connects before it returns. A server that is down raises `McpServerError` before the call starts. LiveKit alone would only log it and run the agent without the tools.
 
 ## Before you ship
 

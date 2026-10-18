@@ -33,6 +33,7 @@ from unmute_core.livekit._coval import correlate_coval
 from unmute_core.livekit._dev import DevObserver
 from unmute_core.livekit._history import shape_chat_ctx
 from unmute_core.livekit._idle import idle_nudges
+from unmute_core.livekit._mcp import mcp_toolset
 from unmute_core.livekit._model import LiveKitModel, ModelCallLLM, filled_llm, traced_llm
 from unmute_core.livekit._phone import BRIEFING_PERSONA, DialError, Dialled, SipLine
 from unmute_core.livekit._tools import function_tools
@@ -60,6 +61,7 @@ __all__ = [
     "idle_nudges",
     "interruption",
     "max_duration",
+    "mcp_toolset",
     "open_call",
     "shape_chat_ctx",
     "sip_call_info",

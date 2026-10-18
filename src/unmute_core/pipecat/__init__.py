@@ -47,6 +47,7 @@ from unmute_core.pipecat._interruption import (
     interruption,
     user_mute_strategies,
 )
+from unmute_core.pipecat._mcp import mcp_tools
 from unmute_core.pipecat._model import ModelCallLLMService
 from unmute_core.pipecat._phone import (
     DailySipLine,
@@ -89,6 +90,7 @@ __all__ = [
     "greeting_frames",
     "interruption",
     "max_duration",
+    "mcp_tools",
     "open_call",
     "reply_text",
     "smart_turn_params",
