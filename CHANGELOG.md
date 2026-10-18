@@ -4,6 +4,18 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## 0.17.1
+
+This release fixes one bug from 0.17.0. No API changed. `unmute_core.require("0.17.0")` accepts 0.17.1, so code built for 0.17.0 needs no change.
+
+### Highlights
+
+- **Reply latency on LiveKit tool turns.** A tool's reply line now gets a `reply_latency`, so the dev page shows how long the caller waited on that turn.
+
+### Fixed
+
+- On LiveKit, a line said with `say()`, like a tool's reply, now gets a `reply_latency` dev record. LiveKit puts `e2e_latency` only on a model reply, and on `say()` only inside `on_enter`. So most tool turns showed no "Caller waited" on the dev page. The observer now takes the time from the caller's `stopped_speaking_at` to the reply's `started_speaking_at`, which is the same sum LiveKit does. Its source is `livekit-chat-message.started_speaking_at` (#38).
+
 ## 0.17.0
 
 This release adds MCP tools on both frameworks and moves to LiveKit Agents 1.8.8. No API changed. Change `unmute_core.require("0.16.0")` to `require("0.17.0")` when you upgrade.
