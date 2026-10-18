@@ -38,6 +38,7 @@ from unmute_core.tasks._values import (
 )
 from unmute_core.tools import ToolRegistry
 from unmute_core.tools._lines import result_paths
+from unmute_core.tools._spec import check_saves
 
 EntryHistory = History | Literal["caller_turn"]
 RESUMED_SCOPE = "shared"
@@ -181,6 +182,7 @@ class TaskPlan:
         self._check_reads(task, where, values)
         self._check_results(task, where)
         self._check_inputs(task, where)
+        self._check_outcome_rows(task, where)
         for rule in task.finish:
             schema = self.tools.get(rule.tool).model_parameters
             if schema.get("additionalProperties") is not False and not schema.get("properties"):
@@ -212,6 +214,34 @@ class TaskPlan:
                 f"{where} saves '{row.variable}' from the input '{row.path[0]}', which no "
                 f"closing tool takes ({tools}). Name an input one of them takes"
             )
+
+    def _check_outcome_rows(self, task: TaskSpec, where: str) -> None:
+        """Check the rows a finish rule or a reply saves against its tool and the State.
+
+        A rule's row reads what its tool returns or takes. A reply's row saves a result
+        into a value of the State.
+
+        Raises:
+            ValueError: Naming the task, the tool and the value.
+        """
+        for rule in task.finish:
+            tool = self.tools.get(rule.tool)
+            for row in rule.assign:
+                here = f"{where}: a finish rule on '{rule.tool}' saves '{row.variable}'"
+                if row.source == "result":
+                    tool.check_result_path(row.path, f"{here}, but it")
+                elif row.path and not self._takes(rule.tool, row.path[0]):
+                    raise ValueError(
+                        f"{here} from the input '{row.path[0]}', which the tool does not take. "
+                        "Name an input it takes"
+                    )
+        for reply in task.replies:
+            if reply.tool is None:  # TaskSpec refuses a reply with no tool
+                continue
+            if any(row.variable == CALL for row in reply.assign):
+                raise reserved_name_error(where)
+            here = f"{where}: a reply to '{reply.tool}'"
+            check_saves(self.tools.get(reply.tool), reply.assign, self.state, here)
 
     def _takes(self, tool: str, field: str) -> bool:
         """Return True when the tool's input has the field, or is open to any field."""

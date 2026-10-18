@@ -424,7 +424,12 @@ def _join_words(words: Sequence[str]) -> str:
 
 
 def _success_text(rules: Sequence[FinishRule]) -> str:
-    """What a tool must return to end the step, as ``success_matches`` reads it."""
+    """What a tool must return to end the step, as ``success_matches`` reads it.
+
+    A rule with no success fields ends the step on any result.
+    """
+    if not all(rule.success for rule in rules):
+        return "any result"
     where = [
         " and ".join(
             f"`{field}` is " + _join_words([f"`{success_word(value)}`" for value in values])

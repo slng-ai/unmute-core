@@ -31,7 +31,7 @@ from unmute_core.tools._lines import (
     RECEIPT_PLACEHOLDER,
     Assign,
     FieldName,
-    ResultMatch,
+    MatchValues,
     SpokenLine,
     ToolName,
     ToolReply,
@@ -208,21 +208,50 @@ class FinishRule(_Spec):
     date after "for" or "to", never after "on". An ``enum`` value is said as words:
     "hair-color" is "hair color".
 
+    The rules of one tool are tried in order, and the first that matches decides: its
+    ``say`` line is spoken, its ``assign`` rows are saved, and the step ends as ``ends``
+    says. A rule with no ``assign`` rows of its own that ends ``completed`` saves every row
+    of the task's ``assign``, as packages written before rules had rows expect.
+
     Attributes:
         tool: The tool, one of the step's own.
         success: Result field to the values that count as success. Every field must hold
-            one of its values.
+            one of its values. Empty only with ``ends="failed"``: it matches every result,
+            like an author's ``else``.
         say: Lines spoken from the result, with ``{{result.<field>}}`` and
             ``{{variable}}`` placeholders. One is picked each time.
         confirm: Lines asked before the tool runs, with ``{{input.<field>}}`` and
             ``{{variable}}`` placeholders. One is picked each time. They belong to the
             tool: every rule of the tool gives the same ones.
+        assign: The values a matching result saves, each one the task's ``assign``
+            declares. Read from the result, or from the input the tool ran with.
+        ends: How the step ends: ``completed``, or ``failed``, which stops a group unless
+            the step is ``non_blocking``.
     """
 
     tool: ToolName
-    success: Annotated[ResultMatch, AfterValidator(_distinct_success)]
+    success: Annotated[
+        dict[FieldName, MatchValues], Field(max_length=16), AfterValidator(_distinct_success)
+    ]
     say: Annotated[tuple[SpokenLine, ...], AfterValidator(_say)] = ()
     confirm: Annotated[tuple[SpokenLine, ...], AfterValidator(_confirm)] = ()
+    assign: tuple[Assign, ...] = ()
+    ends: Literal["completed", "failed"] = "completed"
+
+    @model_validator(mode="after")
+    def _matches_some_results(self) -> Self:
+        """Refuse a rule that completes the step on every result."""
+        if not self.success and self.ends == "completed":
+            raise ValueError(
+                f"a finish rule on '{self.tool}' has no success fields, so every result would "
+                "complete the step. Name the fields that count as success, or set ends: failed"
+            )
+        return self
+
+    @property
+    def saves(self) -> tuple[Assign, ...] | None:
+        """The rows a match saves, or None when it saves every row of the task's ``assign``."""
+        return None if not self.assign and self.ends == "completed" else self.assign
 
     @property
     def say_variables(self) -> set[str]:
@@ -463,6 +492,19 @@ class TaskSpec(_Spec):
                     f"{name} gives '{rule.tool}' two different confirm lines. "
                     "Give every rule of that tool the same ones"
                 )
+        declared = {row.variable: row for row in self.assign}
+        for rule in self.finish:
+            for row in rule.assign:
+                if row.variable not in declared:
+                    raise ValueError(
+                        f"{name}: a finish rule on '{rule.tool}' saves '{row.variable}', which "
+                        "the task's assign does not declare. Add it to the task's assign"
+                    )
+                if row.append != declared[row.variable].append:
+                    raise ValueError(
+                        f"{name}: a finish rule on '{rule.tool}' saves '{row.variable}' with "
+                        "append set differently from the task's assign. Make them the same"
+                    )
         return self
 
     def _check_opening(self, opening: OpeningTool) -> None:
@@ -513,7 +555,10 @@ class TaskSpec(_Spec):
         return {row.argument for row in self.assign if self.derived_from(row) is not None}
 
     def values_from_result(
-        self, result: Mapping[str, Any], given: Mapping[str, Any] | None = None
+        self,
+        result: Mapping[str, Any],
+        given: Mapping[str, Any] | None = None,
+        rows: Sequence[Assign] | None = None,
     ) -> dict[str, Any]:
         """Return the finish arguments a closing tool's call carries, by their paths.
 
@@ -522,10 +567,16 @@ class TaskSpec(_Spec):
             given: The input the model gave the tool. A row that reads an input this
                 call did not carry is left out, like the day of a booking when the step
                 ended on a different tool.
+            rows: The rows to read, like a finish rule's own, each keyed by the finish
+                parameter of the task's row for the same value. Every row of the task when
+                None.
         """
+        arguments = {row.variable: row.argument for row in self.assign}
         return {
-            row.argument: read_path(result if row.source == "result" else given, row.path)
-            for row in self.assign
+            arguments[row.variable]: read_path(
+                result if row.source == "result" else given, row.path
+            )
+            for row in (self.assign if rows is None else rows)
             if row.source == "result"
             or (given is not None and (not row.path or row.path[0] in given))
         }

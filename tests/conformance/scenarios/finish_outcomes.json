@@ -1,0 +1,76 @@
+{
+  "name": "finish_outcomes",
+  "about": "A caller closes one order, then asks to close one that does not exist. The first rule that matches the closing tool's result decides: a found order saves only that rule's value and completes the step, and any other result saves the reason, says its line and fails the step.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "tasks": [
+      {
+        "name": "close_order",
+        "when": "The caller wants to close an order.",
+        "instructions": "Close the order the caller names.",
+        "tools": ["lookup_order"],
+        "assign": [
+          {"variable": "order_id", "path": ["order_id"], "source": "input", "optional": true},
+          {"variable": "status", "path": ["status"], "optional": true},
+          {"variable": "note", "path": ["reason"], "optional": true}
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {"found": [true]},
+            "assign": [{"variable": "status", "path": ["status"]}],
+            "say": ["That order is now {{result.status}}."]
+          },
+          {
+            "tool": "lookup_order",
+            "success": {},
+            "ends": "failed",
+            "assign": [{"variable": "note", "path": ["reason"]}],
+            "say": ["I could not close that order."]
+          }
+        ]
+      }
+    ],
+    "task_only_tools": ["lookup_order"]
+  },
+  "tool_results": {
+    "lookup_order": [
+      {"found": true, "status": "closed"},
+      {"found": false, "reason": "no such order"}
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Please close order A-12.",
+      "model": [
+        {"site": "", "calls": [{"name": "close_order"}]},
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "A-12"}}]}
+      ],
+      "spoken": ["That order is now closed."]
+    },
+    {
+      "caller": "Now close order Z-9.",
+      "model": [
+        {"site": "", "calls": [{"name": "close_order"}]},
+        {"site": "task:close_order", "calls": [{"name": "lookup_order", "arguments": {"order_id": "Z-9"}}]},
+        {"site": "", "text": "Can I help with another order?"}
+      ],
+      "spoken": ["I could not close that order.", "Can I help with another order?"]
+    }
+  ],
+  "expect": {
+    "state": {"order_id": null, "status": "closed", "note": "no such order", "tags": []},
+    "tool_calls": [
+      {"name": "lookup_order", "arguments": {"order_id": "A-12"}},
+      {"name": "lookup_order", "arguments": {"order_id": "Z-9"}}
+    ],
+    "events": [
+      "task.started task=close_order",
+      "task.ended_on_tool task=close_order saved=status",
+      "task.completed task=close_order saved=status",
+      "task.started task=close_order",
+      "task.ended_on_tool task=close_order saved=note",
+      "task.failed task=close_order saved=note"
+    ]
+  }
+}

@@ -26,7 +26,36 @@ When the model has the service, it calls `finish` with `{"requested_service": "h
 
 A weak model often says "Noted, thank you" and never finishes. The library asks the model one narrow question after such a reply, so the step does not wait forever.
 
-## The finish check
+## A closing tool's outcomes
+
+A closing tool's `FinishRule`s are tried in order. The first one that matches the result decides how the step ends.
+
+```python agent.py
+from unmute_core.tasks import Assign, FinishRule
+
+finish = [
+    FinishRule(
+        tool="close_order",
+        success={"found": (True,)},
+        assign=(Assign(variable="status", path=("status",)),),
+        say=("That order is now {{result.status}}.",),
+    ),
+    FinishRule(
+        tool="close_order",
+        success={},
+        ends="failed",
+        assign=(Assign(variable="note", path=("reason",)),),
+        say=("I could not close that order.",),
+    ),
+]
+```
+
+1. A found order saves only `status` and completes the step.
+2. Any other result saves only `note`, says its line and fails the step. A group stops on it, unless the step is `non_blocking`.
+3. Each row a rule saves must be a value the task's `assign` declares.
+4. A rule with no `assign` rows that ends `completed` saves every row of the task's `assign`.
+5. An empty `success` matches every result. Only a rule that ends `failed` may have one.
+
 
 Weak models often say "Noted, thank you" and stop, without calling `finish`.
 The step then waits for a save that never comes.
