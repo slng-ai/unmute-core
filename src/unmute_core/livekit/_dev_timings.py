@@ -16,6 +16,7 @@ class Timings:
         self._started_at: float | None = None
         self._first_speech_at: float | None = None
         self._caller_stopped: dict[str, float] = {}
+        self._speaking: dict[str, float] = {}
 
     def attached(self) -> None:
         """Note that the observer attached to a session now."""
@@ -61,6 +62,30 @@ class Timings:
                     scope="response",
                     exchange_id=response,
                 )
+
+    def speaking(self, response: str, at: float) -> None:
+        """Note when the agent first started speaking in a response."""
+        self._speaking.setdefault(response, at)
+
+    def settled(self, response: str) -> None:
+        """Give a response its reply latency from its first speaking state, if nothing else did.
+
+        A step receipt is said with ``add_to_chat_ctx=False``, so it never becomes a chat
+        message and ``reply`` never sees its speaking times.
+        """
+        rec = self._rec
+        started, stopped = self._speaking.pop(response, None), self._caller_stopped.get(response)
+        if started is None or stopped is None or rec.closed:
+            return
+        if rec.get("measurement", f"{response}:reply-latency") is None:
+            rec.measure(
+                f"{response}:reply-latency",
+                "reply_latency",
+                started - stopped,
+                "livekit-agent-state",
+                scope="response",
+                exchange_id=response,
+            )
 
     def reply(self, response: str, message: str, metrics: dict[str, Any]) -> None:
         """Record the timings LiveKit puts on one reply message.
