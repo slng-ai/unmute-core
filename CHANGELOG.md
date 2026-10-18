@@ -4,30 +4,39 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.18.0
+
+This release lets a tool's result save its own values and end a step as failed, gives each agent its own STT, and says a handoff line in the next agent's voice. Read "Changes that can break you" before you upgrade. Change `unmute_core.require("0.17.0")` to `require("0.18.0")` when you upgrade.
+
+### Highlights
+
+- **A rule saves its own values.** `FinishRule.assign` and `ToolReply.assign` save only what the matching result needs. So "booked" can save the booking, and "taken" can save nothing.
+- **A tool result can fail a step.** `FinishRule.ends="failed"` ends the step as failed, and a group stops on it.
+- **One STT per agent.** Each agent can listen with its own STT service, as it already speaks with its own voice. A call that changes language hands off to an agent with that language's STT and TTS.
+- **Handoff lines in the next agent's voice.** A handoff's line now plays in the voice of the agent that takes the call, and `announce` takes a list of lines.
 
 ### Changes that can break you
 
 - A handoff's `announce` line is now said in the voice of the agent that takes the call. Before, the agent that handed off said it in its own voice. A switch to a Spanish agent now sounds Spanish from its first word.
   - On LiveKit, the next agent says the line as it enters, before its first reply. It still uses `allow_interruptions=False` and stays out of the live chat.
-  - On Pipecat, the handoff waits until the old voice has said the reply that made the handoff. Then it switches the STT service and the voice, and says the line.
-- On LiveKit, a `history="summary"` handoff now writes the summary before the line plays, not while it plays. The 8 second limit still holds.
+  - On Pipecat, the handoff waits until the old voice has said the reply that made the handoff. Then it switches the STT service and the voice, and says the line (#44).
+- On LiveKit, a `history="summary"` handoff now writes the summary before the line plays, not while it plays. The 8 second limit still holds (#44).
 
 ### Added
 
-- `hand_off(announce=...)` takes a list of lines on both frameworks. One is picked each time, never the line this handoff said last, as task and tool lines are. A plain string works as before. A blank line in the list raises `ValueError`.
-- `FinishRule.assign`: the values a matching result saves. Each one must be a value the task's `assign` declares. A row reads the result, or the input the tool ran with.
-- `FinishRule.ends`: `completed` (the default) or `failed`. A rule that ends `failed` ends the step as failed and saves only its own rows. A group stops on it, unless the step is `non_blocking`.
-- A `FinishRule` that ends `failed` may have an empty `success`. It matches every result, like an author's `else`.
-- `ToolReply.assign`: the values the first matching reply saves into the State, as a tool's own `assign` does. It works on the main agent and in a task step. A row must name a value of the State and read the result.
-- Each agent can listen with its own STT service, the way it already speaks with its own voice. A call that changes language hands off to an agent with that language's STT and TTS. A call with one STT service works as before.
+- `hand_off(announce=...)` takes a list of lines on both frameworks. One is picked each time, never the line this handoff said last, as task and tool lines are. A plain string works as before. A blank line in the list raises `ValueError` (#44).
+- `FinishRule.assign`: the values a matching result saves. Each one must be a value the task's `assign` declares. A row reads the result, or the input the tool ran with (#43).
+- `FinishRule.ends`: `completed` (the default) or `failed`. A rule that ends `failed` ends the step as failed and saves only its own rows. A group stops on it, unless the step is `non_blocking` (#43).
+- A `FinishRule` that ends `failed` may have an empty `success`. It matches every result, like an author's `else` (#43).
+- `ToolReply.assign`: the values the first matching reply saves into the State, as a tool's own `assign` does. It works on the main agent and in a task step. A row must name a value of the State and read the result (#43).
+- Each agent can listen with its own STT service, the way it already speaks with its own voice. A call that changes language hands off to an agent with that language's STT and TTS. A call with one STT service works as before (#42).
   - Pipecat: put an `STTSwitcher` where the STT goes, with every agent's STT service, the first agent's first. Give it to `UnmuteFlows(stt=...)`. `hand_off(stt=...)` switches to another service at the same moment as the voice. Without `stt=`, a handoff goes back to the first service.
   - LiveKit: `UnmuteAgent(stt=...)` takes an STT plugin or a LiveKit Inference model name. None uses the session's STT, as before. The agent's task steps listen with it too, as they already speak with its voice. LiveKit starts a new STT stream on a handoff only when the next agent's STT is a different object.
 
 ### Changed
 
-- A closing tool's rules are tried in order, and the first one that matches decides. When it has `assign` rows, the step saves only those. When it has none and ends `completed`, the step saves every row of the task's `assign`, as before. So packages written before this release work unchanged.
-- The step speaks the `say` line of the first matching rule only. Before, it spoke the line of the first matching rule that had one.
+- A closing tool's rules are tried in order, and the first one that matches decides. When it has `assign` rows, the step saves only those. When it has none and ends `completed`, the step saves every row of the task's `assign`, as before. So packages written before this release work unchanged (#43).
+- The step speaks the `say` line of the first matching rule only. Before, it spoke the line of the first matching rule that had one (#43).
 
 ## 0.17.1
 
