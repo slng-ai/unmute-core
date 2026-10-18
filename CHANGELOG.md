@@ -4,6 +4,14 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- Each agent can listen with its own STT service, the way it already speaks with its own voice. A call that changes language hands off to an agent with that language's STT and TTS. A call with one STT service works as before.
+  - Pipecat: put an `STTSwitcher` where the STT goes, with every agent's STT service, the first agent's first. Give it to `UnmuteFlows(stt=...)`. `hand_off(stt=...)` switches to another service at the same moment as the voice. Without `stt=`, a handoff goes back to the first service.
+  - LiveKit: `UnmuteAgent(stt=...)` takes an STT plugin or a LiveKit Inference model name. None uses the session's STT, as before. The agent's task steps listen with it too, as they already speak with its voice. LiveKit starts a new STT stream on a handoff only when the next agent's STT is a different object.
+
 ## 0.17.1
 
 This release fixes one bug from 0.17.0. No API changed. `unmute_core.require("0.17.0")` accepts 0.17.1, so code built for 0.17.0 needs no change.

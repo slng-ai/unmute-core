@@ -58,8 +58,11 @@ from unmute_core.livekit import UnmuteAgent
 <ParamField path="tts" type="tts.TTS | None" default="None">
   The agent's voice. Its steps speak with it too. None uses the session's TTS.
 </ParamField>
+<ParamField path="stt" type="stt.STT | str | None" default="None">
+  The agent's STT, or a LiveKit Inference model name like `deepgram/nova-3`. Its steps listen with it too. None uses the session's STT.
+</ParamField>
 <ParamField path="**agent_options" type="Any">
-  LiveKit's own `Agent` options, passed on as they are. For example `chat_ctx`, `stt`, `vad`, `turn_handling` and `allow_interruptions`.
+  LiveKit's own `Agent` options, passed on as they are. For example `chat_ctx`, `vad`, `turn_handling` and `allow_interruptions`.
 </ParamField>
 
 `AgentSpec` refuses `tools` beside `tasks`, and a task model that `task_models` does not name. `UnmuteAgent` raises `ValueError` in these cases:

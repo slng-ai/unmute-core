@@ -165,6 +165,7 @@ class DelegateRunner:
             models=models,
             model_llm=model_llm,
             voice=self._voice,
+            transcriber=self._owner.stt,
             handoffs=handoffs,
             native_tools=natives,
         )

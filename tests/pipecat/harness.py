@@ -129,6 +129,7 @@ class Harness:
         call: CallHooks | None = None,
         then_targets: Mapping[str, Any] | None = None,
         tts: Any = None,
+        stt: Any = None,
         summarizer: Any = None,
         task_models: Mapping[str, Any] | None = None,
         telemetry: Telemetry | None = None,
@@ -157,6 +158,7 @@ class Harness:
             call=call,
             then_targets=then_targets,
             tts=tts,
+            stt=stt,
             telemetry=telemetry,
         )
         self.tasks = self.flows.tasks
