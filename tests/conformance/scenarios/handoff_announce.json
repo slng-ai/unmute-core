@@ -1,9 +1,9 @@
 {
   "name": "handoff_announce",
-  "about": "A handoff with an announce line says it before the next agent's first reply. The next agent hears it as the last thing said, after what was said before.",
+  "about": "A handoff with an announce line, given as a list of one, says it before the next agent's first reply. The next agent hears it as the last thing said, after what was said before.",
   "instructions": "You help callers with their orders.",
   "tasks": {"mode": "record", "tasks": []},
-  "handoffs": {"to_notes": {"to": "notes", "announce": "Putting you through to notes."}},
+  "handoffs": {"to_notes": {"to": "notes", "announce": ["Putting you through to notes."]}},
   "agents": {
     "notes": {
       "instructions": "You take notes.",

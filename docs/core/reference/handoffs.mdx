@@ -13,8 +13,8 @@ This page is the full detail behind [Handoffs](/core/build/handoffs). Start ther
 | The new agent hands the call straight back before it says a word. | Handoff tools are hidden on its first reply. [The first reply after a handoff](#the-first-reply-after-a-handoff) |
 | The next agent rereads old prompts and tool calls, and gets confused. | You choose what it hears: messages, everything, the last few, a summary, or nothing. [What the next agent hears](/core/build/handoffs#what-the-next-agent-hears) |
 | A cut history starts on a tool result, and the provider refuses the request. | Tool calls and results stay together. Calls to tools the new agent lacks are dropped. |
-| A slow summary holds up the handoff. | The summary runs while the handoff line plays. After 8 s it falls back to messages. [The summary](#the-summary) |
-| Every specialist must use the same model and voice. | Each agent can have its own. [Model and voice on each framework](#model-and-voice-on-each-framework) |
+| A slow summary holds up the handoff. | On Pipecat the summary runs while the handoff line plays. On both, after 8 s it falls back to messages. [The summary](#the-summary) |
+| Every specialist must use the same model and voice. | Each agent can have its own. The handoff line is said in the next agent's voice. [Model and voice on each framework](#model-and-voice-on-each-framework) |
 
 ## How it works
 
@@ -28,8 +28,8 @@ flowchart LR
 ```
 
 1. The model calls the handoff tool. Its handler calls `hand_off`.
-2. The `announce` line is said, and the handoff waits for it to play.
-3. With `history="summary"`, the summary request runs while the line plays.
+2. The `announce` line is said in the next agent's voice, and the handoff waits for it to play. With several lines, one is picked each time, never the line this handoff said last.
+3. With `history="summary"`, the summary request runs while the line plays on Pipecat. On LiveKit it runs first, and the line plays once the next agent enters.
 4. The next agent gets its history, its prompt and its tools, and its own model and voice when it has them.
 5. The next agent replies first. That reply offers none of its handoff tools.
 
@@ -37,8 +37,8 @@ The two specs are the same on both frameworks. LiveKit makes the new agent the s
 
 The announce line differs by framework:
 
-- **LiveKit** says it with `allow_interruptions=False`, so the caller cannot cut it off.
-- **Pipecat** has no such flag for one line. It says the line while the handoff call still runs, so `user_mute_strategies(protect=["tool_calls"])` keeps the caller from cutting it. Without that strategy, a cut line counts as played. Pipecat waits at most 30 seconds for the line.
+- **LiveKit** makes the next agent say it as it enters, before its first reply. It says it with `allow_interruptions=False`, so the caller cannot cut it off.
+- **Pipecat** first waits until the old voice has said the reply that made the handoff. Then it switches the voice and says the line. Pipecat has no `allow_interruptions` flag for one line. It says the line while the handoff call still runs, so `user_mute_strategies(protect=["tool_calls"])` keeps the caller from cutting it. Without that strategy, a cut line counts as played. Pipecat waits at most 30 seconds for the line.
 
 ## HandoffContext
 
@@ -66,8 +66,8 @@ LiveKit. Call it from a `@function_tool` method of an `UnmuteAgent`, and return 
 <ParamField path="agent" type="UnmuteAgent" required>
   The agent that takes the call: `UnmuteAgent(spec, state=self.state)`. Build it on this agent's `CallState`, and without `telemetry`, since it records into this agent's spans. Another state raises `ValueError`. A plain `Agent` raises `TypeError`.
 </ParamField>
-<ParamField path="announce" type="str | None" default="None">
-  A line said first, which the caller cannot cut off. The handoff waits for it to play.
+<ParamField path="announce" type="str | Sequence[str] | None" default="None">
+  A line the next agent says first, in its own voice, which the caller cannot cut off. With several lines, one is picked each time. A blank line raises `ValueError`.
 </ParamField>
 <ParamField path="context" type="HandoffContext | None" default="None">
   What the agent hears. `None` keeps what was said, without tool calls.
@@ -94,8 +94,8 @@ Pipecat. Call it from the handoff tool's handler.
 <ParamField path="tts" type="FrameProcessor | None" default="None">
   The new agent's voice, one of the services of `UnmuteFlows(tts=...)`. `None` goes back to that switcher's first service.
 </ParamField>
-<ParamField path="announce" type="str | None" default="None">
-  A line said first, while the handoff call still runs. The handoff waits for it to play.
+<ParamField path="announce" type="str | Sequence[str] | None" default="None">
+  A line said first in the new agent's voice, while the handoff call still runs. The handoff waits for it to play. With several lines, one is picked each time. A blank line raises `ValueError`.
 </ParamField>
 <ParamField path="context" type="HandoffContext | None" default="None">
   What the new agent hears. `None` keeps what was said, without tool calls.
@@ -104,7 +104,7 @@ Pipecat. Call it from the handoff tool's handler.
   A tool of the new agent's own, run in code as it takes the call. See [Open the next agent on a tool](/core/build/handoffs#open-the-next-agent-on-a-tool). A tool the agent lacks, or a realtime model, raises `ValueError`.
 </ParamField>
 
-The new spec's tools, tasks, `save_values` and `summarizer` replace the old agent's. They do not carry over. The line is said in the old voice, and a summary is written by the old agent's summarizer or model. The new model, voice and summarizer take over after both.
+The new spec's tools, tasks, `save_values` and `summarizer` replace the old agent's. They do not carry over. The line is said in the new voice, and a summary is written by the old agent's summarizer or model. The new model and summarizer take over after both.
 
 `hand_off` raises `ValueError` in these cases. The agent that holds the call keeps it.
 
@@ -176,8 +176,8 @@ The spec's `summarizer` writes the summaries for every handoff from that agent t
 
 Each agent may have its own model and voice, as Unmute's `think:` and `speak:` per agent. The guide shows the code in [Give the next agent its own model and voice](/core/build/handoffs#give-the-next-agent-its-own-model-and-voice).
 
-1. The `announce` line plays in the old voice, and a `summary` is written by the old model.
-2. Then the new model and voice take over. The new agent's first reply, its steps, finish checks and summaries all use them.
+1. The `announce` line plays in the new voice, and a `summary` is written by the old model.
+2. Then the new model takes over. The new agent's first reply, its steps, finish checks and summaries all use the new model and voice.
 3. An agent whose spec has no `model` runs on the call's first model. That is the session's LLM on LiveKit, and the model call the `ModelCallLLMService` was built with on Pipecat. The same holds for the voice.
 4. The `llm` spans name the model each request went to. The `tts` spans name the voice.
 

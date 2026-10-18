@@ -134,6 +134,7 @@ from unmute_core.tasks._opening import check_opening, open_agent
 from unmute_core.telemetry import Telemetry
 from unmute_core.tools import (
     SAVE_VALUES_TOOL,
+    LinePicker,
     ToolError,
     ToolRegistry,
     ToolSpec,
@@ -144,6 +145,7 @@ from unmute_core.tools import (
     values_block,
     values_tool,
 )
+from unmute_core.tools._announce import handoff_line
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +356,7 @@ class UnmuteFlows:
         self._telemetry = telemetry
         self._name = agent_name(spec, tasks.state) or "main"
         self._voices = tts
+        self._handoff_lines = LinePicker()
         self._model: ModelCall | None = None
         self._use_model(spec.model)
         self._own(spec.summarizer)
@@ -637,7 +640,7 @@ class UnmuteFlows:
         *,
         native_tools: Sequence[FunctionSchema] = (),
         tts: FrameProcessor | None = None,
-        announce: str | None = None,
+        announce: str | Sequence[str] | None = None,
         context: HandoffContext | None = None,
         opens_with: OpeningTool | None = None,
     ) -> None:
@@ -646,9 +649,9 @@ class UnmuteFlows:
         The agent hears what ``context`` keeps, and replies first. Its tools and tasks
         replace this agent's, on this call's state. A task this agent started beside the
         handoff is refused, and a handoff beside a running task is refused, unless that
-        task's step made it. The line is said in this agent's voice, and a summary is written
-        by this agent's summarizer or model. The new agent's model, voice and summarizer take
-        over after both.
+        task's step made it. The new agent's voice says the line, and a summary is written by
+        this agent's summarizer or model. The new agent's model and summarizer take over
+        after both.
 
         Args:
             params: The handoff call's params. ``hand_off`` reports its result.
@@ -660,8 +663,9 @@ class UnmuteFlows:
             native_tools: The new agent's Pipecat tools, like its own handoffs.
             tts: The new agent's voice, one of the services of ``UnmuteFlows(tts=...)``.
                 None: that switcher's first service.
-            announce: A line said first, while the handoff call still runs. The handoff
-                waits for it to play.
+            announce: A line said first in the new agent's voice, while the handoff call
+                still runs. The handoff waits for it to play. With several lines, one is
+                picked each time, never the line this handoff said last.
             context: What the new agent hears. A summary is asked for while the line
                 plays. None keeps what was said, without tool calls.
             opens_with: A tool of the new agent's own, run in code before its first reply.
@@ -673,7 +677,7 @@ class UnmuteFlows:
                 a task names a model, or transfers to an agent ``then_targets`` lacks, or
                 if the spec has a model without a ``ModelCallLLMService``, or ``tts`` is not
                 one of the call's voices, or ``opens_with`` names a tool the spec lacks or
-                the model is a realtime one.
+                the model is a realtime one, or a line of ``announce`` is blank.
         """
         self._check_switch(spec, tts, native_tools)
         holding = self._tasks
@@ -692,6 +696,9 @@ class UnmuteFlows:
             )
             _check_tasks(tasks, native_tools, spec.save_values)
             check_opening(opens_with, tasks.plan.tools, realtime=self._realtime)
+            line = handoff_line(
+                self._handoff_lines, agent_name(spec, self.state) or "main", announce
+            )
         except ValueError:
             holding.activate()
             raise
@@ -723,7 +730,7 @@ class UnmuteFlows:
         await shielded(
             self._take_over(
                 params,
-                announce,
+                line,
                 context or HandoffContext(),
                 model=spec.model,
                 tts=tts,
@@ -749,26 +756,33 @@ class UnmuteFlows:
             )
         _check_handoffs(spec.handoffs, native_tools, new_agent=True)
 
-    async def _switch(
-        self, worker: PipelineWorker, model: ModelCall | None, tts: FrameProcessor | None
-    ) -> None:
-        """Give the agent taking the call its model and its voice, before its first reply."""
-        self._use_model(model)
-        if self._voices is not None:
-            voice = tts or self._voices.services[0]
-            await worker.queue_frame(ManuallySwitchServiceFrame(service=voice))
+    async def _switch_voice(self, worker: PipelineWorker, tts: FrameProcessor | None) -> None:
+        """Give the agent taking the call its voice, once the old voice has said all it has.
+
+        A TTS service lets the flush probe out only after the audio queued ahead of it, and
+        a switcher drops what an inactive voice says. So the reply that made the handoff
+        plays to its end in the old voice, and a line queued after the switch goes to the
+        new one.
+        """
+        if self._voices is None:
+            return
+        await worker.flush_pipeline()
+        voice = tts or self._voices.services[0]
+        await worker.queue_frame(ManuallySwitchServiceFrame(service=voice))
 
     async def _take_over(
         self,
         params: FunctionCallParams,
-        announce: str | None,
+        line: str | None,
         context: HandoffContext,
         *,
         model: ModelCall | None,
         tts: FrameProcessor | None,
         opens_with: OpeningTool | None,
     ) -> None:
-        """Say the line, answer the handoff, then set the new agent's prompt, tools and history.
+        """Switch the voice and say the line, answer the handoff, then set the new agent up.
+
+        The new agent gets its model, prompt, tools and history last.
 
         With an opening tool, it runs once the new agent's tools are in place. When its line
         fills, the call, its result and the line join the history, and no model request is
@@ -779,7 +793,7 @@ class UnmuteFlows:
         service does: it goes into the new agent's history here, the same on every pipeline.
         """
         if self._realtime:
-            await self._take_over_realtime(params, announce, tts)
+            await self._take_over_realtime(params, line, tts)
             return
         worker = params.pipeline_worker
         source = self._messages()
@@ -789,8 +803,9 @@ class UnmuteFlows:
             else None
         )
         try:
-            if announce:
-                await self._say_line(worker, announce)
+            await self._switch_voice(worker, tts)
+            if line:
+                await self._say_line(worker, line)
             text = await summary if summary is not None else None
         finally:
             if summary is not None and not summary.done():
@@ -800,7 +815,7 @@ class UnmuteFlows:
             properties=FunctionCallResultProperties(run_llm=False),
         )
         await worker.flush_pipeline()
-        said = [{"role": "assistant", "content": announce}] if announce else []
+        said = [{"role": "assistant", "content": line}] if line else []
         self._set_messages(
             [summary_message(text)]
             if text
@@ -816,7 +831,7 @@ class UnmuteFlows:
         self._replies.count_caller(self._messages())
         self._opening_turn = self._replies.caller_count
         self._context.set_tools(self._main_schemas())
-        await self._switch(worker, model, tts)
+        self._use_model(model)
         await worker.queue_frame(
             LLMUpdateSettingsFrame(delta=LLMSettings(system_instruction=self.main_instruction()))
         )
@@ -841,20 +856,20 @@ class UnmuteFlows:
         return True
 
     async def _take_over_realtime(
-        self, params: FunctionCallParams, announce: str | None, tts: FrameProcessor | None
+        self, params: FunctionCallParams, line: str | None, tts: FrameProcessor | None
     ) -> None:
-        """Hand a realtime model's call over: the line, then new instructions and tools.
+        """Hand a realtime model's call over: the voice and the line, then instructions and tools.
 
         The model keeps the whole conversation on its server. The settings and the tools
         go to the model in order, and the new agent replies once the tools have reached it.
         """
-        if announce:
-            await speak(self._llm, announce, wait=True)
+        await self._switch_voice(params.pipeline_worker, tts)
+        if line:
+            await speak(self._llm, line, wait=True)
         await params.result_callback(
             ToolStatus(status="handed off").model_dump(),
             properties=FunctionCallResultProperties(run_llm=False),
         )
-        await self._switch(params.pipeline_worker, None, tts)
         schemas = self._main_schemas()
         self._context.set_tools(schemas)
         reached = asyncio.Event()

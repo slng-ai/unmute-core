@@ -51,3 +51,17 @@ class LinePicker:
         choices = [line for line in fresh if line != self._last_line.get(site)] or fresh or lines
         self._last_line[site] = self._last_spoken = line = random.choice(choices)
         return line
+
+
+def handoff_line(picker: LinePicker, to: str, announce: str | Sequence[str] | None) -> str | None:
+    """Pick the line a handoff to ``to`` says, or None for no line.
+
+    Args:
+        picker: The call's picker, so a handoff made again says another line.
+        to: The name of the agent that takes the call.
+        announce: One line, or alternatives. None or an empty string says nothing.
+
+    Raises:
+        ValueError: If one of the alternatives is blank.
+    """
+    return picker.pick(f"handoff:{to}", checked_lines(announce or (), placeholders=True))

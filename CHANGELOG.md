@@ -4,6 +4,19 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Changes that can break you
+
+- A handoff's `announce` line is now said in the voice of the agent that takes the call. Before, the agent that handed off said it in its own voice. A switch to a Spanish agent now sounds Spanish from its first word.
+  - On LiveKit, the next agent says the line as it enters, before its first reply. It still uses `allow_interruptions=False` and stays out of the live chat.
+  - On Pipecat, the handoff waits until the old voice has said the reply that made the handoff. Then it switches the voice and says the line.
+- On LiveKit, a `history="summary"` handoff now writes the summary before the line plays, not while it plays. The 8 second limit still holds.
+
+### Added
+
+- `hand_off(announce=...)` takes a list of lines on both frameworks. One is picked each time, never the line this handoff said last, as task and tool lines are. A plain string works as before. A blank line in the list raises `ValueError`.
+
 ## 0.17.1
 
 This release fixes one bug from 0.17.0. No API changed. `unmute_core.require("0.17.0")` accepts 0.17.1, so code built for 0.17.0 needs no change.

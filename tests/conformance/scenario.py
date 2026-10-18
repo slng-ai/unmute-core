@@ -288,7 +288,7 @@ class Handoff(_Strict):
     """A handoff tool: its agent, its line, what that agent hears, the tool it opens with."""
 
     to: str
-    announce: str | None = None
+    announce: str | list[str] | None = None
     context: Context = Context()
     opens_with: OpeningTool | None = None
 
