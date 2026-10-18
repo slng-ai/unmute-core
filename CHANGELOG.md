@@ -8,6 +8,11 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 This release adds MCP tools on both frameworks and moves to LiveKit Agents 1.8.8. No API changed. Change `unmute_core.require("0.16.0")` to `require("0.17.0")` when you upgrade.
 
+### Highlights
+
+- **MCP tools on LiveKit and Pipecat.** Describe a server once with `McpServer`, and both frameworks get its tools. A server that is down fails before the call starts, not in the middle of it.
+- **LiveKit Agents 1.8.8.** The `livekit` extra now needs 1.8.8. Read "Changes that can break you" before you upgrade.
+
 ### Changes that can break you
 
 - The `livekit` extra now needs `livekit-agents>=1.8.8,<1.9`. It was `>=1.8.7`. A project that pins `livekit-agents==1.8.7` no longer resolves. Move it and its plugins to 1.8.8 (#32).
