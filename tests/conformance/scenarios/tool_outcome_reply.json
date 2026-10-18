@@ -1,6 +1,6 @@
 {
   "name": "tool_outcome_reply",
-  "about": "A tool's own replies turn a typed outcome into a line code says, with no model request: on the main agent, and as a step tool. An outcome no reply matches is answered by the model.",
+  "about": "A tool's own replies turn a typed outcome into a line code says, with no model request, and save what they name: on the main agent, and as a step tool, where the step's own reply is tried first. An outcome no reply matches is answered by the model.",
   "instructions": "You take accident reports.",
   "tasks": {
     "mode": "record",
@@ -10,20 +10,36 @@
         "when": "The caller wants to report an accident.",
         "instructions": "Ask when it happened, and note the day.",
         "tools": ["search_web", "lookup_order"],
-        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}]
+        "finish": [{"tool": "lookup_order", "success": {"found": [true]}}],
+        "replies": [
+          {
+            "tool": "search_web",
+            "when": {"status": ["future_day"]},
+            "say": ["{{result.day}} is still ahead. On which day did it happen?"],
+            "assign": [{"variable": "tags", "path": ["day"], "append": true}]
+          }
+        ]
       }
     ]
   },
   "tool_options": {
     "search_web": {
-      "output": {"status": "Literal[\"noted\", \"future_day\"]"},
+      "output": {"status": "Literal[\"noted\", \"future_day\"]", "day": "str"},
       "replies": [
-        {"when": {"status": ["future_day"]}, "say": ["That day hasn't happened yet. On which day did it happen?"]}
+        {
+          "when": {"status": ["future_day"]},
+          "say": ["That day hasn't happened yet. On which day did it happen?"],
+          "assign": [{"variable": "note", "path": ["day"]}]
+        }
       ]
     }
   },
   "tool_results": {
-    "search_web": [{"status": "future_day"}, {"status": "noted"}, {"status": "future_day"}]
+    "search_web": [
+      {"status": "future_day", "day": "next Friday"},
+      {"status": "noted", "day": "last Friday"},
+      {"status": "future_day", "day": "Friday the 30th"}
+    ]
   },
   "turns": [
     {
@@ -52,11 +68,11 @@
       "model": [
         {"site": "task:report", "calls": [{"name": "search_web", "arguments": {"q": "next Friday"}}]}
       ],
-      "spoken": ["That day hasn't happened yet. On which day did it happen?"]
+      "spoken": ["Friday the 30th is still ahead. On which day did it happen?"]
     }
   ],
   "expect": {
-    "state": {"order_id": null, "status": null, "note": null, "tags": []},
+    "state": {"order_id": null, "status": null, "note": "next Friday", "tags": ["Friday the 30th"]},
     "tool_calls": [
       {"name": "search_web", "arguments": {"q": "next Friday"}},
       {"name": "search_web", "arguments": {"q": "last Friday"}},

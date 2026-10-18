@@ -49,9 +49,6 @@ ToolName = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,64}$")]
 MatchValues = Annotated[tuple[str | int | bool, ...], Field(min_length=1, max_length=64)]
 """The values that count for one field."""
 
-ResultMatch = Annotated[dict[FieldName, MatchValues], Field(min_length=1, max_length=16)]
-"""A result field to the values that count: ``FinishRule.success``."""
-
 SpokenLine = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 """One line code speaks, stripped."""
 
@@ -195,6 +192,8 @@ class ToolReply(_Row):
         state: State value to the values that call for the line, read the same way.
         say: Lines spoken from the result, with ``{{result.<field>}}`` and
             ``{{variable}}`` placeholders. One is picked each time.
+        assign: Values the matching result saves into the State, as a tool's own
+            ``assign`` saves them. Only the first reply that matches saves.
     """
 
     tool: ToolName | None = None
@@ -205,6 +204,7 @@ class ToolReply(_Row):
         default_factory=dict
     )
     say: Annotated[tuple[SpokenLine, ...], Field(min_length=1), AfterValidator(say_lines)]
+    assign: tuple[Assign, ...] = ()
 
     @property
     def say_variables(self) -> set[str]:

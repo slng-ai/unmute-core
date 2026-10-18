@@ -188,6 +188,38 @@ REFUSED = [
         _with(replies=[{"tool": "search_web", "when": {"ok": [True]}, "say": ["Hi."]}]),
         "replies to 'search_web', which it does not list in tools",
     ),
+    (
+        _with(tools=["lookup_order"], finish=[{"tool": "lookup_order", "success": {}}]),
+        "has no success fields, so every result would complete the step",
+    ),
+    (
+        _with(
+            tools=["lookup_order"],
+            finish=[
+                {
+                    "tool": "lookup_order",
+                    "success": {"found": [True]},
+                    "assign": [{"variable": "note", "path": ["n"]}],
+                }
+            ],
+        ),
+        "saves 'note', which the task's assign does not declare",
+    ),
+    (
+        _with(
+            tools=["lookup_order"],
+            assign=[{"variable": "tags", "path": ["t"]}],
+            finish=[
+                {
+                    "tool": "lookup_order",
+                    "success": {},
+                    "ends": "failed",
+                    "assign": [{"variable": "tags", "path": ["t"], "append": True}],
+                }
+            ],
+        ),
+        "saves 'tags' with append set differently from the task's assign",
+    ),
     (_group(then="transfer"), "then_target is required with transfer. Name the agent"),
     (_group(then_target="billing"), "then_target is legal with transfer only. Remove it"),
     (_group(then="end", then_target="billing"), "then_target is legal with transfer only"),

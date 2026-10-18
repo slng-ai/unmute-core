@@ -337,6 +337,7 @@ registry = ToolRegistry(
 9. A result that reports an error saves nothing and speaks nothing. Inside a task step, a tool that does not end the step still saves its registry `assign` rows at once, so a step that asks several questions keeps each answer as it comes. The step's own `replies` are spoken, then the tool's own, and the step's own `assign` saves when the step ends.
 10. A `when` value on a `Literal`, `bool` or `Enum` field must be one the field can hold. A typo like `"shiped"` fails when the registry is built, with the values the field holds.
 11. Each line code speaks is told to the sinks as `tool.replied`, so a trace shows which turns cost no model reply.
+12. A reply's own `assign` rows save when it is the first reply that matches, as the tool's `assign` does: `ToolReply(tool="find_order", when={"status": ["held"]}, say=["It is held."], assign=(Assign(variable="order_number", path=("order_id",)),))`. A row reads the result and names a value of the State.
 
 ### Replies on the tool itself
 
