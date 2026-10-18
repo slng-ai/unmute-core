@@ -147,8 +147,12 @@ class StepOpening:
             line = self._step.reply
             if line is None:
                 return None
-        else:
+        elif spec.say:
             line = self._tasks.spoken_line(self._task, spec.tool, spec.say, self._step.result)
+        else:
+            # No lines of its own: the step's replies pick the line for this result,
+            # as they would for the same call later, and as open_agent does on a handoff.
+            line = self._step.reply
         text = json.dumps(arguments)
         if line is not None:
             self.listens = True

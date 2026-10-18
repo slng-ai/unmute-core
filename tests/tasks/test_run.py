@@ -653,6 +653,45 @@ async def test_an_opening_line_reads_the_whole_result_of_a_tool_that_hides_it() 
     assert opening.line == "I found order A-12. Is that the one?"
 
 
+def _replying_opening(*replies: dict[str, Any]) -> StepRun:
+    """``find_order`` opening on a search with no say lines and these replies."""
+    payload = _opening_job()
+    find_order = payload["tasks"][0]
+    del find_order["opens_with"]["say"]
+    find_order["replies"] = list(replies)
+    task_plan = plan(payload, tools=registry(search_web=Canned({"title": "order A-12"})))
+    return _first_step(CallTasks(task_plan, state(task_plan)), {"order_id": "A-12"})
+
+
+async def test_an_opening_with_no_say_lines_speaks_the_reply_its_result_matches() -> None:
+    step = _replying_opening(
+        {"tool": "search_web", "when": {"title": ["nothing"]}, "say": ["No order like that."]},
+        {
+            "tool": "search_web",
+            "when": {"title": ["order A-12"]},
+            "say": ["Found {{result.title}}."],
+        },
+    )
+
+    opening = await step.open()
+
+    assert opening is not None
+    assert opening.line == "Found order A-12."
+    assert step.listens
+
+
+async def test_an_opening_whose_result_no_reply_matches_leaves_the_reply_to_the_model() -> None:
+    step = _replying_opening(
+        {"tool": "search_web", "when": {"title": ["nothing"]}, "say": ["No order like that."]},
+    )
+
+    opening = await step.open()
+
+    assert opening is not None
+    assert opening.line is None
+    assert not step.listens
+
+
 async def test_an_opening_tool_needs_its_values() -> None:
     step = _first_step(_opening_tasks(search_web=Canned({"title": "order A-12"})), {})
 

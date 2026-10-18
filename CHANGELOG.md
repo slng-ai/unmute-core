@@ -4,6 +4,13 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Changed
+
+- A step's opening tool with no `say` lines now speaks the line the step's replies pick for its result: the task's `replies` first, then the tool's own. Before, the step opened with no line and the model read the result. An opening with `say` lines works as before. A handoff's opening already worked this way. So an opening tool with two conditional replies, like a "that day has not happened yet" line and a "next question" line, says the one that matches.
+- A step may open on a tool with no `say` lines. Before, `TasksSpec` refused it.
+
 ## 0.18.0
 
 This release lets a tool's result save its own values and end a step as failed, gives each agent its own STT, and says a handoff line in the next agent's voice. Read "Changes that can break you" before you upgrade. Change `unmute_core.require("0.17.0")` to `require("0.18.0")` when you upgrade.
