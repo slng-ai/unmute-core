@@ -1,8 +1,8 @@
-"""Each agent of a call has its own model and voice, on a real text-only LiveKit session.
+"""Each agent of a call has its own model, voice and STT, on a real text-only LiveKit session.
 
 That the next model request goes to the next agent's model, and that its first reply offers
 no handoff tool, is in tests/conformance (``handoff_own_model.json``). These cases cover the
-LiveKit side: a plugin as the agent's model, its steps, its voice, and ``LiveKitModel``.
+LiveKit side: a plugin as the agent's model, its steps, its voice and STT, and ``LiveKitModel``.
 """
 
 import json
@@ -13,7 +13,7 @@ import pytest
 from livekit.agents import AgentSession, APIConnectOptions, function_tool, llm, tts
 
 from tests.conformance.livekit_driver import Silence
-from tests.livekit.fake import Reply, ScriptedLLM, Voice, call
+from tests.livekit.fake import Ears, Reply, ScriptedLLM, Voice, call
 from tests.livekit.test_trace import Memory
 from tests.tasks.job import Canned, plan, registry, specialist_plan, state
 from unmute_core.agent import AgentSpec
@@ -52,7 +52,7 @@ class Front(UnmuteAgent):
 
 
 class Back(UnmuteAgent):
-    """The notes desk, on its own model and its own voice, with a handoff back."""
+    """The notes desk, on its own model, voice and STT, with a handoff back."""
 
     def __init__(self, call_state: CallState, model: LiveKitModel) -> None:
         super().__init__(
@@ -61,6 +61,7 @@ class Back(UnmuteAgent):
             ),
             state=call_state,
             tts=Voice("orion"),
+            stt=Ears("notes"),
         )
 
     @function_tool
@@ -69,17 +70,18 @@ class Back(UnmuteAgent):
         return "Not now."
 
 
-async def test_an_agent_and_its_steps_answer_on_its_own_plugin_and_voice() -> None:
+async def test_an_agent_and_its_steps_answer_on_its_own_plugin_voice_and_stt() -> None:
     session_llm = ScriptedLLM()
     own = ScriptedLLM(call("find_order"), "Which order is it?", name="gpt-4o")
-    voice = Voice("orion")
+    voice, ears = Voice("orion"), Ears("orders")
     tasks = plan(tools=registry(lookup_order=Canned(FOUND)))
     agent = UnmuteAgent(
         AgentSpec("You help with orders.", tasks=tasks, model=LiveKitModel(own)),
         state=state(tasks),
         tts=voice,
+        stt=ears,
     )
-    async with AgentSession(llm=session_llm) as session:
+    async with AgentSession(llm=session_llm, stt=Ears("session")) as session:
         await session.start(agent)
         await session.run(user_input="Where is my order?")
         step = session.current_agent
@@ -91,10 +93,11 @@ async def test_an_agent_and_its_steps_answer_on_its_own_plugin_and_voice() -> No
     assert agent.tts is voice
     assert isinstance(step, StepTask)
     assert step.tts is voice
+    assert step.stt is ears
     assert step.llm is own
 
 
-async def test_a_handoff_moves_the_call_to_the_next_agents_model_and_voice() -> None:
+async def test_a_handoff_moves_the_call_to_the_next_agents_model_voice_and_stt() -> None:
     sink = Memory()
     front_llm = ScriptedLLM(call("to_notes"), name="gpt-4o-mini")
     notes_llm = ScriptedLLM("Notes desk.", "Noted.", name="gpt-4o")
@@ -103,7 +106,7 @@ async def test_a_handoff_moves_the_call_to_the_next_agents_model_and_voice() -> 
         LiveKitModel(notes_llm),
         telemetry=Telemetry(sink, agent="desk", call_id="RM_1"),
     )
-    async with AgentSession(llm=front_llm) as session:
+    async with AgentSession(llm=front_llm, stt=Ears("session")) as session:
         await session.start(first)
         await session.run(user_input="I need a note taken.")
         await session.run(user_input="Call me back on Monday.")
@@ -118,6 +121,7 @@ async def test_a_handoff_moves_the_call_to_the_next_agents_model_and_voice() -> 
     assert "to_orders" in after.tools
     assert isinstance(desk, Back)
     assert isinstance(desk.tts, Voice) and desk.tts.voice == "orion"
+    assert isinstance(desk.stt, Ears) and desk.stt.name == "notes"
     models = [
         dict(span.attributes or {})["gen_ai.request.model"]
         for span in sink.spans.get_finished_spans()

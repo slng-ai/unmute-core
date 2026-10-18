@@ -114,7 +114,7 @@ from unmute_core.pipecat._tools import (
     say_line,
     tool_dicts,
 )
-from unmute_core.pipecat._voices import VoiceSwitcher
+from unmute_core.pipecat._voices import STTSwitcher, VoiceSwitcher
 from unmute_core.realtime import check_realtime, check_realtime_handoff, realtime_instructions
 from unmute_core.state import CallState
 from unmute_core.tasks import (
@@ -266,7 +266,8 @@ class UnmuteFlows:
 
     A native Pipecat LLM service gets its prompts filled here. A ``ModelCallLLMService``
     gets them unfilled, with the prompt site of each request. A handoff can give the next
-    agent its own model call, on a ``ModelCallLLMService``, and its own voice, with ``tts=``.
+    agent its own model call, on a ``ModelCallLLMService``, its own voice, with ``tts=``,
+    and its own STT service, with ``stt=``.
 
     Attributes:
         task_results: For ``TelemetryObserver``: the result the main agent reads for each
@@ -293,6 +294,7 @@ class UnmuteFlows:
         native_tools: Sequence[FunctionSchema] = (),
         then_targets: Mapping[str, Handler] | None = None,
         tts: VoiceSwitcher | None = None,
+        stt: STTSwitcher | None = None,
     ) -> None:
         """Hold the first agent of the call and the Pipecat objects it runs on.
 
@@ -320,18 +322,25 @@ class UnmuteFlows:
                 the call is handed to transfer through it too.
             tts: The call's voices, a ``VoiceSwitcher`` of TTS services in the pipeline.
                 Its first service speaks first. ``hand_off(tts=...)`` switches to another.
+            stt: The call's STT services, an ``STTSwitcher`` in the pipeline. Its first
+                service listens first. ``hand_off(stt=...)`` switches to another.
 
         Raises:
             ValueError: If the spec has tasks or ``save_values`` and there is no state, a
                 task lists a handoff that is not one of ``native_tools``, or names a model,
                 a group transfers to an agent ``then_targets`` lacks, the spec's
                 ``handoffs`` names a tool ``native_tools`` lacks, the spec has a model and
-                ``llm`` is no ``ModelCallLLMService``, or ``tts`` is a plain
-                ``ServiceSwitcher``.
+                ``llm`` is no ``ModelCallLLMService``, or ``tts`` or ``stt`` is a
+                plain ``ServiceSwitcher``.
         """
         if tts is not None and not isinstance(tts, VoiceSwitcher):
             raise ValueError(
                 "UnmuteFlows(tts=...) takes a VoiceSwitcher. A plain ServiceSwitcher holds "
+                "every pipeline flush until it times out, so each handoff would hang."
+            )
+        if stt is not None and not isinstance(stt, STTSwitcher):
+            raise ValueError(
+                "UnmuteFlows(stt=...) takes an STTSwitcher. A plain ServiceSwitcher holds "
                 "every pipeline flush until it times out, so each handoff would hang."
             )
         state = agent_state(state, call)
@@ -357,6 +366,7 @@ class UnmuteFlows:
         self._name = agent_name(spec, tasks.state) or "main"
         self._voices = tts
         self._handoff_lines = LinePicker()
+        self._stt_switcher = stt
         self._model: ModelCall | None = None
         self._use_model(spec.model)
         self._own(spec.summarizer)
@@ -640,6 +650,7 @@ class UnmuteFlows:
         *,
         native_tools: Sequence[FunctionSchema] = (),
         tts: FrameProcessor | None = None,
+        stt: FrameProcessor | None = None,
         announce: str | Sequence[str] | None = None,
         context: HandoffContext | None = None,
         opens_with: OpeningTool | None = None,
@@ -663,6 +674,8 @@ class UnmuteFlows:
             native_tools: The new agent's Pipecat tools, like its own handoffs.
             tts: The new agent's voice, one of the services of ``UnmuteFlows(tts=...)``.
                 None: that switcher's first service.
+            stt: The new agent's STT service, one of the services of
+                ``UnmuteFlows(stt=...)``. None: that switcher's first service.
             announce: A line said first in the new agent's voice, while the handoff call
                 still runs. The handoff waits for it to play. With several lines, one is
                 picked each time, never the line this handoff said last.
@@ -675,11 +688,12 @@ class UnmuteFlows:
         Raises:
             ValueError: If the spec lists a handoff that is not one of ``native_tools``,
                 a task names a model, or transfers to an agent ``then_targets`` lacks, or
-                if the spec has a model without a ``ModelCallLLMService``, or ``tts`` is not
-                one of the call's voices, or ``opens_with`` names a tool the spec lacks or
-                the model is a realtime one, or a line of ``announce`` is blank.
+                if the spec has a model without a ``ModelCallLLMService``, or ``tts`` or
+                ``stt`` is not one of the call's services, or ``opens_with`` names a tool
+                the spec lacks or the model is a realtime one, or a line of ``announce`` is
+                blank.
         """
-        self._check_switch(spec, tts, native_tools)
+        self._check_switch(spec, tts, stt, native_tools)
         holding = self._tasks
         tasks = cast("CallTasks", agent_tasks(spec, self.state, self._call, always=True))
         try:
@@ -734,6 +748,7 @@ class UnmuteFlows:
                 context or HandoffContext(),
                 model=spec.model,
                 tts=tts,
+                stt=stt,
                 opens_with=opens_with,
             )
         )
@@ -741,9 +756,13 @@ class UnmuteFlows:
         _warn_unasked(tasks, self._side, spec.summarizer)
 
     def _check_switch(
-        self, spec: AgentSpec, tts: FrameProcessor | None, native_tools: Sequence[FunctionSchema]
+        self,
+        spec: AgentSpec,
+        tts: FrameProcessor | None,
+        stt: FrameProcessor | None,
+        native_tools: Sequence[FunctionSchema],
     ) -> None:
-        """Refuse a model, a voice or a handoff tool the call cannot give the new agent.
+        """Refuse a model, a voice, an STT service or a handoff tool the call cannot give.
 
         Raises:
             ValueError: If one of them cannot be given. The message names the fix.
@@ -754,21 +773,35 @@ class UnmuteFlows:
                 "hand_off(tts=...) needs that TTS service in the VoiceSwitcher given as "
                 "UnmuteFlows(tts=...), placed in the pipeline after the LLM."
             )
+        if stt is not None and (
+            self._stt_switcher is None or stt not in self._stt_switcher.services
+        ):
+            raise ValueError(
+                "hand_off(stt=...) needs that STT service in the STTSwitcher given as "
+                "UnmuteFlows(stt=...), placed in the pipeline before the LLM."
+            )
         _check_handoffs(spec.handoffs, native_tools, new_agent=True)
 
-    async def _switch_voice(self, worker: PipelineWorker, tts: FrameProcessor | None) -> None:
-        """Give the agent taking the call its voice, once the old voice has said all it has.
+    async def _switch_services(
+        self, worker: PipelineWorker, tts: FrameProcessor | None, stt: FrameProcessor | None
+    ) -> None:
+        """Give the agent taking the call its STT and voice, once the old voice has said all.
 
         A TTS service lets the flush probe out only after the audio queued ahead of it, and
         a switcher drops what an inactive voice says. So the reply that made the handoff
-        plays to its end in the old voice, and a line queued after the switch goes to the
-        new one.
+        plays to its end in the old voice, a line queued after the switch goes to the new
+        one, and the new STT service hears the caller's answer to it.
         """
-        if self._voices is None:
+        switches = [
+            service or switcher.services[0]
+            for switcher, service in ((self._stt_switcher, stt), (self._voices, tts))
+            if switcher is not None
+        ]
+        if not switches:
             return
         await worker.flush_pipeline()
-        voice = tts or self._voices.services[0]
-        await worker.queue_frame(ManuallySwitchServiceFrame(service=voice))
+        for service in switches:
+            await worker.queue_frame(ManuallySwitchServiceFrame(service=service))
 
     async def _take_over(
         self,
@@ -778,9 +811,10 @@ class UnmuteFlows:
         *,
         model: ModelCall | None,
         tts: FrameProcessor | None,
+        stt: FrameProcessor | None,
         opens_with: OpeningTool | None,
     ) -> None:
-        """Switch the voice and say the line, answer the handoff, then set the new agent up.
+        """Switch the STT and voice, say the line, answer the handoff, then set the agent up.
 
         The new agent gets its model, prompt, tools and history last.
 
@@ -793,7 +827,7 @@ class UnmuteFlows:
         service does: it goes into the new agent's history here, the same on every pipeline.
         """
         if self._realtime:
-            await self._take_over_realtime(params, line, tts)
+            await self._take_over_realtime(params, line, tts, stt)
             return
         worker = params.pipeline_worker
         source = self._messages()
@@ -803,7 +837,7 @@ class UnmuteFlows:
             else None
         )
         try:
-            await self._switch_voice(worker, tts)
+            await self._switch_services(worker, tts, stt)
             if line:
                 await self._say_line(worker, line)
             text = await summary if summary is not None else None
@@ -856,14 +890,18 @@ class UnmuteFlows:
         return True
 
     async def _take_over_realtime(
-        self, params: FunctionCallParams, line: str | None, tts: FrameProcessor | None
+        self,
+        params: FunctionCallParams,
+        line: str | None,
+        tts: FrameProcessor | None,
+        stt: FrameProcessor | None,
     ) -> None:
-        """Hand a realtime model's call over: the voice and the line, then instructions and tools.
+        """Hand a realtime model's call over: STT, voice and line, then instructions and tools.
 
         The model keeps the whole conversation on its server. The settings and the tools
         go to the model in order, and the new agent replies once the tools have reached it.
         """
-        await self._switch_voice(params.pipeline_worker, tts)
+        await self._switch_services(params.pipeline_worker, tts, stt)
         if line:
             await speak(self._llm, line, wait=True)
         await params.result_callback(

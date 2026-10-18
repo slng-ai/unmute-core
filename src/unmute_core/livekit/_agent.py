@@ -29,6 +29,7 @@ from typing import Any
 
 from livekit import rtc
 from livekit.agents import NOT_GIVEN, llm
+from livekit.agents import stt as livekit_stt
 from livekit.agents import tts as livekit_tts
 from livekit.agents.llm.chat_context import Instructions
 from livekit.agents.voice import (
@@ -107,6 +108,7 @@ class UnmuteAgent(Agent):
         native_tools: Sequence[llm.Tool | llm.Toolset] = (),
         then_targets: Mapping[str, ThenTarget] | None = None,
         tts: livekit_tts.TTS | None = None,
+        stt: livekit_stt.STT | str | None = None,
         **agent_options: Any,
     ) -> None:
         """Build the agent and its tools.
@@ -130,8 +132,10 @@ class UnmuteAgent(Agent):
                 to, by its ``then_target``. Each one returns ``agent.hand_off(...)``, like
                 ``lambda agent: agent.hand_off(UnmuteAgent(BILLING, state=agent.state))``.
             tts: The agent's voice, which its steps speak with too. None uses the session's.
+            stt: The agent's STT, or a LiveKit Inference model name like ``deepgram/nova-3``.
+                Its steps listen with it too. None uses the session's.
             **agent_options: LiveKit's own ``Agent`` options, passed on as they are, like
-                ``chat_ctx``, ``stt``, ``vad``, ``turn_handling`` or ``allow_interruptions``.
+                ``chat_ctx``, ``vad``, ``turn_handling`` or ``allow_interruptions``.
 
         Raises:
             TypeError: If the spec's ``model``, ``summarizer`` or a task model is a LiveKit
@@ -222,6 +226,7 @@ class UnmuteAgent(Agent):
             tools=[*main, *native_tools],
             llm=self._model_llm,
             tts=tts if tts is not None else NOT_GIVEN,
+            stt=stt if stt is not None else NOT_GIVEN,
             id=agent_name(spec, state),
             **agent_options,
         )

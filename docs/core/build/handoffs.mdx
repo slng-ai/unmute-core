@@ -182,6 +182,7 @@ async def to_billing(params: FunctionCallParams) -> None:
 1. The `announce` line plays in the new voice, so a switch to another language sounds right from its first word. Then the new model takes over.
 2. An agent whose spec has no `model` runs on the call's first model. The same holds for the voice.
 3. On Pipecat, a spec with a `model` needs a `ModelCallLLMService`, and the voices go through a `VoiceSwitcher`.
+4. An agent can also listen with its own STT, for example in another language. On LiveKit, pass `UnmuteAgent(stt=...)`. On Pipecat, put an `STTSwitcher` where the STT goes, give it to `UnmuteFlows(stt=...)`, and pass `hand_off(stt=...)`.
 
 ## Open the next agent on a tool
 

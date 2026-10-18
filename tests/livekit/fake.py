@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from livekit.agents import AgentSession, APIConnectOptions, NotGivenOr, llm, tts, utils
+from livekit.agents import AgentSession, APIConnectOptions, NotGivenOr, llm, stt, tts, utils
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN
 
 
@@ -142,6 +142,23 @@ class Voice(tts.TTS):
         self, text: str, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS
     ) -> tts.ChunkedStream:
         raise NotImplementedError("a text-only session speaks no audio")
+
+
+class Ears(stt.STT):
+    """An STT that a text-only session never asks to listen. Its name tells agents apart."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(capabilities=stt.STTCapabilities(streaming=False, interim_results=False))
+        self.name = name
+
+    async def _recognize_impl(
+        self,
+        buffer: utils.AudioBuffer,
+        *,
+        language: NotGivenOr[str] = NOT_GIVEN,
+        conn_options: APIConnectOptions,
+    ) -> stt.SpeechEvent:
+        raise NotImplementedError("a text-only session hears no audio")
 
 
 async def until(done: Callable[[], object]) -> None:

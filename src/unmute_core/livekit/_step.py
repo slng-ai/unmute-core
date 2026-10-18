@@ -11,7 +11,7 @@ from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Sequence
 from typing import Any
 
 from livekit import rtc
-from livekit.agents import NOT_GIVEN, NotGivenOr, llm, tts
+from livekit.agents import NOT_GIVEN, NotGivenOr, llm, stt, tts
 from livekit.agents.voice import Agent, AgentTask, ModelSettings, RunContext, SpeechHandle
 
 from unmute_core.call import AGENT_ENDED
@@ -129,6 +129,7 @@ class StepTask(AgentTask[None]):
         handoffs: Sequence[llm.FunctionTool | llm.RawFunctionTool] = (),
         native_tools: Sequence[llm.Tool | llm.Toolset] = (),
         voice: tts.TTS | None = None,
+        transcriber: NotGivenOr[stt.STT | None] = NOT_GIVEN,
     ) -> None:
         """Build the step's task. Its history is set as it opens.
 
@@ -145,6 +146,7 @@ class StepTask(AgentTask[None]):
             native_tools: The owner's framework tools its task offers too, as they are.
             voice: The owner's voice. None speaks with the session's: LiveKit's task does not
                 fall back to its owner's.
+            transcriber: The owner's STT, as LiveKit holds it. Not given: the session's.
         """
         self.step = step
         self._native = native_tools
@@ -163,6 +165,7 @@ class StepTask(AgentTask[None]):
             tools=self._step_tools(),
             llm=model_llm,
             tts=voice if voice is not None else NOT_GIVEN,
+            stt=transcriber,
         )
 
     def _step_tools(self) -> list[llm.Tool | llm.Toolset]:
