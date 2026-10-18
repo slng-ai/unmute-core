@@ -4,11 +4,18 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.17.0
+
+This release adds MCP tools on both frameworks and moves to LiveKit Agents 1.8.8. No API changed. Change `unmute_core.require("0.16.0")` to `require("0.17.0")` when you upgrade.
+
+### Changes that can break you
+
+- The `livekit` extra now needs `livekit-agents>=1.8.8,<1.9`. It was `>=1.8.7`. A project that pins `livekit-agents==1.8.7` no longer resolves. Move it and its plugins to 1.8.8 (#32).
+- LiveKit 1.8.8 renamed the GPT-Live voice `aster` to `cedar`. If your agent sets `aster`, change it to `cedar`. Nothing in this library sets a voice (#32).
 
 ### Added
 
-- MCP tools on both frameworks. `McpServer` in `unmute_core.tools` holds a server's address, transport, credential, tool filter and timeout. `unmute_core.livekit.mcp_toolset` turns it into a LiveKit toolset and `unmute_core.pipecat.mcp_tools` into Pipecat tools. Both connect before they return, so a server that is down raises `McpServerError` before the call starts: LiveKit alone would only log it and run the agent without the tools. On LiveKit the model reads each result's text, as on Pipecat, not LiveKit's JSON of each part. The new `mcp` extra installs the `mcp` package: `unmute-core[livekit,mcp]`.
+- MCP tools on both frameworks. `McpServer` in `unmute_core.tools` holds a server's address, transport, credential, tool filter and timeout. `unmute_core.livekit.mcp_toolset` turns it into a LiveKit toolset and `unmute_core.pipecat.mcp_tools` into Pipecat tools. Both connect before they return, so a server that is down raises `McpServerError` before the call starts: LiveKit alone would only log it and run the agent without the tools. On LiveKit the model reads each result's text, as on Pipecat, not LiveKit's JSON of each part. The new `mcp` extra installs the `mcp` package: `unmute-core[livekit,mcp]` (#35).
 
 ## 0.16.1
 
