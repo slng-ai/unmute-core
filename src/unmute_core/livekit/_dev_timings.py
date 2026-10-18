@@ -15,6 +15,7 @@ class Timings:
         self.attached_at = time.time()
         self._started_at: float | None = None
         self._first_speech_at: float | None = None
+        self._caller_stopped: dict[str, float] = {}
 
     def attached(self) -> None:
         """Note that the observer attached to a session now."""
@@ -45,6 +46,8 @@ class Timings:
 
     def turn(self, response: str, metrics: dict[str, Any]) -> None:
         """Record the timings LiveKit puts on the caller's message, under its reply."""
+        if (stopped := metrics.get("stopped_speaking_at")) is not None:
+            self._caller_stopped[response] = stopped
         for key, metric in (
             ("end_of_turn_delay", "turn_detection"),
             ("transcription_delay", "transcription_delay"),
@@ -69,13 +72,19 @@ class Timings:
         """
         rec = self._rec
         source = "livekit-chat-message"
-        latency = metrics.get("e2e_latency")
+        # LiveKit puts e2e_latency only on a model reply. A line code speaks with say(), like
+        # a tool's reply, gets the same number from the caller's stop to the line's start.
+        latency, latency_source = metrics.get("e2e_latency"), source
+        started, stopped = metrics.get("started_speaking_at"), metrics.get("stopped_speaking_at")
+        caller_stopped = self._caller_stopped.get(response)
+        if latency is None and started is not None and caller_stopped is not None:
+            latency, latency_source = started - caller_stopped, f"{source}.started_speaking_at"
         if latency is not None and rec.get("measurement", f"{response}:reply-latency") is None:
             rec.measure(
                 f"{response}:reply-latency",
                 "reply_latency",
                 latency,
-                source,
+                latency_source,
                 scope="response",
                 exchange_id=response,
             )
@@ -93,7 +102,6 @@ class Timings:
                     exchange_id=response,
                     reason=reason,
                 )
-        started, stopped = metrics.get("started_speaking_at"), metrics.get("stopped_speaking_at")
         first, sentence = metrics.get("llm_node_ttft"), metrics.get("llm_node_ttfs")
         for metric, value in (
             ("speech_duration", stopped - started if started and stopped else None),

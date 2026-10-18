@@ -278,6 +278,21 @@ async def test_a_spoken_turn_gives_its_exchanges_text_operations_and_timings() -
     }
 
 
+async def test_a_tool_reply_spoken_with_say_still_gets_its_reply_latency() -> None:
+    call = Voice()
+    call.caller("Yes, book it.", metrics={"end_of_turn_delay": 0.4, "stopped_speaking_at": 99.0})
+    call.state("thinking")
+    call.metric(_llm_metrics())
+    call.state("speaking")
+    call.said(
+        "Lovely, your haircut is booked.", started_speaking_at=100.2, stopped_speaking_at=101.5
+    )
+    call.state("listening")
+    latency = call.records.measured()["reply_latency"]
+    assert latency["value"] == pytest.approx(1.2)
+    assert latency["source"] == "livekit-chat-message.started_speaking_at"
+
+
 async def test_the_caller_speaking_over_the_agent_cuts_its_reply_off() -> None:
     call = Voice()
     call.caller("Where is my order?")
