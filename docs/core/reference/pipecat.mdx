@@ -60,6 +60,9 @@ from unmute_core.pipecat import UnmuteFlows
 <ParamField path="tts" type="VoiceSwitcher | None" default="None">
   The call's voices. The first service speaks first. `hand_off(tts=...)` switches to another. A plain `ServiceSwitcher` is refused.
 </ParamField>
+<ParamField path="stt" type="STTSwitcher | None" default="None">
+  The call's STT services. The first service listens first. `hand_off(stt=...)` switches to another. A plain `ServiceSwitcher` is refused.
+</ParamField>
 
 On Pipecat, the spec's `summarizer` also answers each finish check when the call's LLM cannot be asked: one that is not OpenAI compatible and not a `ModelCallLLMService`. With no summarizer, such an LLM gets what was said instead, and no finish check.
 
@@ -426,6 +429,19 @@ flows = UnmuteFlows(..., llm=llm, tts=voices)
 ```
 
 Put `voices` in the pipeline where one TTS would go. Two voices of one provider are two instances of its service, and each opens its own connection as the pipeline starts. Which agent uses which model and voice is on [Handoffs](/core/build/handoffs).
+
+## STTSwitcher
+
+`STTSwitcher` holds the STT services of a call's agents, in the pipeline where the STT goes. It has the same fix as `VoiceSwitcher`.
+
+```python
+from unmute_core.pipecat import STTSwitcher
+
+listeners = STTSwitcher([english_stt, spanish_stt])
+flows = UnmuteFlows(..., llm=llm, tts=voices, stt=listeners)
+```
+
+Put `listeners` in the pipeline where one STT would go, before the user aggregator. `hand_off(stt=...)` switches it at the same moment as the voice.
 
 ## Turn pace
 

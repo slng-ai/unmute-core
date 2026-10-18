@@ -1,8 +1,9 @@
-"""Each agent of a call has its own model and voice on Pipecat.
+"""Each agent of a call has its own model, voice and STT on Pipecat.
 
 That the next model request goes to the next agent's model, and that its first reply offers
 no handoff tool, is in tests/conformance (``handoff_own_model.json``). These cases cover the
-Pipecat side: the voice switch on a real pipeline, its order, and what ``hand_off`` refuses.
+Pipecat side: the voice and STT switch on a real pipeline, its order, and what ``hand_off``
+refuses.
 """
 
 import asyncio
@@ -30,6 +31,7 @@ from pipecat.pipeline.service_switcher import ServiceSwitcher
 from pipecat.pipeline.worker import PipelineWorker
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.filters.identity_filter import IdentityFilter
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
@@ -39,7 +41,7 @@ from tests.pipecat.harness import Harness
 from tests.tasks.job import Canned, specialist_plan, state
 from unmute_core.agent import AgentSpec
 from unmute_core.model import ModelEvent, ModelRequest, TextDelta, ToolCall
-from unmute_core.pipecat import ModelCallLLMService, UnmuteFlows, VoiceSwitcher
+from unmute_core.pipecat import ModelCallLLMService, STTSwitcher, UnmuteFlows, VoiceSwitcher
 
 NOTES_PROMPT = "You take notes."
 FOUND = {"found": True, "order": {"id": "A-12"}, "status": "open"}
@@ -94,12 +96,14 @@ async def _until(check: Callable[[], bool]) -> None:
             await asyncio.sleep(0)
 
 
-async def test_the_next_agent_speaks_with_its_own_voice_and_model_after_the_line() -> None:
+async def test_the_next_agent_speaks_and_listens_on_its_own_services_after_the_line() -> None:
     """The handoff's pipeline flushes cross the switcher at once: the test waits 3 seconds."""
     first = Turns("gpt-4o-mini", [ToolCall("call-1", "to_notes", "{}")])
     notes = Turns("gpt-4o", [TextDelta("Notes desk.")])
     front, back = Voice("front"), Voice("back")
     voices = VoiceSwitcher([front, back])
+    front_stt, back_stt = IdentityFilter(), IdentityFilter()
+    stts = STTSwitcher([front_stt, back_stt])
     context = LLMContext()
     aggregators = LLMContextAggregatorPair(context)
     llm = ModelCallLLMService(
@@ -110,12 +114,13 @@ async def test_the_next_agent_speaks_with_its_own_voice_and_model_after_the_line
     )
 
     async def to_notes(params: FunctionCallParams) -> None:
-        """Hand the call to the notes desk, on its own model and voice."""
+        """Hand the call to the notes desk, on its own model, voice and STT."""
         await flows.hand_off(
             params,
             AgentSpec(NOTES_PROMPT, tasks=specialist_plan(), model=notes),
             announce="One moment.",
             tts=back,
+            stt=back_stt,
         )
 
     flows = UnmuteFlows(
@@ -126,9 +131,12 @@ async def test_the_next_agent_speaks_with_its_own_voice_and_model_after_the_line
         state=state(specialist_plan()),
         native_tools=[FunctionSchema("to_notes", "To notes.", {}, [], handler=to_notes)],
         tts=voices,
+        stt=stts,
     )
     flows.install()
-    worker = PipelineWorker(Pipeline([aggregators.user(), llm, voices, aggregators.assistant()]))
+    worker = PipelineWorker(
+        Pipeline([stts, aggregators.user(), llm, voices, aggregators.assistant()])
+    )
     runner = WorkerRunner(handle_sigint=False)
     await runner.add_workers(worker)
     running = asyncio.create_task(runner.run())
@@ -145,6 +153,7 @@ async def test_the_next_agent_speaks_with_its_own_voice_and_model_after_the_line
     assert [request.model for request in notes.requests] == ["gpt-4o"]
     assert llm.model_call is notes
     assert flows.model is notes
+    assert stts.strategy.active_service is back_stt
 
 
 def _desk(hand_off: Callable[[UnmuteFlows, FunctionCallParams], Any], **kwargs: Any) -> Harness:
@@ -160,34 +169,54 @@ def _desk(hand_off: Callable[[UnmuteFlows, FunctionCallParams], Any], **kwargs: 
     return h
 
 
-async def test_the_voice_switches_before_the_next_agents_first_reply() -> None:
+async def test_the_voice_and_stt_switch_before_the_next_agents_first_reply() -> None:
     front, back = FrameProcessor(), FrameProcessor()
+    front_stt, back_stt = FrameProcessor(), FrameProcessor()
 
     async def hand_off(flows: UnmuteFlows, params: FunctionCallParams) -> None:
-        await flows.hand_off(params, AgentSpec(NOTES_PROMPT), tts=back)
+        await flows.hand_off(params, AgentSpec(NOTES_PROMPT), tts=back, stt=back_stt)
 
-    h = _desk(hand_off, tts=VoiceSwitcher([front, back]))
+    h = _desk(hand_off, tts=VoiceSwitcher([front, back]), stt=STTSwitcher([front_stt, back_stt]))
     h.user("I need a note taken.")
     await h.call("to_notes")
 
     kinds = [type(frame) for frame in h.worker.log if not isinstance(frame, str)]
-    assert kinds[-3:] == [ManuallySwitchServiceFrame, LLMUpdateSettingsFrame, LLMRunFrame]
-    switch = next(f for f in h.worker.log if isinstance(f, ManuallySwitchServiceFrame))
-    assert switch.service is back
+    assert kinds[-4:] == [
+        ManuallySwitchServiceFrame,
+        ManuallySwitchServiceFrame,
+        LLMUpdateSettingsFrame,
+        LLMRunFrame,
+    ]
+    switches = [f.service for f in h.worker.log if isinstance(f, ManuallySwitchServiceFrame)]
+    assert switches == [back_stt, back]
 
 
-async def test_a_handoff_without_a_voice_goes_back_to_the_calls_first_voice() -> None:
+async def test_a_handoff_without_a_voice_or_stt_goes_back_to_the_calls_first_ones() -> None:
     front, back = FrameProcessor(), FrameProcessor()
+    front_stt, back_stt = FrameProcessor(), FrameProcessor()
 
     async def hand_off(flows: UnmuteFlows, params: FunctionCallParams) -> None:
         await flows.hand_off(params, AgentSpec(NOTES_PROMPT))
 
-    h = _desk(hand_off, tts=VoiceSwitcher([front, back]))
+    h = _desk(hand_off, tts=VoiceSwitcher([front, back]), stt=STTSwitcher([front_stt, back_stt]))
     h.user("I need a note taken.")
     await h.call("to_notes")
 
-    [switch] = [f for f in h.worker.log if isinstance(f, ManuallySwitchServiceFrame)]
-    assert switch.service is front
+    switches = [f.service for f in h.worker.log if isinstance(f, ManuallySwitchServiceFrame)]
+    assert switches == [front_stt, front]
+
+
+async def test_a_task_step_listens_and_speaks_on_its_owners_services() -> None:
+    h = _desk(
+        lambda flows, params: None,
+        tts=VoiceSwitcher([FrameProcessor(), FrameProcessor()]),
+        stt=STTSwitcher([FrameProcessor(), FrameProcessor()]),
+    )
+    h.user("Where is my order?")
+    await h.call("find_order")
+
+    assert h.flows.site == "task:find_order"
+    assert not [f for f in h.worker.log if isinstance(f, ManuallySwitchServiceFrame)]
 
 
 @pytest.mark.parametrize(
@@ -202,6 +231,11 @@ async def test_a_handoff_without_a_voice_goes_back_to_the_calls_first_voice() ->
             AgentSpec(NOTES_PROMPT),
             {"tts": FrameProcessor()},
             "needs that TTS service in the VoiceSwitcher",
+        ),
+        (
+            AgentSpec(NOTES_PROMPT),
+            {"stt": FrameProcessor()},
+            "needs that STT service in the STTSwitcher",
         ),
         (
             AgentSpec(NOTES_PROMPT, handoffs=("to_orders",)),
@@ -222,9 +256,13 @@ async def test_a_handoff_refuses_what_the_call_cannot_give(
         await h.call("to_notes")
 
 
-def test_the_calls_voices_need_a_voice_switcher() -> None:
-    with pytest.raises(ValueError, match="takes a VoiceSwitcher"):
-        Harness(tts=ServiceSwitcher([FrameProcessor(), FrameProcessor()]))
+@pytest.mark.parametrize(
+    ("kind", "match"), [("tts", "takes a VoiceSwitcher"), ("stt", "takes an STTSwitcher")]
+)
+def test_the_calls_services_need_unmutes_switcher(kind: str, match: str) -> None:
+    with pytest.raises(ValueError, match=match):
+        switcher: dict[str, Any] = {kind: ServiceSwitcher([FrameProcessor(), FrameProcessor()])}
+        Harness(**switcher)
 
 
 async def test_an_opening_cut_off_before_its_request_leaves_the_handoffs_in() -> None:

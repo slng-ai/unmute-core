@@ -12,6 +12,9 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 - `FinishRule.ends`: `completed` (the default) or `failed`. A rule that ends `failed` ends the step as failed and saves only its own rows. A group stops on it, unless the step is `non_blocking`.
 - A `FinishRule` that ends `failed` may have an empty `success`. It matches every result, like an author's `else`.
 - `ToolReply.assign`: the values the first matching reply saves into the State, as a tool's own `assign` does. It works on the main agent and in a task step. A row must name a value of the State and read the result.
+- Each agent can listen with its own STT service, the way it already speaks with its own voice. A call that changes language hands off to an agent with that language's STT and TTS. A call with one STT service works as before.
+  - Pipecat: put an `STTSwitcher` where the STT goes, with every agent's STT service, the first agent's first. Give it to `UnmuteFlows(stt=...)`. `hand_off(stt=...)` switches to another service at the same moment as the voice. Without `stt=`, a handoff goes back to the first service.
+  - LiveKit: `UnmuteAgent(stt=...)` takes an STT plugin or a LiveKit Inference model name. None uses the session's STT, as before. The agent's task steps listen with it too, as they already speak with its voice. LiveKit starts a new STT stream on a handoff only when the next agent's STT is a different object.
 
 ### Changed
 

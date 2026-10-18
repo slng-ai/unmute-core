@@ -1,7 +1,8 @@
 """The Pipecat adapter. Needs the ``[pipecat]`` extra.
 
 ``UnmuteFlows`` runs an agent's tasks, with a Flows node for each step, and hands the call
-between agents, each with its own model and, through a ``VoiceSwitcher``, its own voice.
+between agents, each with its own model and, through a ``VoiceSwitcher`` and an
+``STTSwitcher``, its own voice and STT service.
 ``tools_schema`` gives the tools of an agent without tasks, with their handlers.
 ``ModelCallLLMService``
 sends Pipecat's model requests through a ``ModelCall``. ``TelemetryObserver`` turns
@@ -64,7 +65,7 @@ from unmute_core.pipecat._telemetry import TelemetryObserver
 from unmute_core.pipecat._tools import tools_schema
 from unmute_core.pipecat._turn import smart_turn_params, vad_params
 from unmute_core.pipecat._voicemail import voicemail_tool
-from unmute_core.pipecat._voices import VoiceSwitcher
+from unmute_core.pipecat._voices import STTSwitcher, VoiceSwitcher
 
 __all__ = [
     "Backchannels",
@@ -74,6 +75,7 @@ __all__ = [
     "IdleNudgeObserver",
     "ModelCallLLMService",
     "Protected",
+    "STTSwitcher",
     "TelemetryObserver",
     "TelnyxLine",
     "TwilioLine",
