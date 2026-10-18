@@ -898,6 +898,33 @@ def saved_values(rows: Sequence[Assign], result: object, state: CallState) -> di
     return values
 
 
+def check_saves(
+    tool: "ToolSpec", rows: Iterable[Assign], state: type[BaseModel], where: str
+) -> None:
+    """Refuse a row a tool's result cannot save into the State.
+
+    Args:
+        tool: The tool whose result the rows read.
+        rows: The rows, of a tool's own ``assign`` or a ``ToolReply``.
+        state: The State model.
+        where: Who saves, like ``assign: lookup``.
+
+    Raises:
+        ValueError: Naming the row and what to fix.
+    """
+    for row in rows:
+        here = f"{where} saves {row.variable}"
+        if row.source == "input":
+            raise ValueError(
+                f"{here} from its input, but a tool's own save reads its result. "
+                "Save an input in the assign of the step that runs the tool"
+            )
+        source = tool.check_result_path(row.path, here)
+        target = _state_annotation(state, row.variable, here)
+        if source is not None and (unfit := _unfit(source, target, append=row.append)):
+            raise ValueError(f"{here}, but {unfit}")
+
+
 class ToolRegistry:
     """The tools of an agent: their schemas for the model, and one way to call them.
 
@@ -965,17 +992,7 @@ class ToolRegistry:
                     f"assign: {name} saves to the State. Build the ToolRegistry with "
                     "state=YourState"
                 )
-            for row in rows:
-                where = f"assign: {name} saves {row.variable}"
-                if row.source == "input":
-                    raise ValueError(
-                        f"{where} from its input, but a tool's own save reads its result. "
-                        "Save an input in the assign of the step that runs the tool"
-                    )
-                source = tool.check_result_path(row.path, where)
-                target = _state_annotation(self.state, row.variable, where)
-                if source is not None and (unfit := _unfit(source, target, append=row.append)):
-                    raise ValueError(f"{where}, but {unfit}")
+            check_saves(tool, rows, self.state, f"assign: {name}")
         for reply in self.replies:
             if reply.tool is None:  # only a tool's own replies leave it out
                 raise ValueError(
@@ -999,6 +1016,12 @@ class ToolRegistry:
                         "with state=YourState"
                     )
                 _state_annotation(self.state, variable, where)
+            if reply.assign:
+                if self.state is None:
+                    raise ValueError(
+                        f"{where} saves to the State. Build the ToolRegistry with state=YourState"
+                    )
+                check_saves(tool, reply.assign, self.state, where)
 
     def _owner(self, name: str, where: str) -> ToolSpec:
         """Return the tool a row names.
@@ -1130,7 +1153,7 @@ class ToolRegistry:
         *,
         hooks: ToolHooks | None = None,
     ) -> str | None:
-        """Save what a result's ``assign`` rows name, and pick the line code speaks for it.
+        """Save what a result's ``assign`` rows and first matching reply name, and pick its line.
 
         The main agent calls it after ``call``. A task step speaks only its own
         ``replies``: it calls ``save_result`` alone. Only a result that succeeded and does
@@ -1149,6 +1172,9 @@ class ToolRegistry:
         if not self.save_result(name, result, state, hooks=hooks):
             return None
         tool = self._tools[name]
+        matched = (r for r in self.replies if r.tool == name and r.matches(result, state))
+        if (reply := next(matched, None)) is not None:
+            self.save_reply(name, reply, result, state, hooks=hooks)
         line = lines.reply(tool, self.replies, result, state) if self.replies else None
         if line is not None:
             self.replied(name, hooks=hooks)
@@ -1190,13 +1216,45 @@ class ToolRegistry:
         if tool is None or not tool_succeeded(result) or self.ends_call(name, result):
             return False
         if state is not None and (rows := self.assign.get(name)):
-            try:
-                state.save(saved_values(rows, result, state), origin=StateOrigin("tool", name))
-            except StateRefused as refused:
-                logger.warning("tool %s: its result was not saved: %s", name, refused.message)
-                event = _ToolEvent(name=name, source="model", error=refused.message)
-                self._emit("tool.save_refused", event, hooks)
+            self._save_rows(name, rows, result, state, hooks)
         return True
+
+    def save_reply(
+        self,
+        name: str,
+        reply: ToolReply,
+        result: object,
+        state: CallState | None,
+        *,
+        hooks: ToolHooks | None = None,
+    ) -> None:
+        """Save the ``assign`` rows of the reply that matched a result, as ``save_result`` does.
+
+        Args:
+            name: The tool.
+            reply: The first reply that matched the result.
+            result: What ``call`` returned.
+            state: The call state.
+            hooks: The call's hooks. They also hear a refused save.
+        """
+        if state is not None and reply.assign:
+            self._save_rows(name, reply.assign, result, state, hooks)
+
+    def _save_rows(
+        self,
+        name: str,
+        rows: Sequence[Assign],
+        result: object,
+        state: CallState,
+        hooks: ToolHooks | None,
+    ) -> None:
+        """Save what the rows read from a result, and report a save the State refuses."""
+        try:
+            state.save(saved_values(rows, result, state), origin=StateOrigin("tool", name))
+        except StateRefused as refused:
+            logger.warning("tool %s: its result was not saved: %s", name, refused.message)
+            event = _ToolEvent(name=name, source="model", error=refused.message)
+            self._emit("tool.save_refused", event, hooks)
 
     def schemas(self) -> list[dict[str, Any]]:
         """Return every tool as an OpenAI function tool, for ``ModelRequest.tools``.

@@ -16,6 +16,15 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Added
 
 - `hand_off(announce=...)` takes a list of lines on both frameworks. One is picked each time, never the line this handoff said last, as task and tool lines are. A plain string works as before. A blank line in the list raises `ValueError`.
+- `FinishRule.assign`: the values a matching result saves. Each one must be a value the task's `assign` declares. A row reads the result, or the input the tool ran with.
+- `FinishRule.ends`: `completed` (the default) or `failed`. A rule that ends `failed` ends the step as failed and saves only its own rows. A group stops on it, unless the step is `non_blocking`.
+- A `FinishRule` that ends `failed` may have an empty `success`. It matches every result, like an author's `else`.
+- `ToolReply.assign`: the values the first matching reply saves into the State, as a tool's own `assign` does. It works on the main agent and in a task step. A row must name a value of the State and read the result.
+
+### Changed
+
+- A closing tool's rules are tried in order, and the first one that matches decides. When it has `assign` rows, the step saves only those. When it has none and ends `completed`, the step saves every row of the task's `assign`, as before. So packages written before this release work unchanged.
+- The step speaks the `say` line of the first matching rule only. Before, it spoke the line of the first matching rule that had one.
 
 ## 0.17.1
 

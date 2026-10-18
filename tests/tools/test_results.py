@@ -105,6 +105,19 @@ def _assign(*rows: Assign) -> dict[str, Any]:
             {"replies": [ToolReply(when={"status": ["held"]}, say=["Held."])]},
             "a ToolReply on the ToolRegistry names its tool",
         ),
+        (
+            {
+                "state": State,
+                "replies": [
+                    ToolReply(
+                        tool="find_order",
+                        say=["Found it."],
+                        assign=(Assign(variable="count", path=("due",)),),
+                    )
+                ],
+            },
+            "the result holds Date and the State value holds int",
+        ),
     ],
 )
 def test_a_save_or_a_reply_that_does_not_fit_is_refused_when_built(
