@@ -264,8 +264,9 @@ class OpeningTool(_Spec):
 
     When a ``say`` line fills from the result, the line is spoken, the call and its result
     join the step's history, and the step waits for the caller: no model request at all.
-    Otherwise the step opens as it would without one. Use a tool that only reads, because
-    the model may then call it again.
+    With no ``say`` lines, the line is the one the step's replies pick for the result: the
+    task's ``replies`` first, then the tool's own. Otherwise the step opens as it would
+    without one. Use a tool that only reads, because the model may then call it again.
 
     A tool the step ends on may open it too, when it has ``confirm`` lines. Nothing runs:
     code asks its confirm line about the State values and waits for the caller's yes. When
@@ -279,7 +280,7 @@ class OpeningTool(_Spec):
             does not require: that one is left out of the call.
         say: Lines spoken from the result, with ``{{result.<field>}}`` and
             ``{{variable}}`` placeholders. The first one that fills is spoken. None for a
-            tool with ``confirm`` lines.
+            tool with ``confirm`` lines. Empty: the step's replies pick the line.
     """
 
     tool: ToolName
@@ -522,10 +523,6 @@ class TaskSpec(_Spec):
             raise ValueError(
                 f"{name} opens by asking to confirm '{opening.tool}', so its "
                 "confirm line is what is said. Remove the opening's say lines"
-            )
-        if opening.tool not in ends_on and not opening.say:
-            raise ValueError(
-                f"{name} opens with '{opening.tool}' but says nothing. Give the opening a say line"
             )
 
     def providers(self, tasks: Iterable["TaskSpec"]) -> list["TaskSpec"]:

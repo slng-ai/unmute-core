@@ -165,7 +165,6 @@ REFUSED = [
         ),
         "a tool it ends on",
     ),
-    (_with(tools=["search_web"], opens_with={"tool": "search_web", "say": []}), "says nothing"),
     (
         _with(
             tools=["lookup_order"],
