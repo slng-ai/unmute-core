@@ -1434,7 +1434,7 @@ wheels = [
 
 [[package]]
 name = "livekit-agents"
-version = "1.8.7"
+version = "1.8.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -1470,9 +1470,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "watchfiles" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/34/35/f035e3ad43f86905e592a936d6cfca91d6aa14a20cb07839ca3c6e6ec2cb/livekit_agents-1.8.7.tar.gz", hash = "sha256:3310033a61965138f318b67d4163ad0c51e463c07974431806c95c0c93152dae", size = 2792207, upload-time = "2026-10-14T04:26:18.918Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ea/95/f62737eea8d027e054f93c2dd9be0bb697124c9527b4ef81ac06ecaa93f1/livekit_agents-1.8.8.tar.gz", hash = "sha256:c3231937a8b5c3e14f05ebe863364ccd0a0bf073223eec912ad6a194ca10f21b", size = 2814611, upload-time = "2026-10-15T06:07:04.672Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8b/27/fc46f3db17c5d249b9221c240875264c894915a2c3192a9e59c5c447b6ec/livekit_agents-1.8.7-py3-none-any.whl", hash = "sha256:a8b98d77b13f96eb450871ccb8181cc36bff79bcf924e3ac8bd039ca4c7be33a", size = 2917631, upload-time = "2026-10-14T04:26:16.734Z" },
+    { url = "https://files.pythonhosted.org/packages/d9/0b/0af975caf0673edb7beea5f8d25a7317f4e7d61e8530533adeb500ce301a/livekit_agents-1.8.8-py3-none-any.whl", hash = "sha256:b5c8f79381c822412f6a42e4b4b4cc472efaf43a9ba11f2d6feef10380dc77a6", size = 2944277, upload-time = "2026-10-15T06:07:00.131Z" },
 ]
 
 [[package]]
@@ -3909,7 +3909,7 @@ requires-dist = [
     { name = "email-validator", specifier = ">=2.2,<3" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "jsonschema", specifier = ">=4.23,<5" },
-    { name = "livekit-agents", marker = "extra == 'livekit'", specifier = ">=1.8.7,<1.9" },
+    { name = "livekit-agents", marker = "extra == 'livekit'", specifier = ">=1.8.8,<1.9" },
     { name = "llama-index-core", marker = "extra == 'knowledge'", specifier = ">=0.14,<0.15" },
     { name = "llama-index-readers-file", marker = "extra == 'knowledge'", specifier = ">=0.5,<0.8" },
     { name = "llama-index-retrievers-bm25", marker = "extra == 'knowledge'", specifier = ">=0.6,<0.9" },

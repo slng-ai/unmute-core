@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "One piece of unmute-core at a time, on a stock LiveKit Agents app"
 requires-python = ">=3.12"
 dependencies = [
-    "livekit-agents==1.8.7",
-    "livekit-plugins-openai>=1.8.7",
-    "livekit-plugins-slng>=1.8.7",
-    "livekit-plugins-silero>=1.8.7",
+    "livekit-agents==1.8.8",
+    "livekit-plugins-openai>=1.8.8",
+    "livekit-plugins-slng>=1.8.8",
+    "livekit-plugins-silero>=1.8.8",
     "unmute-core[livekit,slng]",
 ]
 

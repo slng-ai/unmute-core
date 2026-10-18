@@ -167,7 +167,7 @@ These hand edits are in the commit after the raw output. Each one must become co
 3. `[tool.uv.sources]` for unmute-core. Here it is a path to this repo. In emitted projects it is not needed: unmute-core comes from PyPI.
 4. A `uv.lock`.
 5. Pipecat projects pin `pipecat-ai==1.12.0`, not 1.10.0. unmute-core needs Pipecat 1.12.x. In Unmute this is `internal/target/driver.go`, plus its smoke suite on the 1.12.0 wheel.
-6. LiveKit projects pin `livekit-agents==1.8.7` and LiveKit plugins `>=1.8.7`, not 1.8.1 (`internal/target/driver.go`). unmute-core needs LiveKit 1.8.7 or newer. LiveKit 1.8.7 needs openai 3, so the slng projects get `openai>=3.19`.
+6. LiveKit projects pin `livekit-agents==1.8.8` and LiveKit plugins `>=1.8.8`, not 1.8.1 (`internal/target/driver.go`). unmute-core needs LiveKit 1.8.8 or newer. LiveKit 1.8.8 needs openai 3, so the slng projects get `openai>=3.19`.
 7. SLNG speech sends the agent id and the session id. Each call makes one `slng_session_id` where it begins: in `run_call` on LiveKit, in `_run_bot` on Pipecat. Every `slng.STT`, `slng.TTS`, `SlngSTTService` and `SlngTTSService` gets `external_agent_id` and `external_session_id=slng_session_id`. The agent id is the router's `agent_id` when the package has one, else the package `name`. On Pipecat, `build_stt`, each `build_<agent>_tts` and each agent class take `slng_session_id`. Pipecat projects pin `pipecat-slng>=0.7.0,<0.8`: 0.6 takes no ids. Once the examples import `unmute_core.state`, these become `**tracking_ids(state.call)`.
 
 ## Emitted code the library already replaces

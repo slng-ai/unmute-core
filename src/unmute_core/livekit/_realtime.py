@@ -1,7 +1,7 @@
 """A LiveKit session on a realtime model: who speaks a fixed line, and which model it is.
 
 LiveKit's ``session.say`` needs a TTS, or a model that can say a line itself
-(voice/agent_activity.py:1720-1729). No realtime model of LiveKit 1.8.7 can. So when the
+(voice/agent_activity.py:1720-1729). No realtime model of LiveKit 1.8.8 can. So when the
 model speaks itself, a fixed line becomes a reply it is told to speak word for word, as
 Unmute's realtime greeting does.
 """

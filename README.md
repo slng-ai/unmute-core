@@ -120,7 +120,7 @@ uv add "unmute-core[pipecat]"
 
 | Extra | What it adds |
 |---|---|
-| `livekit` | The LiveKit adapter. LiveKit Agents 1.8.7 or newer within 1.8. |
+| `livekit` | The LiveKit adapter. LiveKit Agents 1.8.8 or newer within 1.8. |
 | `pipecat` | The Pipecat adapter. Pipecat 1.12 or newer within 1.12. |
 | `slng` | The `openai` package, for `OpenAIModelCall` and the SLNG Context Router as a model call. See [slng](https://github.com/slng-ai/unmute-core/blob/main/docs/core/models/slng.mdx). |
 | `knowledge` | Search over a folder of documents, with llama-index. See [knowledge](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/knowledge.mdx). |

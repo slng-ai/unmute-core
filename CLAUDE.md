@@ -18,7 +18,7 @@ flowchart TD
 ## Decisions already made
 - Name: distribution `unmute-core`, import `unmute_core`, repo `slng-ai/unmute-core`.
 - Python `>=3.12`. Develop on 3.12 (`.python-version`) so newer syntax fails here first.
-- One package with `[livekit]` and `[pipecat]` extras. Both frameworks are on their newest release: LiveKit `>=1.8.7,<1.9`, Pipecat `>=1.12.0,<1.13`. The core's own floors are as low as `scripts/check-floors.sh` proves: OpenTelemetry `>=1.40`, pydantic `>=2.11`, openai `>=1.109,<4` (the `slng` extra). LiveKit 1.8.7 brings OpenTelemetry 1.45 and openai 3 itself. The library leads and Unmute's `internal/target/driver.go` follows. Unmute still pins LiveKit 1.8.1 and Pipecat 1.10.0, and must move to 1.8.7 and 1.12.0 before the Unmute integration.
+- One package with `[livekit]` and `[pipecat]` extras. Both frameworks are on their newest release: LiveKit `>=1.8.8,<1.9`, Pipecat `>=1.12.0,<1.13`. The core's own floors are as low as `scripts/check-floors.sh` proves: OpenTelemetry `>=1.40`, pydantic `>=2.11`, openai `>=1.109,<4` (the `slng` extra). LiveKit 1.8.8 brings OpenTelemetry 1.45 and openai 3 itself. The library leads and Unmute's `internal/target/driver.go` follows. Unmute moves to the same pins in slng-ai/unmute#301.
 - Install from PyPI: `uv add "unmute-core[livekit]"`. A `v*` tag publishes to TestPyPI, then to PyPI after a maintainer approves, with trusted publishing. `.github/workflows/release.yml` runs CI and the live tests first.
 - Unmute's constitution rule "no runtime dependency" (Principle I) will be changed in the Unmute repo.
 - Datadog is a public telemetry target: spans go over OTLP to an OpenTelemetry Collector that exports to Datadog. It is built here first, then added to Unmute.
