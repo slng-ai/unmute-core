@@ -224,11 +224,14 @@ def test_a_tool_that_ends_the_step_is_named_with_what_it_must_return() -> None:
                 FinishRule(tool="lookup_order", success={"found": (True,), "late": (False,)}),
                 FinishRule(tool="lookup_order", success={"status": ("shipped", "delivered")}),
             ],
-            "book": [FinishRule(tool="book", success={"booked": (True,)})],
+            "book": [
+                FinishRule(tool="book", success={"booked": (True,)}),
+                FinishRule(tool="book", success={}, ends="failed"),
+            ],
         },
     )
     assert (
-        "When `book` returns a result where `booked` is `true` or `lookup_order` returns a "
+        "When `book` returns any result or `lookup_order` returns a "
         "result where `found` is `true` and `late` is `false`, or where `status` is `shipped` "
         "or `delivered`, this step ends by itself"
     ) in tail

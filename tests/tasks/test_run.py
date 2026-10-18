@@ -24,6 +24,7 @@ from unmute_core.tasks import (
     CallTasks,
     DelegateRun,
     FinishCheck,
+    SaveOutcome,
     StepRun,
     TaskPlan,
     TasksSpec,
@@ -420,6 +421,42 @@ async def test_a_group_step_without_its_required_value_fails_without_starting() 
         "task.failed",
         "group.stopped",
     ]
+
+
+@pytest.mark.parametrize(
+    ("non_blocking", "status", "next_step"),
+    [
+        pytest.param([], "failed", None, id="stops-the-group"),
+        pytest.param(["find_order"], None, "take_note", id="non-blocking-carries-on"),
+    ],
+)
+async def test_a_closing_rule_that_ends_failed_saves_its_rows_and_stops_a_blocking_group(
+    non_blocking: list[str], status: str | None, next_step: str | None
+) -> None:
+    payload = job()
+    payload["tasks"][0]["finish"].append(
+        {
+            "tool": "lookup_order",
+            "success": {},
+            "ends": "failed",
+            "assign": [{"variable": "status", "path": ["status"]}],
+        }
+    )
+    payload["groups"][0]["non_blocking"] = non_blocking
+    tasks = _tasks(
+        payload, lookup_order=Canned({"found": False, "order": {"id": "A-12"}, "status": "closed"})
+    )
+    run = _start(tasks, "order_flow")
+    first = _step(run)
+
+    assert await first.call_tool("lookup_order", {}) is None
+    run.ended(first)
+
+    assert first.outcome == SaveOutcome("failed", ("status",))
+    assert (tasks.state.plain("order_id"), tasks.state.plain("status")) == (None, "closed")
+    following = run.next_step()
+    assert (following.task.name if following else None) == next_step
+    assert run.status == status
 
 
 async def test_a_confirmed_step_is_skipped_and_entering_it_withdraws_its_confirmation() -> None:

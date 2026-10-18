@@ -2,7 +2,7 @@
 
 ``ClosingTools`` is the part of a ``StepRun`` that runs a tool call. A tool with a ``finish``
 rule is a closing tool: it may ask the caller to confirm its input first, it runs one at a
-time, and its success saves the step's values and ends the step.
+time, and a result one of its rules matches saves that rule's values and ends the step.
 """
 
 import asyncio
@@ -54,7 +54,7 @@ class _Asked:
 
 
 class ClosingTools:
-    """Runs the tools of one step, and ends the step on a closing tool's success.
+    """Runs the tools of one step, and ends the step on a result a closing tool's rule matches.
 
     Attributes:
         reply: The line code speaks for the tool call that just ran, or None: a ``replies``
@@ -217,7 +217,8 @@ class ClosingTools:
     def _reply_to(self, name: str, result: object) -> str | None:
         """Return the line code speaks for this result of a tool, or None.
 
-        The step's ``replies`` are tried first, then the tool's own.
+        The step's ``replies`` are tried first, then the tool's own. The first that matches
+        saves its ``assign`` rows.
         """
         rule = next(
             (
@@ -229,6 +230,7 @@ class ClosingTools:
         )
         if rule is None:
             return None
+        self._tools.save_reply(name, rule, result, self._tasks.state, hooks=self._tasks.hooks)
         line = self._tasks.spoken_line(self._task, name, rule.say, result)
         if line is not None:
             self._tools.replied(name, hooks=self._tasks.hooks)
@@ -312,41 +314,52 @@ class ClosingTools:
         result: object,
         arguments: str | Mapping[str, Any],
     ) -> object:
-        """End the step on a closing tool's successful result, or hand the result back.
+        """End the step on a result a rule matches, or hand the result back.
 
-        The step's ``assign`` rows read the result, or the input the tool just ran with.
+        The first rule that matches decides. Its ``assign`` rows, or the step's when it has
+        none and ends ``completed``, read the result or the input the tool just ran with.
         """
-        matched = [rule for rule in rules if success_matches(rule, result)]
+        rule = next((rule for rule in rules if success_matches(rule, result)), None)
         if self._step.done:
-            if matched:
+            if rule is not None:
                 logger.warning(
                     "step %s had ended when %s succeeded; nothing records it",
                     self._task.name,
                     name,
                 )
             return None
-        if not matched or not isinstance(result, Mapping):
+        if rule is None or not isinstance(result, Mapping):
             self._returned(result)
             self.reply = self._reply_to(name, result)
             return result
         self._terminal = (name, result)
         self._step.carries_turn = True
+        rows = rule.saves
+        state = self._tasks.state
+        reads = self._task.assign if rows is None else rows
         try:
             given = (
-                self._tools.check(name, arguments, self._tasks.state)
-                if any(row.source == "input" for row in self._task.assign)
+                self._tools.check(name, arguments, state)
+                if any(row.source == "input" for row in reads)
                 else None
             )
-            outcome = self._values.save(
-                self._task.values_from_result(result, given), state=self._tasks.state
+            outcome = (
+                self._values.save(self._task.values_from_result(result, given), state=state)
+                if rows is None
+                else self._values.save_rows(
+                    rows,
+                    self._task.values_from_result(result, given, rows),
+                    state=state,
+                    status=rule.ends,
+                )
             )
         except TaskValueRefused as error:
             logger.warning("closing tool %s: not recorded: %s", name, error.message)
             self._event("task.value_refused")
             self.tool_returned = True
             return {**result, "refused": "Not recorded: " + error.message + TERMINAL_SAVE_REFUSED}
-        logger.info("step %s ended on %s", self._task.name, name)
-        self.receipt = self._tasks.receipt(self._task, name, matched, result)
+        logger.info("step %s ended %s on %s", self._task.name, outcome.status, name)
+        self.receipt = self._tasks.receipt(self._task, name, (rule,), result)
         self._event("task.ended_on_tool", saved=outcome.saved)
         self._step.outcome = outcome
         return None

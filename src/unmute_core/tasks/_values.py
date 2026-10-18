@@ -63,7 +63,7 @@ class SaveOutcome:
 
     Attributes:
         status: ``completed`` saved. ``unserved`` handed the caller back. ``failed``
-            broke and saved nothing.
+            broke, or ended on a finish rule that ends ``failed`` and saved only its rows.
         saved: The values it saved.
         unserved_request: What it could not serve, in the caller's words.
         refused: Values a hand-back was given that did not fit, left as they were.
@@ -392,14 +392,16 @@ class StepValues:
         state: CallState,
         *,
         only: set[str] | None = None,
+        required: frozenset[str] = frozenset(),
         keep_valid: bool = False,
         confirming: bool = True,
     ) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """Save the step's values, or only those named: what saved, and what did not.
 
-        All or none, refused with ``TaskValueRefused``. With ``keep_valid`` a value that does
-        not fit is left out and named, and the rest are saved. Without ``confirming`` the step
-        confirms none of them.
+        All or none, refused with ``TaskValueRefused``. A value the task needs is refused
+        when missing: every row not optional, or with ``only`` the ``required`` ones. With
+        ``keep_valid`` a value that does not fit is left out and named, and the rest are
+        saved. Without ``confirming`` the step confirms none of them.
         """
         task = self.task
         pending: dict[str, Any] = {}
@@ -414,7 +416,8 @@ class StepValues:
                     raise
                 refused.append(row.variable)
                 continue
-            if only is None and value is None and not (row.append or row.optional):  # needs the row
+            needed = row.argument in required if only is not None else not row.optional
+            if value is None and needed and not row.append:
                 raise TaskValueRefused(f"{row.argument}: Field required")
             if row.append:
                 current = state.plain(row.variable) or []
@@ -477,6 +480,34 @@ class StepValues:
             return SaveOutcome("unserved", saved, unserved, refused)
         saved, _ = self._save(arguments, state, confirming=confirming)
         return SaveOutcome("completed", saved)
+
+    def save_rows(
+        self,
+        rows: Sequence[Assign],
+        arguments: Mapping[str, Any],
+        *,
+        state: CallState,
+        status: Literal["completed", "failed"],
+    ) -> SaveOutcome:
+        """Save only the values a finish rule's own rows name, and end the step with ``status``.
+
+        Each row is required unless it is optional or appends, as in a finish.
+
+        Args:
+            rows: The rule's rows. Each names a value the task's ``assign`` declares.
+            arguments: Their values, by the task's finish parameters
+                (``TaskSpec.values_from_result`` with ``rows``).
+            state: The call state.
+            status: How the step ends.
+
+        Raises:
+            TaskValueRefused: If a value does not fit. Nothing was saved.
+        """
+        names = {row.variable: row.argument for row in self.task.assign}
+        required = frozenset(names[row.variable] for row in rows if not row.optional)
+        only = {names[row.variable] for row in rows}
+        saved, _ = self._save(arguments, state, only=only, required=required)
+        return SaveOutcome(status, saved)
 
 
 def merge_retained(

@@ -216,6 +216,20 @@ def _opening_reads(value: str) -> dict[str, Any]:
             None,
             "saves 'note' from a tool's input, but no finish rule names a tool",
         ),
+        (
+            _bad(
+                ["tasks", 0, "replies"],
+                [
+                    {
+                        "tool": "lookup_order",
+                        "say": ["Hi."],
+                        "assign": [{"variable": "ghost", "path": ["g"]}],
+                    }
+                ],
+            ),
+            None,
+            "a reply to 'lookup_order' saves ghost: the State has no value 'ghost'",
+        ),
         (job(), {"note": "take_note"}, "which the agent does not run directly"),
         (job(), {"note": "find_order"}, "must assign 'note', the value it confirms"),
         (job(), {"note": "ghost"}, "which the agent does not run directly"),
@@ -266,6 +280,11 @@ def test_a_step_saves_only_inputs_its_closing_tool_takes() -> None:
         plan(payload, tools=_typed_lookup())
     payload["tasks"][0]["assign"][0]["path"] = ["order_id"]
     assert plan(payload, tools=_typed_lookup())
+    payload["tasks"][0]["finish"][0]["assign"] = [
+        {"variable": "order_id", "path": ["order_number"], "source": "input"}
+    ]
+    with pytest.raises(ValueError, match="from the input 'order_number', which the tool does not"):
+        plan(payload, tools=_typed_lookup())
 
 
 class _Order(BaseModel):
@@ -300,6 +319,18 @@ def _step(**changes: Any) -> dict[str, Any]:
         (
             _step(replies=[{"tool": "lookup_order", "when": {"colour": ["red"]}, "say": ["Red."]}]),
             "reads result.colour",
+        ),
+        (
+            _step(
+                finish=[
+                    {
+                        "tool": "lookup_order",
+                        "success": {"found": [True]},
+                        "assign": [{"variable": "status", "path": ["state"]}],
+                    }
+                ]
+            ),
+            "saves 'status', but it reads result.state, which _Found",
         ),
     ],
 )
