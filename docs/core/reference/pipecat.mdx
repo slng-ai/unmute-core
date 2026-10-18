@@ -384,11 +384,12 @@ Without `enable_metrics` and `enable_usage_metrics`, Pipecat sends no time to fi
 
 ## Native tools and MCP
 
-`native_tools` are Pipecat `FunctionSchema`s with their own handlers, like a handoff or an end-call tool. A Pipecat MCP client needs no new class.
+`native_tools` are Pipecat `FunctionSchema`s with their own handlers, like a handoff or an end-call tool.
 
-1. `MCPClient.tools()` returns a `ToolsSchema`. Its `FunctionSchema`s carry their handlers.
-2. The main agent gets every tool you pass in `native_tools`.
-3. A step gets only the names its task lists. See [Tasks](/core/build/tasks).
+1. `await mcp_tools(McpServer(...))` returns an MCP server's tools, each with its handler. It connects first and raises `McpServerError` when the server is down, the address is unset or the token is missing. The settings are in [McpServer](/core/reference/tools#mcp-servers).
+2. The LLM service closes the connection when the pipeline ends.
+3. The main agent gets every tool you pass in `native_tools`.
+4. A step gets only the names its task lists, by each tool's own name. See [Tasks](/core/build/tasks).
 
 ### end_call_tool
 

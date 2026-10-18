@@ -313,6 +313,8 @@ When the session closes, the agent settles the steps' held saves and closes its 
 TaskSpec(name="look_up_customer", native_tools=("crm",), ...)
 ```
 
+`await mcp_toolset(McpServer(...))` returns an MCP server's tools as a toolset whose id is the server's `name`. It connects first and raises `McpServerError` when the server is down, the address is unset or the token is missing. It sends the model each result's text parts joined, as Pipecat does. LiveKit's own resolver would send each part as JSON. The settings are in [McpServer](/core/reference/tools#mcp-servers).
+
 See [Tasks](/core/build/tasks) for a step that offers the agent's native tools.
 
 ## Rules to know
