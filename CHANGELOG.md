@@ -6,8 +6,16 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ## Unreleased
 
+### Changes that can break you
+
+- A handoff's `announce` line is now said in the voice of the agent that takes the call. Before, the agent that handed off said it in its own voice. A switch to a Spanish agent now sounds Spanish from its first word.
+  - On LiveKit, the next agent says the line as it enters, before its first reply. It still uses `allow_interruptions=False` and stays out of the live chat.
+  - On Pipecat, the handoff waits until the old voice has said the reply that made the handoff. Then it switches the STT service and the voice, and says the line.
+- On LiveKit, a `history="summary"` handoff now writes the summary before the line plays, not while it plays. The 8 second limit still holds.
+
 ### Added
 
+- `hand_off(announce=...)` takes a list of lines on both frameworks. One is picked each time, never the line this handoff said last, as task and tool lines are. A plain string works as before. A blank line in the list raises `ValueError`.
 - `FinishRule.assign`: the values a matching result saves. Each one must be a value the task's `assign` declares. A row reads the result, or the input the tool ran with.
 - `FinishRule.ends`: `completed` (the default) or `failed`. A rule that ends `failed` ends the step as failed and saves only its own rows. A group stops on it, unless the step is `non_blocking`.
 - A `FinishRule` that ends `failed` may have an empty `success`. It matches every result, like an author's `else`.

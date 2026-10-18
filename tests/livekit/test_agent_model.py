@@ -10,8 +10,9 @@ import re
 from typing import Any, cast
 
 import pytest
-from livekit.agents import AgentSession, function_tool, llm
+from livekit.agents import AgentSession, APIConnectOptions, function_tool, llm, tts
 
+from tests.conformance.livekit_driver import Silence
 from tests.livekit.fake import Ears, Reply, ScriptedLLM, Voice, call
 from tests.livekit.test_trace import Memory
 from tests.tasks.job import Canned, plan, registry, specialist_plan, state
@@ -252,3 +253,83 @@ async def test_an_opening_cut_off_before_its_request_leaves_the_handoffs_in() ->
 
     assert "to_orders" not in [tool.id for tool in desk._gate.offered(heard.copy(), tools)]
     assert "to_orders" in [tool.id for tool in desk._gate.offered(later, tools)]
+
+
+class _Sentence(tts.ChunkedStream):
+    """One sentence of speech: a short sound."""
+
+    async def _run(self, output_emitter: tts.AudioEmitter) -> None:
+        output_emitter.initialize(
+            request_id="r", sample_rate=24000, num_channels=1, mime_type="audio/pcm"
+        )
+        output_emitter.push(b"\x00\x00" * 240)
+        output_emitter.flush()
+
+
+class Speaker(tts.TTS):
+    """A voice that keeps each text it is asked to say."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            capabilities=tts.TTSCapabilities(streaming=False), sample_rate=24000, num_channels=1
+        )
+        self.said: list[str] = []
+
+    def synthesize(
+        self,
+        text: str,
+        *,
+        conn_options: APIConnectOptions = ...,  # ty: ignore[invalid-parameter-default]
+    ) -> tts.ChunkedStream:
+        self.said.append(text)
+        return _Sentence(tts=self, input_text=text, conn_options=conn_options)
+
+
+SPANISH_LINES = ("Un momento.", "Un segundo.")
+
+
+class English(UnmuteAgent):
+    """The English desk, on the session's voice, with a handoff to the Spanish desk."""
+
+    def __init__(self, call_state: CallState, spanish_voice: Speaker) -> None:
+        super().__init__(AgentSpec("You speak English."), state=call_state)
+        self.spanish_voice = spanish_voice
+
+    @function_tool
+    async def to_spanish(self) -> UnmuteAgent | str:
+        """Hand the caller to the Spanish desk."""
+        assert self.state is not None
+        spanish = Spanish(self.state, self.spanish_voice)
+        return await self.hand_off(spanish, announce=SPANISH_LINES)
+
+
+class Spanish(UnmuteAgent):
+    """The Spanish desk, on its own voice, with a handoff back."""
+
+    def __init__(self, call_state: CallState, voice: Speaker) -> None:
+        super().__init__(AgentSpec("Hablas español."), state=call_state, tts=voice)
+        self.voice = voice
+
+    @function_tool
+    async def to_english(self) -> UnmuteAgent | str:
+        """Hand the caller back to the English desk."""
+        assert self.state is not None
+        return await self.hand_off(English(self.state, self.voice))
+
+
+async def test_the_handoff_line_is_said_in_the_next_agents_voice_and_rotates() -> None:
+    english, spanish = Speaker(), Speaker()
+    model = ScriptedLLM(
+        call("to_spanish"), "Hola.", call("to_english"), "Hello.", call("to_spanish"), "Hola."
+    )
+    async with AgentSession(llm=model, tts=english) as session:
+        session.output.audio = Silence()
+        await session.start(English(CallState(), spanish))
+        await session.run(user_input="Español, por favor.")
+        await session.run(user_input="English, please.")
+        await session.run(user_input="Español otra vez.")
+
+    first, hola, second, hola_again = spanish.said
+    assert {first, second} == set(SPANISH_LINES)
+    assert (hola, hola_again) == ("Hola.", "Hola.")
+    assert english.said == ["Hello."]

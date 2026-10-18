@@ -7,7 +7,7 @@ refuses.
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from typing import Any, cast
 
 import pytest
@@ -24,7 +24,10 @@ from pipecat.frames.frames import (
     LLMTextFrame,
     LLMUpdateSettingsFrame,
     ManuallySwitchServiceFrame,
+    TTSAudioRawFrame,
     TTSSpeakFrame,
+    TTSStoppedFrame,
+    TTSTextFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.service_switcher import ServiceSwitcher
@@ -35,6 +38,8 @@ from pipecat.processors.filters.identity_filter import IdentityFilter
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.openai.llm import OpenAILLMService
+from pipecat.services.settings import TTSSettings
+from pipecat.services.tts_service import TTSService
 from pipecat.workers.runner import WorkerRunner
 
 from tests.pipecat.harness import Harness
@@ -96,7 +101,7 @@ async def _until(check: Callable[[], bool]) -> None:
             await asyncio.sleep(0)
 
 
-async def test_the_next_agent_speaks_and_listens_on_its_own_services_after_the_line() -> None:
+async def test_the_next_agent_speaks_and_listens_on_its_own_services_from_the_line() -> None:
     """The handoff's pipeline flushes cross the switcher at once: the test waits 3 seconds."""
     first = Turns("gpt-4o-mini", [ToolCall("call-1", "to_notes", "{}")])
     notes = Turns("gpt-4o", [TextDelta("Notes desk.")])
@@ -143,17 +148,134 @@ async def test_the_next_agent_speaks_and_listens_on_its_own_services_after_the_l
     try:
         caller = [{"role": "user", "content": "I need a note taken."}]
         await worker.queue_frame(LLMMessagesAppendFrame(cast(Any, caller), run_llm=True))
-        await _until(lambda: back.lines == ["Notes desk."])
+        await _until(lambda: back.lines == ["One moment.", "Notes desk."])
     finally:
         await worker.queue_frame(EndFrame())
         await asyncio.wait_for(running, 5)
 
-    assert front.lines == ["One moment."]
+    assert front.lines == []
     assert len(first.requests) == 1
     assert [request.model for request in notes.requests] == ["gpt-4o"]
     assert llm.model_call is notes
     assert flows.model is notes
     assert stts.strategy.active_service is back_stt
+
+
+class Speaker(TTSService):
+    """Pipecat's TTS service with silence for a voice, after a provider's delay."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            name=name,
+            sample_rate=16000,
+            push_start_frame=True,
+            push_stop_frames=True,
+            stop_frame_timeout_s=0.05,
+            settings=TTSSettings(model=None, voice=None, language=None),
+        )
+        self.lines: list[str] = []
+
+    async def run_tts(self, text: str, context_id: str) -> AsyncGenerator[Frame | None]:
+        self.lines.append(text.strip())
+        await asyncio.sleep(0.05)
+        yield TTSAudioRawFrame(b"\x00" * 640, 16000, 1, context_id=context_id)
+
+
+class Output(FrameProcessor):
+    """Plays the speech that leaves the voices, as an output transport does."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.heard: list[str] = []
+        self._speaking = False
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
+        await super().process_frame(frame, direction)
+        if isinstance(frame, TTSAudioRawFrame):
+            if not self._speaking:
+                self._speaking = True
+                await self.push_frame(BotStartedSpeakingFrame(), FrameDirection.UPSTREAM)
+            return
+        if isinstance(frame, TTSTextFrame):
+            self.heard.append(frame.text)
+        await self.push_frame(frame, direction)
+        if isinstance(frame, TTSStoppedFrame) and self._speaking:
+            self._speaking = False
+            await self.push_frame(BotStoppedSpeakingFrame(), FrameDirection.UPSTREAM)
+
+
+SPANISH_LINES = ("Un momento.", "Un segundo.")
+
+
+async def test_the_handoff_line_is_said_in_the_next_voice_after_the_old_reply_and_rotates() -> None:
+    model = Turns(
+        "gpt-4o-mini",
+        [TextDelta("Sure."), ToolCall("call-1", "to_spanish", "{}")],
+        [TextDelta("Hola.")],
+        [ToolCall("call-2", "to_english", "{}")],
+        [TextDelta("Hello.")],
+        [ToolCall("call-3", "to_spanish", "{}")],
+        [TextDelta("Hola.")],
+    )
+    english, spanish, output = Speaker("english"), Speaker("spanish"), Output()
+    voices = VoiceSwitcher([english, spanish])
+    context = LLMContext()
+    aggregators = LLMContextAggregatorPair(context)
+    llm = ModelCallLLMService(
+        model,
+        settings=OpenAILLMService.Settings(
+            model="gpt-4o-mini", system_instruction="You speak English."
+        ),
+    )
+
+    async def to_spanish(params: FunctionCallParams) -> None:
+        await flows.hand_off(
+            params,
+            AgentSpec("Hablas español.", handoffs=("to_english",)),
+            native_tools=[back],
+            announce=SPANISH_LINES,
+            tts=spanish,
+        )
+
+    async def to_english(params: FunctionCallParams) -> None:
+        await flows.hand_off(
+            params,
+            AgentSpec("You speak English.", handoffs=("to_spanish",)),
+            native_tools=[there],
+            tts=english,
+        )
+
+    there = FunctionSchema("to_spanish", "To Spanish.", {}, [], handler=to_spanish)
+    back = FunctionSchema("to_english", "To English.", {}, [], handler=to_english)
+    flows = UnmuteFlows(
+        AgentSpec("You speak English.", handoffs=("to_spanish",)),
+        llm=llm,
+        context=context,
+        aggregators=aggregators,
+        native_tools=[there],
+        tts=voices,
+    )
+    flows.install()
+    worker = PipelineWorker(
+        Pipeline([aggregators.user(), llm, voices, output, aggregators.assistant()])
+    )
+    runner = WorkerRunner(handle_sigint=False)
+    await runner.add_workers(worker)
+    running = asyncio.create_task(runner.run())
+    try:
+        for caller, heard in [("Español.", 3), ("English.", 4), ("Español otra vez.", 6)]:
+            message = [{"role": "user", "content": caller}]
+            await worker.queue_frame(LLMMessagesAppendFrame(cast(Any, message), run_llm=True))
+            await _until(lambda heard=heard: len(output.heard) == heard)
+    finally:
+        await worker.queue_frame(EndFrame())
+        await asyncio.wait_for(running, 5)
+
+    first, hola, second, hola_again = spanish.lines
+    assert {first, second} == set(SPANISH_LINES)
+    assert (hola, hola_again) == ("Hola.", "Hola.")
+    assert english.lines == ["Sure.", "Hello."]
+    assert output.heard == ["Sure.", first, "Hola.", "Hello.", second, "Hola."]
 
 
 def _desk(hand_off: Callable[[UnmuteFlows, FunctionCallParams], Any], **kwargs: Any) -> Harness:

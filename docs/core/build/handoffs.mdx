@@ -73,7 +73,7 @@ flows = UnmuteFlows(
 
 </CodeGroup>
 
-1. The `announce` line plays first, and the handoff waits for it. The caller cannot cut it off.
+1. The `announce` line plays first, in the next agent's voice, and the handoff waits for it. The caller cannot cut it off. Pass a list of lines to have one picked each time, never the one this handoff said last.
 2. On LiveKit, build the next agent on `self.state` and without `telemetry`. On Pipecat, pass its spec, and `UnmuteFlows` swaps the prompt, tools, tasks and model.
 3. The next agent replies first. Name each agent's handoff tools in its spec's `handoffs`, so that first reply cannot hand the call straight back.
 
@@ -103,7 +103,7 @@ HandoffContext(history="last_n", max_messages=6)
 HandoffContext(history="summary", summarizer=my_model_call)
 ```
 
-1. The summary is asked for while the `announce` line plays, so it does not hold up the handoff.
+1. On Pipecat, the summary is asked for while the `announce` line plays, so it does not hold up the handoff. On LiveKit, it is written first, and the next agent says the line as it enters.
 2. `summarizer` is any `ModelCall`. Without one, the spec's `summarizer` answers, else the model of the agent that hands off.
 3. A summary that fails, comes back empty, or takes longer than 8 seconds is dropped. The next agent then hears `messages`.
 
@@ -179,7 +179,7 @@ async def to_billing(params: FunctionCallParams) -> None:
 
 `FRONT_VOICE` and `BILLING_VOICE` are two Fish Audio voice ids on SLNG. `SLNG_KEY`, `SLNG_HOST` and `WORLD_PART` come from your environment, as in the [quickstart](/core/start/quickstart).
 
-1. The `announce` line plays in the old voice. Then the new model and voice take over.
+1. The `announce` line plays in the new voice, so a switch to another language sounds right from its first word. Then the new model takes over.
 2. An agent whose spec has no `model` runs on the call's first model. The same holds for the voice.
 3. On Pipecat, a spec with a `model` needs a `ModelCallLLMService`, and the voices go through a `VoiceSwitcher`.
 4. An agent can also listen with its own STT, for example in another language. On LiveKit, pass `UnmuteAgent(stt=...)`. On Pipecat, put an `STTSwitcher` where the STT goes, give it to `UnmuteFlows(stt=...)`, and pass `hand_off(stt=...)`.

@@ -76,6 +76,7 @@ from unmute_core.tools import (
     values_block,
     values_tool,
 )
+from unmute_core.tools._announce import handoff_line
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,7 @@ class UnmuteAgent(Agent):
         self._task_models = dict(spec.task_models)
         self._gate = HandoffGate(self._handoffs, armed=True)
         self._opens_with: OpeningTool | None = None
+        self._entry_line: str | None = None
         self._handed_off = False
         self._settles = False
         self._settling: asyncio.Task[list[str]] | None = None
@@ -343,8 +345,9 @@ class UnmuteAgent(Agent):
     async def on_enter(self) -> None:
         """Start the call's spans on the first entry. An agent handed the call speaks first.
 
-        With an opening tool, it runs the tool first. When its line fills, the call and its
-        result join the chat, the line is said, and no model request is made.
+        It says the handoff's line first, in its own voice. With an opening tool, it runs
+        the tool next. When its line fills, the call and its result join the chat, the line
+        is said, and no model request is made.
 
         Raises:
             ValueError: On a realtime model, if the agent has something it cannot run. The
@@ -373,6 +376,9 @@ class UnmuteAgent(Agent):
             self._guard.hold_job()
         if self._gate.opens:
             self._gate.opens = False
+            if (line := self._entry_line) is not None:
+                self._entry_line = None
+                await self._announce(line)
             said = await self._open()
             self._gate.start_opening(self.chat_ctx)
             if not said:
@@ -388,14 +394,18 @@ class UnmuteAgent(Agent):
         if self.tasks is not None:
             self.tasks.listen(trace.telemetry.event)
 
-    def open_on_enter(self, opens_with: OpeningTool | None = None) -> None:
+    def open_on_enter(
+        self, opens_with: OpeningTool | None = None, *, line: str | None = None
+    ) -> None:
         """Speak first when the agent enters: it takes a call handed to it.
 
         Args:
             opens_with: A tool of the agent's own, run in code before its first reply.
+            line: The handoff's line, said in this agent's voice before anything else.
         """
         self._gate.opens = True
         self._opens_with = opens_with
+        self._entry_line = line
 
     async def _open(self) -> bool:
         """Run the opening tool the handoff gave, and say its line. Return True when said."""
@@ -470,7 +480,7 @@ class UnmuteAgent(Agent):
         self,
         agent: "UnmuteAgent",
         *,
-        announce: str | None = None,
+        announce: str | Sequence[str] | None = None,
         context: HandoffContext | None = None,
         opens_with: OpeningTool | None = None,
     ) -> "UnmuteAgent | str":
@@ -482,9 +492,10 @@ class UnmuteAgent(Agent):
 
         Args:
             agent: The agent that takes the call, built on this agent's ``CallState``.
-            announce: A line said first, which the caller cannot cut off. The handoff
-                waits for it to play.
-            context: What the agent hears. A summary is asked for while the line plays.
+            announce: A line the agent says first, in its own voice, which the caller
+                cannot cut off. With several lines, one is picked each time, never the
+                line this handoff said last.
+            context: What the agent hears. A summary is written before the agent enters.
                 None keeps what was said, without tool calls.
             opens_with: A tool of the agent's own it runs in code as it enters. When a line
                 fills from the result, the line is its first reply, with no model request.
@@ -494,7 +505,8 @@ class UnmuteAgent(Agent):
 
         Raises:
             TypeError: If ``agent`` is not an ``UnmuteAgent``.
-            ValueError: If ``agent`` holds another call state, or cannot run ``opens_with``.
+            ValueError: If ``agent`` holds another call state, or cannot run ``opens_with``,
+                or a line of ``announce`` is blank.
         """
         if not isinstance(agent, UnmuteAgent):  # own text: names the plain-agent way
             raise TypeError(
@@ -515,6 +527,9 @@ class UnmuteAgent(Agent):
             check_realtime_handoff(
                 context, fixed_instructions=not model.capabilities.mutable_instructions
             )
+        line = handoff_line(
+            _HANDOFF_LINES.setdefault(self.session, LinePicker()), agent.id, announce
+        )
         source = step if step is not None else self
         summary = None
         if context.history == "summary":
@@ -522,12 +537,10 @@ class UnmuteAgent(Agent):
             summary = asyncio.create_task(
                 self._models.summarize(self, source.chat_ctx, model=model)
             )
-        if announce:
-            await self._announce(announce)
         text = await summary if summary is not None else None
         history = source.chat_ctx.copy()
-        if announce and not speaks_itself(self.session):
-            history.add_message(role="assistant", content=announce)
+        if line and not speaks_itself(self.session):
+            history.add_message(role="assistant", content=line)
         await agent.update_chat_ctx(
             summary_history(text)
             if text
@@ -544,15 +557,16 @@ class UnmuteAgent(Agent):
             self._trace.start_handoff()
         if step is not None:
             step.step.hand_off()
-        agent.open_on_enter(opens_with)
+        agent.open_on_enter(opens_with, line=line)
         self._handed_off = True
         return agent
 
     async def _announce(self, line: str) -> None:
-        """Say a handoff's line, which the caller cannot cut off, and wait for it to play.
+        """Say a handoff's line as this agent enters, which the caller cannot cut off.
 
-        It stays out of this agent's chat. ``hand_off`` puts it in the next agent's
-        history, as on Pipecat, where only a TTS service writes spoken text to the context.
+        It waits for the line to play. It stays out of the live chat. ``hand_off`` puts it
+        in this agent's history, as on Pipecat, where only a TTS service writes spoken text
+        to the context.
         A realtime model that speaks itself says it in a reply, which joins its chat and
         the trace as any reply does.
         """
@@ -654,6 +668,8 @@ class UnmuteAgent(Agent):
 
 _CLOSED: weakref.WeakKeyDictionary[AgentSession, list[object]] = weakref.WeakKeyDictionary()
 """The model calls each session's agents already closed."""
+_HANDOFF_LINES: weakref.WeakKeyDictionary[AgentSession, LinePicker] = weakref.WeakKeyDictionary()
+"""The handoff lines each session said, whichever agent object makes the handoff."""
 
 
 def _flat(tools: Iterable[llm.Tool | llm.Toolset]) -> list[llm.Tool]:
