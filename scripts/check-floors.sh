@@ -43,5 +43,5 @@ run() {
     --ignore=tests/test_docs.py "$@")
 }
 
-run all-extras "livekit,pipecat,slng,knowledge" "$work/floors-livekit.txt" "$@"
-run no-livekit "pipecat,slng,knowledge" "$work/floors.txt" "$@"
+run all-extras "livekit,pipecat,slng,knowledge,mcp" "$work/floors-livekit.txt" "$@"
+run no-livekit "pipecat,slng,knowledge,mcp" "$work/floors.txt" "$@"
