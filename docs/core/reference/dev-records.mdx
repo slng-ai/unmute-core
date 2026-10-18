@@ -197,7 +197,7 @@ A `state` record carries the caller's own values. A value over 4 KiB is cut, wit
 | `first_response` | each reply | not sent | the reply's `llm_node_ttft` and `tts_node_ttfb` |
 | `first_response`, `request_duration` | each transcript | the STT service's metrics | `request_duration` only, of an STT that does not stream, from LiveKit's metrics |
 | `tool_duration` | each tool call | the function call frames | `tool_execution_updated` |
-| `reply_latency` | each reply | caller silence to the agent's first audio | the reply's `e2e_latency` |
+| `reply_latency` | each reply | caller silence to the agent's first audio | the reply's `e2e_latency`, or for a line said with `say()`, like a tool's reply, the caller message's `stopped_speaking_at` to the reply's `started_speaking_at` |
 | `turn_detection` | each reply | the latency observer's user turn | the caller message's `end_of_turn_delay` |
 | `transcription_delay` | each reply | not sent | the caller message's `transcription_delay` |
 | `speech_duration` | each reply | the bot's speaking frames | the reply's speaking times |
