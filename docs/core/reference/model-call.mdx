@@ -406,6 +406,27 @@ The object `on_retry` receives.
 
 A framework's own fallback works without this class. Native LLM plugins keep their own retries and fallback.
 
+### with_attempts
+
+Runs a stream of your own around each attempt of any `FallbackModelCall` inside a request. It is for code that cannot reach the chain, like an adapter in front of a model call that builds its own chain per request.
+
+```python
+from unmute_core.model import with_attempts
+
+async def traced(call, request):
+    with tracer.start_as_current_span("attempt"):
+        async for event in call.stream(request):
+            yield event
+
+async for event in with_attempts(model.stream(request), traced):
+    ...
+```
+
+1. `with_attempts(events, stream)` reads `events`. While it computes each item, every chain inside sends each attempt through `stream(call, request)` instead of `call.stream(request)`.
+2. The hook is set only while the next item is computed. It does not leak to the reader, and a reader in another task can close the stream.
+3. A chain inside an attempt sends its own attempts through `stream` too.
+4. `ModelCallLLM(trace_attempts=True)` uses it to give each attempt its own LiveKit span pair.
+
 ## Write your own
 
 Any class with `stream` is a `ModelCall`. The guide shows a small one in [Write your own ModelCall](/core/models/model-call#write-your-own-modelcall). Give it to an adapter the way you give it the router: `ModelCallLLM(Echo())` on LiveKit or `ModelCallLLMService(Echo())` on Pipecat.

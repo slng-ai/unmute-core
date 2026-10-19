@@ -19,6 +19,7 @@ from unmute_core.model import (
     Usage,
     answered_model,
     variable_key_max,
+    with_attempts,
 )
 from unmute_core.model._fallback import SAME_MODEL_RETRIES_S
 
@@ -448,3 +449,21 @@ async def test_a_usage_can_count_as_an_empty_answer(answer: list, moves_on: bool
     )
     expected = (["x"], 1, 1) if moves_on else ([], 0, 0)
     assert (await collect(chain), second.calls, len(moves)) == expected
+
+
+async def test_with_attempts_runs_each_attempt_of_a_chain_inside_through_its_stream() -> None:
+    tried: list[object] = []
+
+    async def stream(call, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        tried.append(call)
+        async for event in call.stream(request):
+            yield event
+
+    first, second = FakeCall(RuntimeError("down")), FakeCall(["ok"])
+    chain = FallbackModelCall([first, second])
+    events = [event async for event in with_attempts(chain.stream(REQUEST), stream)]
+    assert (events, tried) == ([TextDelta("ok")], [first, second])
+    assert [event async for event in FallbackModelCall([FakeCall(["ok"])]).stream(REQUEST)] == [
+        TextDelta("ok")
+    ]
+    assert tried == [first, second]

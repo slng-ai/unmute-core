@@ -133,6 +133,9 @@ session = AgentSession(llm=ModelCallLLM(router, state=state), ...)
 <ParamField path="prompts_as_written" type="bool" default="False">
   `True` sends each prompt as written, for prompts that are not templates. A `{{name}}` in them is plain text, so no state is read and no `MissingVariablesError` is raised.
 </ParamField>
+<ParamField path="trace_attempts" type="bool" default="False">
+  `True` traces each call a `FallbackModelCall` tries, as LiveKit's `FallbackAdapter` does. The request gets an `llm_fallback_adapter` span, and under it each call tried gets its own `llm_request` span pair with its model name. A failed attempt is marked as an error. It works for a chain the model call builds itself, like one per request, through `with_attempts`. A `LiveKitModel` traces itself through its plugin, so its attempts run as they are.
+</ParamField>
 
 ### filled_llm
 
