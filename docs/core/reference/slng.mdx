@@ -375,6 +375,8 @@ flowchart LR
 5. Both adapters send back only the `google`, `livekit` and `xai` keys, the ones LiveKit sends (`REPLAYED_PROVIDERS`). `replayed_extra(extra)` returns what goes back. A call with none of them goes back with no `extra_content`.
 6. An `after_model` hook reads all the provider data the model sent, in `ToolCall.extra`. On Pipecat this needs a `ModelCallLLMService`. A native service keeps none.
 
+Gemini can sign a text reply too, as the `extra_content` of a chunk's `delta`. `RouterModelCall` and `OpenAIModelCall` put it on the text, as `TextDelta.extra`. Data that comes before any text waits for the first piece, and data with no text at all is dropped. On LiveKit, it becomes the assistant message's `extra`, so the next requests send it back with that message, as LiveKit's own OpenAI-compatible models do. A step or an agent that takes earlier turns drops them from those turns as it enters (`without_text_signatures`). On Pipecat, the context keeps only the text, so the signature is not sent back.
+
 For a Gemini model, `RouterModelCall` adds Google's placeholder, `skip_thought_signature_validator`, to an assistant message whose first call has no signature. A call the runtime makes itself, or one from another model, then passes. The model counts as Gemini when:
 
 - the pinned `model` names Gemini,

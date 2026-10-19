@@ -119,7 +119,7 @@ A call streams three kinds of event.
 | Event | Fields | What it is |
 |---|---|---|
 | `AnswerStarted` | `response_id`, `request_id` | The provider began its answer: its first chunk arrived. Once, before anything else. |
-| `TextDelta` | `text`, `response_id`, `request_id` | The next piece of the answer. |
+| `TextDelta` | `text`, `response_id`, `request_id`, `extra` | The next piece of the answer. `extra` is the provider data sent with the text, like a Gemini thought signature. |
 | `ToolCall` | `id`, `name`, `arguments`, `extra`, `response_id`, `request_id` | One whole tool call. `arguments` is the JSON text the model wrote. |
 | `Usage` | `input_tokens`, `output_tokens`, `cached_input_tokens`, `response_id`, `request_id`, `reasoning_tokens`, `total_tokens` | The token counts, once, at the end. `cached_input_tokens` is the part of the prompt the provider served from its cache. `reasoning_tokens` is the part of the output spent on hidden reasoning. `total_tokens` is the provider's own total, which can be more than input plus output. `response_id` is the answer's id, like `chatcmpl-...`, and `request_id` the provider's `x-request-id`. Each is `None` when the provider did not send it. |
 

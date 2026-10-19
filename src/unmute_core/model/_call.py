@@ -70,14 +70,20 @@ class TextDelta:
     """The next piece of the answer's text.
 
     Attributes:
-        text: The piece of text.
+        text: The piece of text. Empty only on a piece that brings ``extra`` after the
+            text has begun.
         response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
         request_id: The provider's ``x-request-id`` for the HTTP request, or None.
+        extra: Provider data sent with the text, in the OpenAI-compatible ``extra_content``
+            form, like Gemini's ``{"google": {"thought_signature": "..."}}``. An adapter
+            that keeps it puts it on the assistant message, so it goes back with that
+            message on later requests. Empty when there is none.
     """
 
     text: str
     response_id: str | None = None
     request_id: str | None = None
+    extra: Mapping[str, Any] = field(default_factory=dict, hash=False)
 
 
 @original_errors

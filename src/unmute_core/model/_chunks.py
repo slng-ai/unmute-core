@@ -19,7 +19,9 @@ async def chunk_events(
     some OpenAI-compatible endpoints do, is joined by the call's ``id``, so several whole
     calls in one chunk stay separate calls. A piece with neither continues the last call.
     Calls come out in the order they first appeared. A provider's ``extra_content`` on a piece,
-    like Gemini's thought signature, stays on the finished call. The ``Usage`` carries the
+    like Gemini's thought signature, stays on the finished call. A provider's ``extra_content``
+    on the text goes out on the text: data that comes before any text waits for the first
+    piece, and data with no text at all is dropped, so it never starts an answer. The ``Usage`` carries the
     cached input tokens, the reasoning tokens and the provider's own total. Every event
     carries the answer's id from its chunks, as far as they have named it, and
     ``request_id``, so a reply cut off before its ``Usage`` still names both.
@@ -34,6 +36,8 @@ async def chunk_events(
     usage: Usage | None = None
     response_id: str | None = None
     started = False
+    spoken = False
+    held: dict[str, Any] = {}
     async for chunk in chunks:
         response_id = chunk.id or response_id
         if not started:
@@ -50,10 +54,17 @@ async def chunk_events(
                 total_tokens=getattr(chunk.usage, "total_tokens", None),
             )
         for choice in chunk.choices:
-            if choice.delta.content:
+            if isinstance(extra := (choice.delta.model_extra or {}).get(EXTRA_CONTENT), dict):
+                held |= extra
+            spoken = spoken or bool(choice.delta.content)
+            if spoken and (choice.delta.content or held):
                 yield TextDelta(
-                    choice.delta.content, response_id=response_id, request_id=request_id
+                    choice.delta.content or "",
+                    response_id=response_id,
+                    request_id=request_id,
+                    extra=held,
                 )
+                held = {}
             for part in choice.delta.tool_calls or []:
                 if part.index is not None:
                     key = part.index

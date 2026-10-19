@@ -382,15 +382,16 @@ class _AttemptStream(llm.LLMStream):
         try:
             async for event in self._call.stream(self._request):
                 self._events.put_nowait(event)
-                if (chunk := _event_chunk(event)) is None:
+                if (chunk := _event_chunk(event)) is None or (
+                    chunk := _spoken(chunk, speech)
+                ) is None:
                     continue
-                if isinstance(chunk, str) and (text := speech.feed(chunk)):
+                if isinstance(chunk, str):
                     chunk = llm.ChatChunk(
                         id=event.response_id or utils.shortuuid("unmute_"),
-                        delta=llm.ChoiceDelta(role="assistant", content=text),
+                        delta=llm.ChoiceDelta(role="assistant", content=chunk),
                     )
-                if isinstance(chunk, llm.ChatChunk):
-                    self._event_ch.send_nowait(chunk)
+                self._event_ch.send_nowait(chunk)
         except Exception as error:
             self._events.put_nowait(error)
             raise
@@ -1138,9 +1139,21 @@ async def _chunks(
 
 
 def _event_chunk(event: ModelEvent) -> llm.ChatChunk | str | None:
-    """Return one model event as LiveKit reads it: text, a chunk, or None for no chunk."""
+    """Return one model event as LiveKit reads it: text, a chunk, or None for no chunk.
+
+    Text with provider data goes out as a chunk with the data as ``ChoiceDelta.extra``.
+    LiveKit keeps it on the assistant message and sends it back as the message's
+    ``extra_content``, as with its own OpenAI-compatible models.
+    """
     if isinstance(event, TextDelta):
-        return event.text
+        if not event.extra:
+            return event.text
+        return llm.ChatChunk(
+            id=event.response_id or utils.shortuuid("unmute_"),
+            delta=llm.ChoiceDelta(
+                role="assistant", content=event.text or None, extra=dict(event.extra)
+            ),
+        )
     if isinstance(event, Usage):
         usage = llm.CompletionUsage(
             completion_tokens=event.output_tokens,
@@ -1302,7 +1315,7 @@ def _spoken(chunk: llm.ChatChunk | str, speech: ReasoningFilter) -> llm.ChatChun
     if chunk.delta is None or not chunk.delta.content:
         return chunk
     content = speech.feed(chunk.delta.content)
-    if not content and not chunk.delta.tool_calls and chunk.usage is None:
+    if not (content or chunk.delta.tool_calls or chunk.delta.extra or chunk.usage):
         return None
     return chunk.model_copy(
         update={"delta": chunk.delta.model_copy(update={"content": content or None})}
