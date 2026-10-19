@@ -107,7 +107,7 @@ A frozen Pydantic dataclass. It holds one request, with the prompt still unfille
   The name of the model that answers, like `gpt-5.6-luna`. A `before_model` hook can read it. Under `FallbackModelCall` it is the first call's name. It is empty when unknown.
 </ParamField>
 <ParamField path="params" type="dict[str, Any]" default="{}">
-  Extra body fields for this request only, like `{"temperature": 0}`. `RouterModelCall` sends them. An OpenAI compatible framework LLM gets them as `extra_body`.
+  Extra body fields for this request only, like `{"temperature": 0}`. `RouterModelCall` and `OpenAIModelCall` send them. An OpenAI compatible framework LLM gets them as `extra_body`. In these two calls, `timeout`, `max_retries`, `extra_query`, `extra_headers` and `extra_body` are openai request options, not body fields.
 </ParamField>
 
 The call's `before_model` hooks may change a request. `wrap_model` hooks run around a `ModelCall`. See [Hooks](/core/build/hooks).
@@ -121,12 +121,12 @@ A call streams three kinds of event.
 | `AnswerStarted` | `response_id`, `request_id` | The provider began its answer: its first chunk arrived. Once, before anything else. |
 | `TextDelta` | `text`, `response_id`, `request_id`, `extra` | The next piece of the answer. `extra` is the provider data sent with the text, like a Gemini thought signature. |
 | `ToolCall` | `id`, `name`, `arguments`, `extra`, `response_id`, `request_id` | One whole tool call. `arguments` is the JSON text the model wrote. |
-| `Usage` | `input_tokens`, `output_tokens`, `cached_input_tokens`, `response_id`, `request_id`, `reasoning_tokens`, `total_tokens` | The token counts, once, at the end. `cached_input_tokens` is the part of the prompt the provider served from its cache. `reasoning_tokens` is the part of the output spent on hidden reasoning. `total_tokens` is the provider's own total, which can be more than input plus output. `response_id` is the answer's id, like `chatcmpl-...`, and `request_id` the provider's `x-request-id`. Each is `None` when the provider did not send it. |
+| `Usage` | `input_tokens`, `output_tokens`, `cached_input_tokens`, `response_id`, `request_id`, `reasoning_tokens`, `total_tokens`, `cache_write_tokens` | The token counts, once, at the end. `cached_input_tokens` is the part of the prompt the provider served from its cache. `cache_write_tokens` is the part it wrote to its cache. `reasoning_tokens` is the part of the output spent on hidden reasoning. `total_tokens` is the provider's own total, which can be more than input plus output. `response_id` is the answer's id, like `chatcmpl-...`, and `request_id` the provider's `x-request-id`. Each is `None` when the provider did not send it. |
 
 1. `extra` on a `ToolCall` holds provider data sent with the call, like a Gemini thought signature. It is empty when there is none. See [Thought signatures](/core/reference/slng#gemini-thought-signatures).
 2. `TextDelta` and `ToolCall` carry the same `response_id` and `request_id` as `Usage`, as far as the provider has sent them. So a reply cut off before its `Usage`, like one a caller talks over, still names its answer and its HTTP request. `RouterModelCall` and `OpenAIModelCall` fill them. A call of your own may leave them `None`.
 3. Both adapters put `Usage` on the `llm` span. Code that reads events skips a `Usage` or an `AnswerStarted` it has no use for.
-4. A reply that is only a tool call shows its `ToolCall` when the whole call has streamed. `AnswerStarted` tells you earlier that the provider is answering. `FallbackModelCall(start_ends_budget=True)` uses it.
+4. `RouterModelCall` and `OpenAIModelCall` yield a `ToolCall` as soon as it is whole. A call is whole when the provider starts the next call, or sends a `finish_reason`. A call still open when the stream ends, as when a provider sends no `finish_reason`, comes out at the end. The calls keep the order they began in, and the `Usage` comes last. A provider must send the pieces of one call together. A piece that comes after its call went out is dropped with a warning. `AnswerStarted` tells you earlier that the provider is answering. `FallbackModelCall(start_ends_budget=True)` and `FallbackModelCall(start_is_answer=True)` use it.
 5. Every event is a frozen Pydantic dataclass. A value of the wrong type, like `ToolCall(id=1, ...)`, raises a `ValidationError`. Token counts in `Usage` pass through unchecked, as a provider sends them.
 
 ### ToolCall
@@ -287,7 +287,7 @@ gemini = OpenAIModelCall(
   A ready client. `base_url`, `api_key` and `timeout` are then unused.
 </ParamField>
 <ParamField path="params" type="Mapping[str, object] | None" default="None">
-  Body fields for every request, like `{"temperature": 0}`. A request's own `params` win. It may not set `stream_options`.
+  Body fields for every request, like `{"temperature": 0}`. A request's own `params` win. It may not set `stream_options`, in `extra_body` either. Five names are openai request options, not body fields, as in `client.chat.completions.create(**params)`: `timeout`, `max_retries`, `extra_query` and `extra_headers` set the request's timeout, retry count, URL query parameters and headers, and the fields of `extra_body` join the body. A request's option wins over the call's, and `extra_query` and `extra_headers` join by name. A value the SDK cannot use raises `ValueError`.
 </ParamField>
 <ParamField path="timeout" type="openai.Timeout | float | None" default="None">
   The client timeout: seconds above zero, or an `openai.Timeout`. `0` raises `ValueError`. The default is 15 seconds to connect and 5 seconds for each read.
@@ -322,7 +322,7 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
   How long a call may take to start answering, its same-model retries included. `None` waits as long as the call does. `FIRST_EVENT_TIMEOUT_S` is 45 seconds and clears slow reasoning models.
 </ParamField>
 <ParamField path="max_wait_s" type="float" default="2.0">
-  The longest `Retry-After` worth waiting for. A longer one fails over. A value below zero raises `ValueError`.
+  The longest `Retry-After` worth waiting for. A longer one fails over. A value below zero raises `ValueError`. A `Retry-After` of 0, or an HTTP date in the past, asks for no wait. It is treated as no `Retry-After`, so the call retries on its `same_model_retries` pauses, and it counts as one of them.
 </ParamField>
 <ParamField path="same_model_retries" type="Sequence[float]" default="()">
   The pause before each retry of the same call after a short failure. A short failure has no status, or is a 408, a 429 or a 5xx. A 429 with a usable `Retry-After` waits that long once instead. Empty moves to the next call at once. `SAME_MODEL_RETRIES_S` is `(0.25, 0.75)`. It is off by default because the Context Router retries by itself.
@@ -343,7 +343,10 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
   `True` takes a call that sent its `Usage` and nothing else as one that answered with an empty reply, so the request ends there. Only a call that sent no event at all moves on through `empty_fails_over`. A provider that reports usage has finished its answer, while a stream with no event at all is often a broken response.
 </ParamField>
 <ParamField path="start_ends_budget" type="bool" default="False">
-  `True` ends `first_event_timeout_s` at a call's `AnswerStarted`, the provider's first chunk. A reply that is only a long tool call then counts as started at once, and is not cut off for a timeout. `False` ends it at the first text or tool call. The chain passes no `AnswerStarted` on either way.
+  `True` ends `first_event_timeout_s` at a call's `AnswerStarted`, the provider's first chunk. A reply that is only a long tool call then counts as started at once, and is not cut off for a timeout. `False` ends it at the first text or tool call. The chain passes no `AnswerStarted` on unless `start_is_answer` is set.
+</ParamField>
+<ParamField path="start_is_answer" type="bool" default="False">
+  `True` takes a call's `AnswerStarted` as its answer. It implies `start_ends_budget`. The chain passes that `AnswerStarted` on to its reader, once, for the call that answers, and stays with that call from then on. An error after it is raised as it is, like an error after the first text. There is no retry and no failover, and `on_retry` and `on_fail_over` are not called. A call that sends `AnswerStarted` and nothing else ends the request with its own empty answer, with no failover. A call that sends no `AnswerStarted` is judged as before, and `empty_fails_over` and `usage_counts_as_answer` apply to that call only. A reply that is only a long tool call is then never sent again after the provider began. `False` keeps the chain as it is.
 </ParamField>
 <ParamField path="on_fail_over" type="Callable[[FailOver], None] | None" default="None">
   Called at each move to the next call. A callback that raises is logged and the chain goes on.
@@ -354,7 +357,7 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
 
 ### How it fails over
 
-1. It never retries or fails over once the caller has part of the answer.
+1. It never retries or fails over once the caller has part of the answer. With `start_is_answer=True`, the start of an answer counts as part of it.
 2. No other model fixes a stop status or a stop code, so the chain ends there.
 3. `error_code(error)` reads the code of an error. `http_status(error)` reads its status.
 4. `retries_itself` is `True`. On LiveKit, `ModelCallLLM` then marks the call's errors as final, so LiveKit does not walk the chain again. A plain `RouterModelCall` does not set it, so LiveKit still retries a router it cannot reach. Another call can set the attribute, and `retries_itself(model)` reads it.
