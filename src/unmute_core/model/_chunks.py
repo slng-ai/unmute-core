@@ -22,7 +22,8 @@ async def chunk_events(
     like Gemini's thought signature, stays on the finished call. A provider's ``extra_content``
     on the text goes out on the text: data that comes before any text waits for the first
     piece, and data with no text at all is dropped, so it never starts an answer. The ``Usage`` carries the
-    cached input tokens, the reasoning tokens and the provider's own total. Every event
+    cached input tokens, the tokens written to the cache, the reasoning tokens and the
+    provider's own total. Every event
     carries the answer's id from its chunks, as far as they have named it, and
     ``request_id``, so a reply cut off before its ``Usage`` still names both.
 
@@ -52,6 +53,7 @@ async def chunk_events(
                 cached_input_tokens=getattr(details, "cached_tokens", None),
                 reasoning_tokens=getattr(output_details, "reasoning_tokens", None),
                 total_tokens=getattr(chunk.usage, "total_tokens", None),
+                cache_write_tokens=getattr(details, "cache_write_tokens", None),
             )
         for choice in chunk.choices:
             if isinstance(extra := (choice.delta.model_extra or {}).get(EXTRA_CONTENT), dict):
