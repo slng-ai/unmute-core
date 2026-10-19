@@ -38,6 +38,7 @@ from pipecat.utils.types import assert_given
 from unmute_core.call import CallHooks
 from unmute_core.model import (
     EXTRA_CONTENT,
+    AnswerStarted,
     ModelCall,
     ModelEvent,
     ModelRequest,
@@ -315,6 +316,8 @@ async def _chunks(
     index = 0
     speech = ReasoningFilter()
     async for event in events:
+        if isinstance(event, AnswerStarted):
+            continue
         if isinstance(event, TextDelta):
             if text := speech.feed(event.text):
                 started()

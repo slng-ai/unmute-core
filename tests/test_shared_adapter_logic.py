@@ -110,7 +110,9 @@ async def test_collect_names_an_event_that_is_not_a_model_event():
     async def events():
         yield "plain text"
 
-    with pytest.raises(TypeError, match="streamed str; stream TextDelta, ToolCall or Usage"):
+    with pytest.raises(
+        TypeError, match="streamed str; stream TextDelta, ToolCall, Usage or AnswerStarted"
+    ):
         await collect(events())
 
 

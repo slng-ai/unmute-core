@@ -47,6 +47,7 @@ from unmute_core.livekit._history import CallerHistory
 from unmute_core.livekit._trace import SessionTrace
 from unmute_core.model import (
     EXTRA_CONTENT,
+    AnswerStarted,
     ModelAnswer,
     ModelCall,
     ModelEvent,
@@ -1001,6 +1002,8 @@ async def _chunks(
     """Stream one attempt of the request through the model call, as chunks."""
     events = hooks.run_model(request, model.stream) if hooks is not None else model.stream(request)
     async for event in events:
+        if isinstance(event, AnswerStarted):
+            continue
         if isinstance(event, TextDelta):
             yield event.text
             continue

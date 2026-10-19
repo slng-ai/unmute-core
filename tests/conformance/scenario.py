@@ -30,6 +30,7 @@ from unmute_core.handoff import History
 from unmute_core.hooks import Hooks, PromptSuffix, Refuse
 from unmute_core.model import (
     SUMMARY_SITE,
+    AnswerStarted,
     ModelEvent,
     ModelRequest,
     TextDelta,
@@ -510,7 +511,7 @@ class ScriptedModel:
         return self if name is None else NamedModel(self, name)
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        """Answer with the next reply's text, then its tool calls."""
+        """Answer as a provider streams: it starts, then the reply's text, then its tool calls."""
         self.requests.append(request)
         number = len(self.requests)
         if not self.pending:
@@ -635,6 +636,7 @@ class ScriptedModel:
                 self.problems.append(
                     f"request {number} replayed {name} with {carried}, the script expects {extra}"
                 )
+        yield AnswerStarted()
         if reply.text:
             yield TextDelta(reply.text)
         if reply.fail_after_text:
