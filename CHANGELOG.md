@@ -9,10 +9,16 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Added
 
 - `Usage` carries `reasoning_tokens` and `total_tokens`: the output tokens a provider spent on hidden reasoning, and the provider's own total, which can be more than input plus output when it counts thinking separately. Both are `None` when the provider did not say, and they come after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.reasoning_tokens` is set and `LLMMetrics.total_tokens` is the provider's total, not input plus output. On Pipecat, the usage chunk carries them, so `LLMTokenUsage.reasoning_tokens` and `total_tokens` are set. Before, both were dropped.
+- `FallbackModelCall(usage_counts_as_answer=True)` takes a call that sent its `Usage` and nothing else as an empty reply, which ends the request there. Only a call that sent no event at all moves to the next call. A provider that reports usage has finished its answer, so its empty reply is the model's own, while a stream with no event at all is often a broken response. The default, `False`, works as before.
+
+### Changed
+
+- `RouterModelCall` and `OpenAIModelCall` keep an idle connection to the provider open for 120 s by default, set with the new `keepalive_s=` argument. Before, the client they build closed it after 5 s, which is openai's default. In a voice call the turns are often more than 5 s apart, so almost every turn paid a new TCP and TLS handshake before its first token. Pass `keepalive_s=5.0` for the old value, or `None` to keep a connection open with no limit. It only applies to the client the call builds: with `client=` it raises `ValueError`.
 
 ### Fixed
 
 - `RouterModelCall` and `OpenAIModelCall` now keep parallel tool calls apart when the provider sends no `index` on them. Some OpenAI-compatible endpoints, like Google Gemini's, leave `index` null and may put several whole calls in one chunk. Before, all of them joined into one call with the names and the JSON arguments glued together, so no tool could run. Now a call is numbered by its `index` when it has one, else by its `id`, and a piece with neither continues the last call. A stream numbered the usual way gives the same events as before.
+- On LiveKit, an agent whose tool is still running when the caller speaks no longer calls that tool again. LiveKit adds the running call and a note that it is still in progress to the agent's request. The library left that pair out of every request, so the model could not see the tool was running. Now the agent's own request keeps the pair. A task step's request and the side requests, like a summary, still leave it out, because a step never made the call that is still running.
 
 ## 0.18.3
 
