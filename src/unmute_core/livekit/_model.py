@@ -316,24 +316,36 @@ def livekit_error(error: BaseException) -> APIError | None:
             return None
 
 
-def request_context(chat_ctx: llm.ChatContext, prompt: str | None) -> llm.ChatContext:
+def request_context(
+    chat_ctx: llm.ChatContext, prompt: str | None, *, keep_running: bool = False
+) -> llm.ChatContext:
     """Return a copy of the request with the prompt as it reads now.
 
-    The copy leaves out the running tool calls LiveKit adds to every request of the session
-    (voice/agent_activity.py:3547). A step never made the delegate call that is still
-    running. It reads that call as its own unfinished work and answers with nothing.
+    LiveKit adds a pair to a request while a tool call is still running: the call and an
+    output that says it is still in progress (voice/generation.py,
+    ``_inject_running_tool_calls``). The model reads it and does not call a slow tool a
+    second time, for example when the caller speaks during a long lookup. The agent that
+    made the call keeps the pair. A step never made the delegate call that is still
+    running. It reads that call as its own unfinished work and answers with nothing, so a
+    step's copy leaves the pair out.
 
     Args:
         chat_ctx: The request LiveKit built.
         prompt: The agent's or step's prompt, placeholders still in it. None keeps the
             prompt the request holds.
+        keep_running: True keeps the running tool calls, as the agent's own request needs.
+            False leaves them out, as a step's or a side request's does.
     """
     ctx = chat_ctx.copy()
-    running = {
-        item.call_id
-        for item in ctx.items
-        if isinstance(item, llm.FunctionCall) and item.extra.get(RUNNING_PLACEHOLDER_KEY)
-    }
+    running = (
+        set()
+        if keep_running
+        else {
+            item.call_id
+            for item in ctx.items
+            if isinstance(item, llm.FunctionCall) and item.extra.get(RUNNING_PLACEHOLDER_KEY)
+        }
+    )
     ctx.items[:] = [
         item
         for item in ctx.items
@@ -542,7 +554,7 @@ class ModelNode:
         dev = None if unseen else dev_observer(_running_session(agent, session))
         named = hooks or self.trace or dev or self.metrics_llm
         name, provider = _names(model, agent, session) if named else ("", "")
-        ctx = request_context(chat_ctx, prompt)
+        ctx = request_context(chat_ctx, prompt, keep_running=site == "" and not side)
         if self.call is not None and site == "" and not side:
             _add_notes(ctx, self.call)
         schemas = llm.ToolContext(tools).parse_function_tools("openai") if tools else []

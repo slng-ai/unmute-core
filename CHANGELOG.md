@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Fixed
+
+- On LiveKit, an agent whose tool is still running when the caller speaks no longer calls that tool again. LiveKit adds the running call and a note that it is still in progress to the agent's request. The library left that pair out of every request, so the model could not see the tool was running. Now the agent's own request keeps the pair. A task step's request and the side requests, like a summary, still leave it out, because a step never made the call that is still running.
+
 ## 0.18.3
 
 This release names the answer on each model chunk, lets a prompt hold `{{name}}` as plain text, and lets a fallback stay on a model that gave an empty answer. No API was removed. `unmute_core.require("0.18.0")` accepts 0.18.3, so code built for 0.18.0 needs no change.
