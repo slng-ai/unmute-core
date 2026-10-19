@@ -325,7 +325,7 @@ class FallbackModelCall:
             return _Decision.RAISE, 0.0
         return _Decision.FAIL_OVER, 0.0
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    async def stream(self, request: ModelRequest) -> AsyncGenerator[ModelEvent]:
         """Stream from the first call that starts answering.
 
         Raises:
