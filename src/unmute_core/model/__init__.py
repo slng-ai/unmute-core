@@ -60,7 +60,12 @@ from unmute_core.model._prompt import (
     router_messages,
     template_variables,
 )
-from unmute_core.model._reasoning import ReasoningFilter
+from unmute_core.model._reasoning import (
+    MODEL_REASONING_MARKERS,
+    Marker,
+    ReasoningFilter,
+    reasoning_markers,
+)
 from unmute_core.model._signatures import (
     EXTRA_CONTENT,
     REPLAYED_PROVIDERS,
@@ -75,6 +80,7 @@ __all__ = [
     "EXTRA_CONTENT",
     "FINISH_TOOL_NAME",
     "FIRST_EVENT_TIMEOUT_S",
+    "MODEL_REASONING_MARKERS",
     "REPLAYED_PROVIDERS",
     "SKIP_THOUGHT_SIGNATURE",
     "STEP_START_CUE",
@@ -86,6 +92,7 @@ __all__ = [
     "AttemptStream",
     "FailOver",
     "FallbackModelCall",
+    "Marker",
     "MissingVariablesError",
     "ModelAnswer",
     "ModelCall",
@@ -113,6 +120,7 @@ __all__ = [
     "next_step",
     "note_answer",
     "provider_name",
+    "reasoning_markers",
     "render_prompt",
     "replayed_extra",
     "retries_itself",
