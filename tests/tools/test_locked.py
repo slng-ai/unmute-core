@@ -270,3 +270,48 @@ def test_a_transcript_in_arabic_keeps_its_budget_as_sent() -> None:
 def test_one_message_over_the_budget_still_sends_the_newest() -> None:
     huge = [{"role": "user", "content": "x" * (TRANSCRIPT_MAX_BYTES * 2)}]
     assert locked_value(Transcript(), None, {"transcript": huge}) == huge
+
+
+def test_the_default_byte_cap_is_the_library_cap() -> None:
+    assert Transcript().max_bytes == TRANSCRIPT_MAX_BYTES
+    messages = [{"role": "user", "content": f"{n:03d} " + "x" * 400} for n in range(200)]
+    context = {"transcript": messages}
+    default = locked_value(Transcript(), None, context)
+    assert default == locked_value(Transcript(max_bytes=TRANSCRIPT_MAX_BYTES), None, context)
+    assert isinstance(default, list)
+    assert 0 < len(default) < 200
+
+
+def test_a_larger_byte_cap_keeps_more_and_a_smaller_one_keeps_less() -> None:
+    messages = [{"role": "user", "content": f"{n:03d} " + "x" * 400} for n in range(200)]
+    context = {"transcript": messages}
+    default = locked_value(Transcript(), None, context)
+    larger = locked_value(Transcript(max_bytes=TRANSCRIPT_MAX_BYTES * 2), None, context)
+    smaller = locked_value(Transcript(max_bytes=4096), None, context)
+    assert isinstance(default, list) and isinstance(larger, list) and isinstance(smaller, list)
+    assert len(smaller) < len(default) < len(larger) <= 200
+    assert len(json.dumps(larger).encode()) <= TRANSCRIPT_MAX_BYTES * 2
+    assert len(json.dumps(smaller).encode()) <= 4096
+    assert larger[-1] == messages[-1] and smaller[-1] == messages[-1]
+
+    as_text = locked_value(Transcript(text=True, max_bytes=TRANSCRIPT_MAX_BYTES * 2), None, context)
+    assert isinstance(as_text, str)
+    assert TRANSCRIPT_MAX_BYTES < len(as_text.encode()) <= TRANSCRIPT_MAX_BYTES * 2
+
+
+def test_no_byte_cap_keeps_every_message_up_to_max_messages() -> None:
+    messages = [{"role": "user", "content": f"{n:03d} " + "x" * 400} for n in range(200)]
+    context = {"transcript": messages}
+    assert locked_value(Transcript(max_bytes=None), None, context) == messages
+    assert locked_value(Transcript(max_bytes=None, max_messages=3), None, context) == messages[-3:]
+    as_text = locked_value(Transcript(text=True, max_bytes=None), None, context)
+    assert isinstance(as_text, str)
+    assert as_text.count("\n") == 199
+    assert len(as_text.encode()) > TRANSCRIPT_MAX_BYTES
+    huge = [{"role": "user", "content": "x" * (TRANSCRIPT_MAX_BYTES * 2)}] * 2
+    assert locked_value(Transcript(max_bytes=None), None, {"transcript": huge}) == huge
+
+
+def test_a_byte_cap_below_one_is_refused() -> None:
+    with pytest.raises(ValueError, match="max_bytes"):
+        Transcript(max_bytes=0)
