@@ -7,6 +7,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -537,7 +538,7 @@ class Timed:
             self.ended.append(time.perf_counter())
 
 
-async def _answered(call: object) -> AnswerClock:
+async def _answered(call: Any) -> AnswerClock:
     clock = AnswerClock()
     chain = call if isinstance(call, FallbackModelCall) else FallbackModelCall([call])
     [_ async for _ in with_answer_clock(chain.stream(REQUEST), clock)]
