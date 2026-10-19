@@ -116,6 +116,8 @@ class Reply(_Strict):
         params: When set, the extra body fields the request must carry.
         usage: When set, the input and output tokens the reply reports last. Its ``llm``
             span must show them.
+        cached_tokens: When set, how many of the input tokens the reply reports as served
+            from the provider's prompt cache. Its ``llm`` span must show them.
         holds: When set, text one of the request's system messages must hold, like the
             values block. A cascade request sends the block as a message of its own, and
             a realtime model reads it at the end of its instructions.
@@ -151,6 +153,7 @@ class Reply(_Strict):
     prompt_ends: str | None = None
     params: dict[str, Any] | None = None
     usage: tuple[int, int] | None = None
+    cached_tokens: int | None = None
     holds: str | None = None
     replayed: dict[str, dict[str, Any]] | None = None
     model: str | None = None
@@ -641,7 +644,7 @@ class ScriptedModel:
                 f"call_{number}_{index}", call.name, json.dumps(call.arguments), call.extra
             )
         if reply.usage is not None:
-            yield Usage(*reply.usage)
+            yield Usage(*reply.usage, cached_input_tokens=reply.cached_tokens)
 
 
 class NamedModel:
@@ -880,6 +883,15 @@ class Run:
             tokens = (span.get("gen_ai.usage.input_tokens"), span.get("gen_ai.usage.output_tokens"))
             if reply is not None and reply.usage is not None and tokens != reply.usage:
                 problems.append(f"llm span {number} shows tokens {tokens}, not {reply.usage}")
+            cached = span.get("gen_ai.usage.cache_read.input_tokens")
+            if (
+                reply is not None
+                and reply.cached_tokens is not None
+                and cached != reply.cached_tokens
+            ):
+                problems.append(
+                    f"llm span {number} shows {cached} cached tokens, not {reply.cached_tokens}"
+                )
         return problems
 
     def _event_problems(self, spans: list[Any]) -> list[str]:

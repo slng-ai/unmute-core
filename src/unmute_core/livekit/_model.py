@@ -788,7 +788,13 @@ class _ReplyRecorder:
         answer = ModelAnswer(
             "".join(self.text),
             tuple(_tool_call(call) for call in self.calls),
-            Usage(self.usage.prompt_tokens, self.usage.completion_tokens) if self.usage else None,
+            Usage(
+                self.usage.prompt_tokens,
+                self.usage.completion_tokens,
+                cached_input_tokens=self.usage.prompt_cached_tokens or None,
+            )
+            if self.usage
+            else None,
         )
         interrupted = not self.finished and self.error is None
         if self.telemetry is not None and self.span is not None:
@@ -800,6 +806,7 @@ class _ReplyRecorder:
                 tool_calls=[call.to_openai() for call in answer.calls],
                 input_tokens=answer.usage.input_tokens if answer.usage else None,
                 output_tokens=answer.usage.output_tokens if answer.usage else None,
+                cached_input_tokens=answer.usage.cached_input_tokens if answer.usage else None,
                 ttfb=self.ttfb,
                 error=self.error,
                 interrupted=interrupted,

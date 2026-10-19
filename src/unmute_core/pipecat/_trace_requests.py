@@ -177,6 +177,7 @@ class RequestTracker:
             tool_calls=self._calls,
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None,
+            cached_input_tokens=usage.cached_input_tokens if usage else None,
             ttfb=self._ttfb,
             error=self._error,
             interrupted=interrupted,
@@ -214,6 +215,7 @@ class RequestTracker:
             tool_calls=tool_calls,
             input_tokens=usage.input_tokens if usage else None,
             output_tokens=usage.output_tokens if usage else None,
+            cached_input_tokens=usage.cached_input_tokens if usage else None,
         )
 
     def metrics(
@@ -231,7 +233,11 @@ class RequestTracker:
         """
         for data in frame.data:
             if isinstance(data, LLMUsageMetricsData):
-                self._usage = Usage(data.value.prompt_tokens, data.value.completion_tokens)
+                self._usage = Usage(
+                    data.value.prompt_tokens,
+                    data.value.completion_tokens,
+                    cached_input_tokens=data.value.cache_read_input_tokens,
+                )
             elif isinstance(data, TTFBMetricsData) and isinstance(source, LLMService):
                 self._ttfb = data.value
                 note("llm_ttft", data.value)
