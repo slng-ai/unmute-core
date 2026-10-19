@@ -17,7 +17,7 @@ This page is the full detail behind [The model call](/core/models/model-call). S
 | A retry after the reply started gives a doubled sentence. | The chain moves on only before the first word. |
 | A rate limit sends the call to a worse model when 1 s of waiting would work. | A short `Retry-After` waits on the same model. |
 | Gemini refuses several system messages. | They are folded into one. [Gemini and several system messages](#gemini-and-several-system-messages) |
-| A `<think>` block is read aloud. | Reasoning tags are removed from the stream. |
+| A `<think>` block is read aloud. | Reasoning tags are removed from the stream, and so are a model's own markers. [ReasoningFilter](#reasoningfilter) |
 | The model sees a different prompt depending on how you reach it. | Placeholders are filled once, the same way on every path. [The same final prompt](#the-same-final-prompt) |
 
 ## Stream one request
@@ -455,6 +455,27 @@ if clock.started is not None:
 3. The first report wins. A chain inside a chain reports its own answering attempt, not the time the outer chain spent on the inner one.
 4. Your own chain calls `note_answer(started)` with the `time.perf_counter()` reading it took before it sent the attempt, when the attempt gives its first event.
 5. `ModelCallLLM` uses it to time `LLMMetrics`. See [LiveKit](/core/reference/livekit).
+
+### ReasoningFilter
+
+`ReasoningFilter` keeps a model's reasoning out of the text a caller hears. Both adapters run each reply through one. It always drops `<think>`, `<thought>`, `<thinking>` and `<reasoning>` blocks, ignoring case, and a lone opening or closing tag. A tag cut between two chunks is held back until it is whole. A block still open when the reply ends is dropped.
+
+Some models mark their reasoning in their own way. Give the filter those markers as pairs of an opening and a closing marker. They are matched as written, and a block one pair opens ends only at its own closing marker.
+
+```python
+from unmute_core.model import ReasoningFilter, reasoning_markers
+
+speech = ReasoningFilter([("<|channel>thought", "<channel|>")])
+speech.feed("<|channel>thought\nCheck the order.<channel|>It is on its way.")  # "It is on its way."
+
+reasoning_markers("google/gemma-4-31b-it")  # (("<|channel>thought", "<channel|>"),)
+reasoning_markers("gpt-5.6-terra")  # ()
+```
+
+1. `ReasoningFilter(markers=())` takes the extra pairs. It raises `ValueError` for an empty marker, or a pair whose two markers are the same.
+2. `feed(text)` returns the part of the next chunk that may be spoken. `flush()` returns what was held back at the end, unless a block is open.
+3. `reasoning_markers(model)` returns the pair a model uses besides the standard tags, or `()`. It matches the exact model id, as LiveKit does, so `google/gemma-4-31b-it` has a pair and a bare `gemma-4-31b-it` does not. `MODEL_REASONING_MARKERS` holds the table, keyed by model id. It equals the table LiveKit's own inference models strip by, like Gemma 4's.
+4. `ModelCallLLM` on LiveKit uses the markers of the model a request goes to by default, and takes more with `reasoning_markers=`. `ModelCallLLMService` on Pipecat takes `reasoning_markers=` and adds none for a model.
 
 ## Write your own
 

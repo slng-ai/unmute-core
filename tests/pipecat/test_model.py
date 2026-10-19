@@ -53,6 +53,24 @@ async def test_reasoning_tags_are_taken_out_of_the_text() -> None:
     assert text == "Hi there"
 
 
+class Gemma(Scripted):
+    """A scripted model call named as the model whose markers LiveKit strips."""
+
+    model = "google/gemma-4-31b-it"
+
+
+async def test_a_models_own_markers_are_left_alone_unless_the_service_is_given_them() -> None:
+    text = "<|channel>thought\nhm<channel|>Hi"
+
+    async def spoken(**kwargs: Any) -> str:
+        model = Gemma([TextDelta("<|chan"), TextDelta(text[6:])])
+        stream = await service(model, **kwargs).get_chat_completions(LLMContext())
+        return "".join([chunk.choices[0].delta.content or "" async for chunk in stream])
+
+    assert await spoken() == text
+    assert await spoken(reasoning_markers=[("<|channel>thought", "<channel|>")]) == "Hi"
+
+
 async def test_a_request_carries_its_prompt_unfilled_its_site_and_live_variables() -> None:
     llm = service(Scripted())
     h = Harness(llm=llm)

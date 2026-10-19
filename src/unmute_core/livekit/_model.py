@@ -15,7 +15,7 @@ import functools
 import json
 import logging
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any, ClassVar, cast
@@ -51,6 +51,7 @@ from unmute_core.livekit._trace import SessionTrace
 from unmute_core.model import (
     EXTRA_CONTENT,
     AnswerClock,
+    Marker,
     ModelAnswer,
     ModelCall,
     ModelEvent,
@@ -66,6 +67,7 @@ from unmute_core.model import (
     http_status,
     model_name,
     provider_name,
+    reasoning_markers,
     retries_itself,
     template_variables,
     tool_choice,
@@ -110,6 +112,7 @@ class ModelCallLLM(llm.LLM):
         call: CallHooks | None = None,
         prompts_as_written: bool = False,
         trace_attempts: bool = False,
+        reasoning_markers: Iterable[Marker] = (),
     ) -> None:
         """Keep the model call and what each request reads.
 
@@ -127,6 +130,10 @@ class ModelCallLLM(llm.LLM):
                 LiveKit's ``FallbackAdapter`` does: an ``llm_fallback_adapter`` span for the
                 request, and under it one ``llm_request`` span pair per call tried, a failed
                 one marked as an error. It reaches a chain the model call builds itself.
+            reasoning_markers: Extra pairs of an opening and a closing marker to keep out of
+                the reply, like ``("<|channel>thought", "<channel|>")``. The standard tags
+                (``<think>`` and the like) and the markers of the model the request goes to,
+                like Gemma's, are always stripped. See ``unmute_core.model.reasoning_markers``.
         """
         super().__init__()
         self._model = model
@@ -137,6 +144,7 @@ class ModelCallLLM(llm.LLM):
             call=call or (trace.call if trace else None),
             prompts_as_written=prompts_as_written,
             trace_attempts=trace_attempts,
+            reasoning_markers=reasoning_markers,
         )
         self.site = site
         self._stream_class = _ChainStream if trace_attempts else _ModelCallStream
@@ -442,9 +450,20 @@ class _AttemptStream(llm.LLMStream):
         chat_ctx: llm.ChatContext,
         tools: list[llm.Tool],
         events: "asyncio.Queue[ModelEvent | Exception | None]",
+        markers: tuple[Marker, ...] = (),
     ) -> None:
-        """Start the attempt. LiveKit runs ``_run`` in the background."""
+        """Start the attempt. LiveKit runs ``_run`` in the background.
+
+        Args:
+            call: The call the attempt sends to.
+            request: The request it sends.
+            chat_ctx: The chat the request was made from.
+            tools: The tools the request offers.
+            events: Where the call's events go, in order, then None, or the call's error.
+            markers: Extra reasoning markers, besides the standard tags and the call's own.
+        """
         self._call = call
+        self._markers = (*reasoning_markers(model_name(call)), *markers)
         self._request = request
         self._events = events
         super().__init__(
@@ -453,7 +472,7 @@ class _AttemptStream(llm.LLMStream):
 
     async def _run(self) -> None:
         """Send the attempt: each event goes to the chain, and as a chunk to LiveKit."""
-        speech = ReasoningFilter()
+        speech = ReasoningFilter(self._markers)
         try:
             async for event in self._call.stream(self._request):
                 self._events.put_nowait(event)
@@ -476,6 +495,7 @@ async def _attempt_events(
     *,
     chat_ctx: llm.ChatContext,
     tools: list[llm.Tool],
+    markers: tuple[Marker, ...] = (),
 ) -> AsyncIterator[ModelEvent]:
     """Run one attempt of a chain as its own LiveKit stream, and yield the call's events.
 
@@ -487,7 +507,9 @@ async def _attempt_events(
             yield event
         return
     events: asyncio.Queue[ModelEvent | Exception | None] = asyncio.Queue()
-    stream = _AttemptStream(call, request, chat_ctx=chat_ctx, tools=tools, events=events)
+    stream = _AttemptStream(
+        call, request, chat_ctx=chat_ctx, tools=tools, events=events, markers=markers
+    )
     try:
         while (event := await events.get()) is not None:
             if isinstance(event, Exception):
@@ -580,6 +602,7 @@ class ModelNode:
         metrics_llm: llm.LLM | None = None,
         prompts_as_written: bool = False,
         trace_attempts: bool = False,
+        reasoning_markers: Iterable[Marker] = (),
     ) -> None:
         """Keep what every request reads.
 
@@ -598,6 +621,8 @@ class ModelNode:
                 plain text, not a placeholder.
             trace_attempts: True runs each call a ``FallbackModelCall`` tries as its own
                 LiveKit stream, with its own ``llm_request`` span pair.
+            reasoning_markers: Extra reasoning markers to strip from every reply, besides
+                the standard tags and the markers of the model that answers.
         """
         self.state = state
         self.model = model
@@ -606,6 +631,7 @@ class ModelNode:
         self.metrics_llm = metrics_llm
         self.prompts_as_written = prompts_as_written
         self.trace_attempts = trace_attempts
+        self.reasoning_markers = tuple(reasoning_markers)
 
     def adopt_trace(self, trace: SessionTrace) -> None:
         """Record every request into ``trace`` from now on, as a handoff's new agent does."""
@@ -690,7 +716,13 @@ class ModelNode:
         )
         if self.trace_attempts:
             source = with_attempts(
-                source, functools.partial(_attempt_events, chat_ctx=filled, tools=tools)
+                source,
+                functools.partial(
+                    _attempt_events,
+                    chat_ctx=filled,
+                    tools=tools,
+                    markers=self.reasoning_markers,
+                ),
             )
         answer = answer or AnswerClock()
         source = with_answer_clock(source, answer)
@@ -717,6 +749,7 @@ class ModelNode:
             model=prepared.name,
             provider=prepared.provider,
             answer=answer,
+            markers=(*reasoning_markers(_marker_model(prepared)), *self.reasoning_markers),
         )
         try:
             async for raw in source:
@@ -934,6 +967,7 @@ class _ReplyRecorder:
         model: str = "",
         provider: str = "",
         answer: AnswerClock | None = None,
+        markers: tuple[Marker, ...] = (),
     ) -> None:
         """Start the clock.
 
@@ -950,6 +984,7 @@ class _ReplyRecorder:
             model: The model name the request went out with.
             provider: Who serves the model.
             answer: Learns when the attempt that answered began, or None for no such clock.
+            markers: Reasoning markers to strip from the reply, besides the standard tags.
         """
         self.answer = answer or AnswerClock()
         self.metrics_llm = metrics_llm
@@ -973,7 +1008,7 @@ class _ReplyRecorder:
         self.usage: llm.CompletionUsage | None = None
         self.error: str | None = None
         self.finished = False
-        self.speech = ReasoningFilter()
+        self.speech = ReasoningFilter(markers)
 
     def hear(self, raw: llm.ChatChunk | str) -> llm.ChatChunk | str | None:
         """Return the chunk to pass on with its reasoning taken out, or None for no chunk."""
@@ -1136,6 +1171,19 @@ def _names(
     assert agent is not None  # ponytail: stream checks this first
     native = _native_llm(agent, session)
     return native.model, native.provider
+
+
+def _marker_model(prepared: PreparedRequest) -> str:
+    """Return the name of the model the request goes to, for its reasoning markers.
+
+    A plugin names its own model. A model call names the one it sends, and a fallback chain
+    names the call the request starts with.
+    """
+    if prepared.name:
+        return prepared.name
+    if prepared.plugin is not None:
+        return prepared.plugin.model
+    return model_name(prepared.model) if prepared.model is not None else ""
 
 
 def _has_output(chunk: llm.ChatChunk | str) -> bool:

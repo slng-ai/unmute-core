@@ -14,7 +14,7 @@ same data.
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping
 from dataclasses import replace
 from typing import Any, cast
 
@@ -39,6 +39,7 @@ from unmute_core.call import CallHooks
 from unmute_core.model import (
     EXTRA_CONTENT,
     AnswerStarted,
+    Marker,
     ModelCall,
     ModelEvent,
     ModelRequest,
@@ -94,6 +95,7 @@ class ModelCallLLMService(OpenAILLMService):
         state: CallState | None = None,
         call: CallHooks | None = None,
         prompts_as_written: bool = False,
+        reasoning_markers: Iterable[Marker] = (),
         **kwargs: Any,
     ) -> None:
         """Wrap the model call.
@@ -104,12 +106,17 @@ class ModelCallLLMService(OpenAILLMService):
             call: The call's hooks, run on each request.
             prompts_as_written: True sends each prompt as written, for prompts that are not
                 templates: a ``{{name}}`` in them is plain text, not a placeholder.
+            reasoning_markers: Pairs of an opening and a closing marker to keep out of the
+                reply, like ``("<|channel>thought", "<channel|>")``, besides the standard
+                tags (``<think>`` and the like), which are always stripped. None are
+                added for a model by default.
             **kwargs: ``OpenAILLMService`` arguments, such as ``settings``. A key or a
                 base URL is not used.
         """
         self.model_call = model_call
         self.state = state
         self.prompts_as_written = prompts_as_written
+        self.reasoning_markers = tuple(reasoning_markers)
         self.site = ""
         self.failure_is_final = False
         self.call = call
@@ -185,6 +192,7 @@ class ModelCallLLMService(OpenAILLMService):
             self.get_full_model_name() or "",
             self.tool_extras,
             (lambda: started.append(True)) if started is not None else (lambda: None),
+            self.reasoning_markers,
         )
 
     async def _process_context(self, context: LLMContext) -> None:
@@ -307,14 +315,16 @@ async def _chunks(
     model: str,
     extras: ToolExtras,
     started: Callable[[], None] = lambda: None,
+    markers: Iterable[Marker] = (),
 ) -> AsyncIterator[Any]:
     """Yield the model call's events as OpenAI chunks, reasoning tags taken out of the text.
 
     Each tool call's provider data goes into ``extras``, through ``ToolExtras.keep``.
     ``started`` is called before the first chunk of text or of a tool call goes out.
+    ``markers`` are extra reasoning markers to strip, besides the standard tags.
     """
     index = 0
-    speech = ReasoningFilter()
+    speech = ReasoningFilter(markers)
     async for event in events:
         if isinstance(event, AnswerStarted):
             continue
