@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Fixed
 
-- A `Retry-After` of 0, or an HTTP date in the past, is no wait hint any more. `retry_delay` returns None for it, as for a missing header. Before, it returned 0.0, which always fits `max_wait_s`, so `FallbackModelCall` took one extra retry with a 0 s pause that did not use up any of `same_model_retries`. Now the call retries on its normal pauses, and the retry counts as one of them. With none left, it moves to the next call. A positive `Retry-After` works as before (#TBD).
+- A `Retry-After` of 0, or an HTTP date in the past, is no wait hint any more. `retry_delay` returns None for it, as for a missing header. Before, it returned 0.0, which always fits `max_wait_s`, so `FallbackModelCall` took one extra retry with a 0 s pause that did not use up any of `same_model_retries`. Now the call retries on its normal pauses, and the retry counts as one of them. With none left, it moves to the next call. A positive `Retry-After` works as before (#68).
 
 ## 0.19.1
 
