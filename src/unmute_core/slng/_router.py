@@ -36,9 +36,8 @@ from unmute_core.slng._settings import DEFAULT_MODEL, SlngSettings, router_url
 from unmute_core.state._call_info import CallInfo
 
 try:
-    from openai import AsyncOpenAI, AsyncStream, Timeout, omit
+    from openai import AsyncOpenAI, Timeout, omit
     from openai.types.chat import (
-        ChatCompletionChunk,
         ChatCompletionMessageParam,
         ChatCompletionToolUnionParam,
     )
@@ -293,7 +292,7 @@ class RouterModelCall:
                 the form it reads. False sends the messages as written.
         """
         messages = router_messages(request.messages) if rewrite else request.messages
-        async with self.client.chat.completions.with_streaming_response.create(
+        stream = await self.client.chat.completions.create(
             model=self.model,
             messages=cast(
                 "list[ChatCompletionMessageParam]",
@@ -307,7 +306,9 @@ class RouterModelCall:
             stream_options={"include_usage": True},
             extra_headers=headers,
             extra_body=self.body | request.params | owned,
-        ) as response:
+        )
+        async with stream:
+            response = stream.response
             self.last_response = {
                 name: value
                 for name, value in response.headers.items()
@@ -318,8 +319,7 @@ class RouterModelCall:
             )
             if scope:
                 logger.info("slng router: %s", answer_line(scope, self.last_response))
-            chunks = cast("AsyncStream[ChatCompletionChunk]", await response.parse())
             async for event in chunk_events(
-                chunks, request_id=response.headers.get("x-request-id")
+                stream, request_id=response.headers.get("x-request-id")
             ):
                 yield event

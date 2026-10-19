@@ -122,6 +122,7 @@ OpenAI refuses function tools with reasoning on `/v1/chat/completions`, and answ
 - The `provider` attribute is `slng`. The `model` attribute defaults to `slng/auto`.
 - `aclose()` closes the client only when the call built it. A client you pass in stays open.
 - `last_response` holds the `x-slng-*` headers of the latest answer.
+- It streams with a plain `chat.completions.create(stream=True)`, so the request carries the headers openai's client sends for any streamed request. It sends no `x-stainless-raw-response` header.
 - A placeholder name whose router key is over 64 characters is refused when the agent is built. `RouterModelCall.variable_key_max` is 64. See [Placeholder names](/core/build/tasks/what-the-model-reads#placeholder-names).
 - Each answer ends with its `Usage`.
 
