@@ -9,6 +9,11 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Changed
 
 - On LiveKit, every text and tool call chunk of a `ModelCallLLM` reply now carries the `response_id` of the model event, the id the provider gave the answer. Before, text and tool calls got a random `unmute_` id, so `LLMMetrics.request_id` and the span attribute `lk.provider_request_ids` could name random ids instead of the completion id, for example after a barge-in or with no usage chunk. A random id is used only when the provider named none. `LiveKitModel` passes its plugin's chunk id on as the `response_id` of its text and tool call events (#TBD).
+- On LiveKit, after a `FallbackModelCall` answered, the request's `LLMMetrics` measure `ttft` and `duration` from the start of the call that answered. Before, they counted from the first call, so a model that timed out or failed, and the pauses between retries, were counted in. LiveKit's own `FallbackAdapter` reports the stream that answered, and now `ModelCallLLM` does the same, with and without `trace_attempts`. There is still one `LLMMetrics` per request, and the ids and token counts do not change. `tokens_per_second` and the `lk.llm_metrics` span attribute follow the new duration. A request that no call answered keeps its metrics (#TBD).
+
+### Added
+
+- `unmute_core.model.with_answer_clock(events, clock)` fills an `AnswerClock` with the start of the attempt that answered, for any `FallbackModelCall` inside `events`, including a chain an app builds inside its own model call. `note_answer(started)` is what a chain of your own calls when a call gives its first event (#TBD).
 
 ## 0.19.1
 

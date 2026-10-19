@@ -16,6 +16,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from typing import Any, ClassVar, cast
 
@@ -31,6 +32,7 @@ from livekit.agents import (
 )
 from livekit.agents.metrics import LLMMetrics
 from livekit.agents.metrics.base import Metadata
+from livekit.agents.telemetry import trace_types
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN
 from livekit.agents.voice import Agent, AgentSession, ModelSettings
 from opentelemetry.trace import Span
@@ -48,6 +50,7 @@ from unmute_core.livekit._history import CallerHistory
 from unmute_core.livekit._trace import SessionTrace
 from unmute_core.model import (
     EXTRA_CONTENT,
+    AnswerClock,
     ModelAnswer,
     ModelCall,
     ModelEvent,
@@ -67,6 +70,7 @@ from unmute_core.model import (
     template_variables,
     tool_choice,
     variable_key_max,
+    with_answer_clock,
     with_attempts,
 )
 from unmute_core.model._failover import transport_failure
@@ -156,6 +160,24 @@ class ModelCallLLM(llm.LLM):
         """Close the LLM, then the model call, when it has an ``aclose``."""
         await super().aclose()
         await close_model(self._model)
+
+    def emit(self, event: Any, *args: Any) -> None:
+        """Emit an event. A request's metrics are first timed from the call that answered.
+
+        LiveKit builds a request's ``LLMMetrics`` from the start of the stream. After a
+        fallback, that counts the calls that failed and the pauses between them. The stream
+        that is reporting corrects ``ttft`` and ``duration`` to start at the answering
+        attempt, as LiveKit's own ``FallbackAdapter`` reports the stream that answered.
+        """
+        stream = _REPORTING.get()
+        if (
+            event == "metrics_collected"
+            and stream is not None
+            and args
+            and isinstance(args[0], LLMMetrics)
+        ):
+            args = (stream.answered_metrics(args[0]), *args[1:])
+        super().emit(event, *args)
 
     def chat(
         self,
@@ -255,6 +277,13 @@ async def _never_run(raw_arguments: dict[str, Any]) -> None:
     raise RuntimeError("a tool offered through LiveKitModel.stream is never run here")
 
 
+_REPORTING: ContextVar["_ModelCallStream | None"] = ContextVar(
+    "unmute_reporting_stream", default=None
+)
+"""The request whose stream is being built. Its metrics task copies this, so the metrics it
+emits find their stream."""
+
+
 class _ModelCallStream(llm.LLMStream):
     """One request of a ``ModelCallLLM``."""
 
@@ -274,8 +303,46 @@ class _ModelCallStream(llm.LLMStream):
         self._node = node
         self._model = model
         self._settings = settings
-        super().__init__(owner, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options)
+        self._answer = AnswerClock()
+        self._created = time.perf_counter()
+        token = _REPORTING.set(self)
+        try:
+            super().__init__(owner, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options)
+        finally:
+            _REPORTING.reset(token)
         self._retry_on_chunk_sent = False
+
+    def answered_metrics(self, reported: LLMMetrics) -> LLMMetrics:
+        """Return the request's metrics timed from the attempt that answered it.
+
+        LiveKit times them from the stream's start. When a chain answered, ``ttft`` and
+        ``duration`` start at the answering attempt instead, and ``tokens_per_second`` follows
+        the new duration. The ids and token counts stay. A request that no call answered
+        keeps its metrics. The request's span gets the same figures.
+
+        Args:
+            reported: The metrics LiveKit built for this request.
+        """
+        if (started := self._answer.started) is None:
+            return reported
+        skipped = started - self._created
+        duration = max(0.0, reported.duration - skipped)
+        corrected = reported.model_copy(
+            update={
+                "ttft": reported.ttft if reported.ttft < 0 else max(0.0, reported.ttft - skipped),
+                "duration": duration,
+                "tokens_per_second": reported.completion_tokens / duration
+                if reported.tokens_per_second and duration
+                else 0.0,
+            }
+        )
+        if (span := self._llm_request_span) is not None:
+            span.set_attribute(trace_types.ATTR_LLM_METRICS, corrected.model_dump_json())
+            if corrected.ttft >= 0:
+                span.set_attribute(
+                    trace_types.ATTR_GEN_AI_RESPONSE_TIME_TO_FIRST_CHUNK, corrected.ttft
+                )
+        return corrected
 
     async def _run(self) -> None:
         """Stream the model call's events to LiveKit as chunks.
@@ -294,7 +361,13 @@ class _ModelCallStream(llm.LLMStream):
         answer_id: str | None = None
         try:
             async for chunk in self._node.stream(
-                None, self.chat_ctx, self.tools, self._settings, prompt=None, site=self._owner.site
+                None,
+                self.chat_ctx,
+                self.tools,
+                self._settings,
+                prompt=None,
+                site=self._owner.site,
+                answer=self._answer,
             ):
                 if isinstance(chunk, str):
                     chunk = _text_chunk(chunk, answer_id)
@@ -551,6 +624,7 @@ class ModelNode:
         side: bool = False,
         kind: PromptKind = "agent",
         cut: list[Exception] | None = None,
+        answer: AnswerClock | None = None,
     ) -> AsyncIterator[llm.ChatChunk | str]:
         """Send one request and stream the reply, as ``llm_node`` does.
 
@@ -576,6 +650,8 @@ class ModelNode:
             cut: When given, gets the error of a reply that failed after its first text or
                 tool call. Such a reply ends here with no error raised and no call failure:
                 the caller already heard it. An error before that is raised as ever.
+            answer: Learns when the attempt of a ``FallbackModelCall`` that answered began.
+                None keeps a clock of the request's own, for its metrics.
 
         A model call that fails for an agent fails the call through ``call``: LiveKit only
         logs a failed ``llm_node``. A plugin, a ``LiveKitModel`` or ``ModelCallLLM`` reports
@@ -615,6 +691,8 @@ class ModelNode:
             source = with_attempts(
                 source, functools.partial(_attempt_events, chat_ctx=filled, tools=tools)
             )
+        answer = answer or AnswerClock()
+        source = with_answer_clock(source, answer)
         operation = (
             prepared.dev.request_started(
                 name=label,
@@ -637,6 +715,7 @@ class ModelNode:
             metrics_llm=None if prepared.native else self.metrics_llm,
             model=prepared.name,
             provider=prepared.provider,
+            answer=answer,
         )
         try:
             async for raw in source:
@@ -853,6 +932,7 @@ class _ReplyRecorder:
         metrics_llm: llm.LLM | None = None,
         model: str = "",
         provider: str = "",
+        answer: AnswerClock | None = None,
     ) -> None:
         """Start the clock.
 
@@ -868,11 +948,13 @@ class _ReplyRecorder:
             metrics_llm: The LLM that gets this request's ``LLMMetrics``, or None for none.
             model: The model name the request went out with.
             provider: Who serves the model.
+            answer: Learns when the attempt that answered began, or None for no such clock.
         """
+        self.answer = answer or AnswerClock()
         self.metrics_llm = metrics_llm
         self.model = model
         self.provider = provider
-        self.ttft: float | None = None
+        self.first_output: float | None = None
         self.request_id = ""
         self.dev = dev if operation is not None else None
         self.operation = operation
@@ -899,8 +981,8 @@ class _ReplyRecorder:
         if (chunk := _spoken(raw, self.speech)) is not None:
             self.observe(chunk)
             self.began = self.began or _has_output(chunk)
-            if self.ttft is None and _has_output(chunk):
-                self.ttft = time.perf_counter() - self.started
+            if self.first_output is None and _has_output(chunk):
+                self.first_output = time.perf_counter()
         return chunk
 
     def observe(self, chunk: llm.ChatChunk | str) -> None:
@@ -985,18 +1067,21 @@ class _ReplyRecorder:
         """Emit this request's ``LLMMetrics`` on the LLM, with LiveKit's own field rules.
 
         A request that produced no chunk or failed has nothing to report, as in LiveKit's
-        ``LLMStream``. One that was cut after its first chunk reports as cancelled.
+        ``LLMStream``. One that was cut after its first chunk reports as cancelled. After a
+        fallback, ``ttft`` and ``duration`` start at the attempt that answered.
         """
         if self.metrics_llm is None or self.ttfb is None or self.error is not None:
             return
-        duration = time.perf_counter() - self.started
+        begun = self.started if self.answer.started is None else self.answer.started
+        duration = time.perf_counter() - begun
+        ttft = -1.0 if self.first_output is None else self.first_output - begun
         usage = self.usage
         self.metrics_llm.emit(
             "metrics_collected",
             LLMMetrics(
                 timestamp=time.time(),
                 request_id=self.request_id,
-                ttft=self.ttft if self.ttft is not None else -1.0,
+                ttft=ttft,
                 duration=duration,
                 cancelled=not self.finished,
                 label=self.metrics_llm.label,

@@ -255,6 +255,26 @@ def test_llm_metrics_still_carry_the_fields_the_model_node_sets() -> None:
     assert set(metrics_base.Metadata.model_fields) >= {"model_name", "model_provider"}
 
 
+def test_a_stream_still_reports_its_metrics_from_a_task_it_starts_at_construction() -> None:
+    """``ModelCallLLM.emit`` finds the stream through the context its metrics task copies.
+
+    ``_ModelCallStream.answered_metrics`` then corrects the metrics and the request span.
+    """
+    from livekit.agents.telemetry import trace_types
+
+    init = inspect.getsource(llm.LLMStream.__init__)
+    assert "asyncio.create_task(\n            self._metrics_monitor_task(monitor_aiter)" in init
+    assert "self._llm_request_span: trace.Span | None = None" in init
+    monitor = inspect.getsource(llm.LLMStream._metrics_monitor_task)
+    assert 'self._llm.emit("metrics_collected", metrics)' in monitor
+    assert "self._llm_request_span.set_attribute(" in monitor
+    assert trace_types.ATTR_LLM_METRICS == "lk.llm_metrics"
+    assert (
+        trace_types.ATTR_GEN_AI_RESPONSE_TIME_TO_FIRST_CHUNK
+        == "gen_ai.response.time_to_first_chunk"
+    )
+
+
 def test_an_activity_still_listens_for_metrics_on_its_llm() -> None:
     """``ModelNode`` emits ``metrics_collected`` on the LLM, and ``AgentActivity`` listens."""
     source = inspect.getsource(agent_activity)

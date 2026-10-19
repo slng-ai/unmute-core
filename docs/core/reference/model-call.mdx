@@ -432,6 +432,27 @@ async for event in with_attempts(model.stream(request), traced):
 3. A chain inside an attempt sends its own attempts through `stream` too.
 4. `ModelCallLLM(trace_attempts=True)` uses it to give each attempt its own LiveKit span pair.
 
+### with_answer_clock
+
+Tells you when the attempt that answered a request began. It is for code that cannot reach the chain, like `with_attempts`. Time a reply from that moment, not from the request, so a call that failed first and the pauses between retries are left out.
+
+```python
+import time
+from unmute_core.model import AnswerClock, with_answer_clock
+
+clock = AnswerClock()
+async for event in with_answer_clock(model.stream(request), clock):
+    ...
+if clock.started is not None:
+    answered_for = time.perf_counter() - clock.started
+```
+
+1. `with_answer_clock(events, clock)` reads `events`. While it computes each item, every `FallbackModelCall` inside tells `clock` when one of its calls gives its first event.
+2. `clock.started` is a `time.perf_counter()` reading. It is the start of the attempt that answered, after any failed call, `Retry-After` wait or same-model retry pause. It stays `None` when no call answered, for example when the last call sent an empty reply.
+3. The first report wins. A chain inside a chain reports its own answering attempt, not the time the outer chain spent on the inner one.
+4. Your own chain calls `note_answer(started)` with the `time.perf_counter()` reading it took before it sent the attempt, when the attempt gives its first event.
+5. `ModelCallLLM` uses it to time `LLMMetrics`. See [LiveKit](/core/reference/livekit).
+
 ## Write your own
 
 Any class with `stream` is a `ModelCall`. The guide shows a small one in [Write your own ModelCall](/core/models/model-call#write-your-own-modelcall). Give it to an adapter the way you give it the router: `ModelCallLLM(Echo())` on LiveKit or `ModelCallLLMService(Echo())` on Pipecat.
