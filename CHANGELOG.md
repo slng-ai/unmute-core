@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Changed
+
+- `RouterModelCall` and `OpenAIModelCall` keep an idle connection to the provider open for 120 s by default, set with the new `keepalive_s=` argument. Before, the client they build closed it after 5 s, which is openai's default. In a voice call the turns are often more than 5 s apart, so almost every turn paid a new TCP and TLS handshake before its first token. Pass `keepalive_s=5.0` for the old value, or `None` to keep a connection open with no limit. It only applies to the client the call builds: with `client=` it raises `ValueError`.
+
 ## 0.18.3
 
 This release names the answer on each model chunk, lets a prompt hold `{{name}}` as plain text, and lets a fallback stay on a model that gave an empty answer. No API was removed. `unmute_core.require("0.18.0")` accepts 0.18.3, so code built for 0.18.0 needs no change.

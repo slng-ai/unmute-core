@@ -5,7 +5,14 @@ from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Annotated, Any, cast
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, PlainValidator, StringConstraints, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PlainValidator,
+    StringConstraints,
+    ValidationError,
+)
 
 from unmute_core._pydantic import retitled
 from unmute_core.model._call import ModelEvent, ModelRequest, NativeModelCall
@@ -14,12 +21,16 @@ from unmute_core.model._prompt import folded_system
 from unmute_core.model._signatures import is_gemini, signed_tool_calls, takes_one_system_message
 
 if TYPE_CHECKING:
-    from openai import AsyncOpenAI, Timeout
+    from openai import AsyncOpenAI, DefaultAsyncHttpxClient, Timeout
 
 logger = logging.getLogger(__name__)
 
 RESERVED_PARAMS = frozenset({"stream_options"})
 """Body fields ``OpenAIModelCall`` owns."""
+
+DEFAULT_KEEPALIVE_S = 120.0
+"""How long a call's own client keeps an idle connection open. openai's own is 5 s, shorter
+than the gap between two turns of a voice call, so every turn would open a new connection."""
 
 
 def _seconds_or_timeout(value: object) -> object:
@@ -39,26 +50,75 @@ class ClientArguments(BaseModel):
     model: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)] | None = None
     base_url: Annotated[str, StringConstraints(pattern=r"^https?://\S+$")] | None = None
     timeout: Annotated[object, PlainValidator(_seconds_or_timeout)] = None
+    keepalive_s: Annotated[float, Field(gt=0, allow_inf_nan=False)] | None = DEFAULT_KEEPALIVE_S
 
 
 def check_client_arguments(
-    title: str, *, model: str | None = None, base_url: str | None = None, timeout: object = None
+    title: str,
+    *,
+    model: str | None = None,
+    base_url: str | None = None,
+    timeout: object = None,
+    keepalive_s: float | None = DEFAULT_KEEPALIVE_S,
 ) -> None:
-    """Check a model call's model name, URL and timeout, naming the public class.
+    """Check a model call's model name, URL, timeout and keep-alive, naming the public class.
 
     Args:
         title: The public class, like ``OpenAIModelCall``.
         model: The model name.
         base_url: The endpoint's URL.
         timeout: Seconds, or a timeout object like ``openai.Timeout``.
+        keepalive_s: Seconds above zero, or None for no limit.
 
     Raises:
         ValidationError: Naming the class and the argument.
     """
     try:
-        ClientArguments(model=model, base_url=base_url, timeout=timeout)
+        ClientArguments(model=model, base_url=base_url, timeout=timeout, keepalive_s=keepalive_s)
     except ValidationError as error:
         raise retitled(error, title) from None
+
+
+def check_keepalive_without_client(title: str, keepalive_s: float | None) -> None:
+    """Refuse a ``keepalive_s`` that a ready client would ignore.
+
+    Args:
+        title: The public class, like ``OpenAIModelCall``.
+        keepalive_s: The value the caller passed next to ``client=``.
+
+    Raises:
+        ValueError: If it is not the default. Set the keep-alive on the client itself.
+    """
+    if keepalive_s != DEFAULT_KEEPALIVE_S:
+        raise ValueError(
+            f"{title}: keepalive_s only applies to a client {title} builds. "
+            "Drop client=, or set the keep-alive on the client you pass"
+        )
+
+
+def keepalive_http_client(
+    keepalive_s: float | None, timeout: "Timeout | float | None"
+) -> "DefaultAsyncHttpxClient":
+    """Build openai's default HTTP client with an idle keep-alive of your choice.
+
+    The connection limits are openai's own, except how long an idle connection stays open.
+
+    Args:
+        keepalive_s: Seconds an idle connection stays open. None keeps it open with no limit.
+        timeout: The client's timeout.
+
+    Returns:
+        The HTTP client to pass to ``AsyncOpenAI(http_client=...)``.
+    """
+    import openai
+
+    defaults = openai.DEFAULT_CONNECTION_LIMITS
+    limits = type(defaults)(
+        max_connections=defaults.max_connections,
+        max_keepalive_connections=defaults.max_keepalive_connections,
+        keepalive_expiry=keepalive_s,
+    )
+    return openai.DefaultAsyncHttpxClient(limits=limits, timeout=timeout)
 
 
 class OpenAIModelCall(NativeModelCall):
@@ -81,6 +141,7 @@ class OpenAIModelCall(NativeModelCall):
         client: "AsyncOpenAI | None" = None,
         params: Mapping[str, Any] | None = None,
         timeout: "Timeout | float | None" = None,
+        keepalive_s: float | None = DEFAULT_KEEPALIVE_S,
     ) -> None:
         """Set up the client.
 
@@ -95,11 +156,17 @@ class OpenAIModelCall(NativeModelCall):
             timeout: The client's timeout. None waits 15 s to connect and 5 s for each read,
                 as ``RouterModelCall`` does. The default client never retries: the failover
                 rules decide that.
+            keepalive_s: Seconds an idle connection to the provider stays open for the next
+                request. None keeps it open with no limit. The default, 120 s, covers the gap
+                between two turns of a call. openai's own client closes it after 5 s, and the
+                next turn then pays a new TCP and TLS handshake before its first token. Only
+                for the client this call builds.
 
         Raises:
             ImportError: If the ``openai`` package is missing.
             ValueError: If ``params`` sets a field in ``RESERVED_PARAMS``, or ``model``,
-                ``base_url`` or ``timeout`` is not one the client can use.
+                ``base_url``, ``timeout`` or ``keepalive_s`` is not one the client can use, or
+                ``keepalive_s`` is set together with ``client``.
         """
         try:
             from openai import AsyncOpenAI, Timeout
@@ -111,23 +178,34 @@ class OpenAIModelCall(NativeModelCall):
             raise ValueError(f"set {reserved[0]} with OpenAIModelCall's own behaviour, not params")
         if client is None:
             check_client_arguments(
-                "OpenAIModelCall", model=model, base_url=base_url, timeout=timeout
+                "OpenAIModelCall",
+                model=model,
+                base_url=base_url,
+                timeout=timeout,
+                keepalive_s=keepalive_s,
             )
         else:
             check_client_arguments("OpenAIModelCall", model=model)
+            check_keepalive_without_client("OpenAIModelCall", keepalive_s)
         super().__init__(self._send)
         self.model = model
         self.provider = (urlparse(base_url).hostname if base_url else None) or "openai"
         self.params = dict(params or {})
         self._owns_client = client is None
-        self.client = client or AsyncOpenAI(
-            base_url=base_url,
-            api_key=api_key,
-            max_retries=0,
-            timeout=timeout
-            if timeout is not None
-            else Timeout(connect=15.0, read=5.0, write=5.0, pool=5.0),
-        )
+        if client is None:
+            timeout = (
+                timeout
+                if timeout is not None
+                else Timeout(connect=15.0, read=5.0, write=5.0, pool=5.0)
+            )
+            client = AsyncOpenAI(
+                base_url=base_url,
+                api_key=api_key,
+                max_retries=0,
+                timeout=timeout,
+                http_client=keepalive_http_client(keepalive_s, timeout),
+            )
+        self.client = client
         self._one_system_message = takes_one_system_message(model)
 
     async def _send(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
