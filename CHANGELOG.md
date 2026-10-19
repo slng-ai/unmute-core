@@ -8,7 +8,12 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
+- `FallbackModelCall(empty_fails_over=False)` ends a request with a call's empty answer instead of moving to the next call. An app that handles an empty reply itself, like asking the same model again, then stays on that model. The default, `True`, works as before.
 - `TextDelta` and `ToolCall` carry `response_id` and `request_id`, as `Usage` does: the answer's id from its chunks and the provider's `x-request-id`. `RouterModelCall` and `OpenAIModelCall` fill them. A reply cut off before its `Usage`, like one a caller talks over, still names its answer and its HTTP request. Before, only the `Usage` at the end carried them. Both default to `None`, so a call of your own needs no change.
+
+### Fixed
+
+- `FallbackModelCall` now closes a call's stream when its reader stops early, like a caller who talks over the reply. Before, the call's request stayed open, and its `finally` blocks ran, only once the stream was garbage collected.
 
 ## 0.18.2
 
