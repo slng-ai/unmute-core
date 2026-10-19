@@ -228,6 +228,8 @@ class LiveKitModel(NativeModelCall):
                         chunk.usage.completion_tokens,
                         cached_input_tokens=chunk.usage.prompt_cached_tokens,
                         response_id=chunk.id or None,
+                        reasoning_tokens=chunk.usage.reasoning_tokens or None,
+                        total_tokens=chunk.usage.total_tokens,
                     )
                 if chunk.delta is None:
                     continue
@@ -316,24 +318,36 @@ def livekit_error(error: BaseException) -> APIError | None:
             return None
 
 
-def request_context(chat_ctx: llm.ChatContext, prompt: str | None) -> llm.ChatContext:
+def request_context(
+    chat_ctx: llm.ChatContext, prompt: str | None, *, keep_running: bool = False
+) -> llm.ChatContext:
     """Return a copy of the request with the prompt as it reads now.
 
-    The copy leaves out the running tool calls LiveKit adds to every request of the session
-    (voice/agent_activity.py:3547). A step never made the delegate call that is still
-    running. It reads that call as its own unfinished work and answers with nothing.
+    LiveKit adds a pair to a request while a tool call is still running: the call and an
+    output that says it is still in progress (voice/generation.py,
+    ``_inject_running_tool_calls``). The model reads it and does not call a slow tool a
+    second time, for example when the caller speaks during a long lookup. The agent that
+    made the call keeps the pair. A step never made the delegate call that is still
+    running. It reads that call as its own unfinished work and answers with nothing, so a
+    step's copy leaves the pair out.
 
     Args:
         chat_ctx: The request LiveKit built.
         prompt: The agent's or step's prompt, placeholders still in it. None keeps the
             prompt the request holds.
+        keep_running: True keeps the running tool calls, as the agent's own request needs.
+            False leaves them out, as a step's or a side request's does.
     """
     ctx = chat_ctx.copy()
-    running = {
-        item.call_id
-        for item in ctx.items
-        if isinstance(item, llm.FunctionCall) and item.extra.get(RUNNING_PLACEHOLDER_KEY)
-    }
+    running = (
+        set()
+        if keep_running
+        else {
+            item.call_id
+            for item in ctx.items
+            if isinstance(item, llm.FunctionCall) and item.extra.get(RUNNING_PLACEHOLDER_KEY)
+        }
+    )
     ctx.items[:] = [
         item
         for item in ctx.items
@@ -542,7 +556,7 @@ class ModelNode:
         dev = None if unseen else dev_observer(_running_session(agent, session))
         named = hooks or self.trace or dev or self.metrics_llm
         name, provider = _names(model, agent, session) if named else ("", "")
-        ctx = request_context(chat_ctx, prompt)
+        ctx = request_context(chat_ctx, prompt, keep_running=site == "" and not side)
         if self.call is not None and site == "" and not side:
             _add_notes(ctx, self.call)
         schemas = llm.ToolContext(tools).parse_function_tools("openai") if tools else []
@@ -806,6 +820,8 @@ class _ReplyRecorder:
                 self.usage.prompt_tokens,
                 self.usage.completion_tokens,
                 cached_input_tokens=self.usage.prompt_cached_tokens or None,
+                reasoning_tokens=self.usage.reasoning_tokens or None,
+                total_tokens=self.usage.total_tokens,
             )
             if self.usage
             else None,
@@ -858,6 +874,7 @@ class _ReplyRecorder:
                 total_tokens=usage.total_tokens if usage else 0,
                 tokens_per_second=usage.completion_tokens / duration if usage and duration else 0.0,
                 prompt_cached_tokens=usage.prompt_cached_tokens if usage else 0,
+                reasoning_tokens=usage.reasoning_tokens if usage else 0,
                 metadata=Metadata(model_name=answered or self.model, model_provider=self.provider),
             ),
         )
@@ -992,7 +1009,12 @@ async def _chunks(
                 completion_tokens=event.output_tokens,
                 prompt_tokens=event.input_tokens,
                 prompt_cached_tokens=event.cached_input_tokens or 0,
-                total_tokens=event.input_tokens + event.output_tokens,
+                reasoning_tokens=event.reasoning_tokens or 0,
+                total_tokens=(
+                    event.total_tokens
+                    if event.total_tokens is not None
+                    else event.input_tokens + event.output_tokens
+                ),
             )
             yield llm.ChatChunk(id=event.response_id or utils.shortuuid("unmute_"), usage=usage)
             continue

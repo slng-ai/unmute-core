@@ -17,7 +17,12 @@ from unmute_core.model import (
     signed_tool_calls,
 )
 from unmute_core.model._chunks import chunk_events
-from unmute_core.model._openai import check_client_arguments
+from unmute_core.model._openai import (
+    DEFAULT_KEEPALIVE_S,
+    check_client_arguments,
+    check_keepalive_without_client,
+    keepalive_http_client,
+)
 from unmute_core.slng._blocked import warn_dropped
 from unmute_core.slng._config import RouterConfig
 from unmute_core.slng._headers import (
@@ -106,6 +111,7 @@ class RouterModelCall:
         extra_headers: Mapping[str, str] | None = None,
         timeout: Timeout | float = TIMEOUT,
         client: AsyncOpenAI | None = None,
+        keepalive_s: float | None = DEFAULT_KEEPALIVE_S,
     ) -> None:
         """Set up the router client. Arguments left out come from ``SlngSettings``.
 
@@ -133,16 +139,22 @@ class RouterModelCall:
             client: A ready client, for tests. Then the environment is not read, and
                 ``model`` defaults to ``slng/auto``. The default client never retries,
                 because the failover rules decide that.
+            keepalive_s: Seconds an idle connection to the router stays open for the next
+                request. None keeps it open with no limit. The default, 120 s, covers the gap
+                between two turns of a call. openai's own client closes it after 5 s, and the
+                next turn then pays a new TCP and TLS handshake before its first token. Only
+                for the client this call builds.
 
         Raises:
             TypeError: If ``call`` is no ``CallInfo``.
             SlngConfigError: If the key, or both the URL and the world part, are neither
                 passed nor set.
             ValueError: If ``model`` names no model of ``config``, or ``body`` sets a field
-                in ``RESERVED_BODY`` other than ``template_variables``. A field the router
+                in ``RESERVED_BODY`` other than ``template_variables``, or ``keepalive_s``
+                is set together with ``client``. A field the router
                 drops, like ``api_base`` or ``metadata``, is sent with one warning.
             ValidationError: If ``llm_config_id`` is empty, too long, or holds a comma,
-                whitespace, a brace or a bar.
+                whitespace, a brace or a bar, or ``keepalive_s`` is not above zero.
         """
         # an argument of the wrong type, named with the fix: RouterHeaders was the old one
         if not isinstance(call, CallInfo):
@@ -155,8 +167,14 @@ class RouterModelCall:
             raise ValueError(f"set {reserved[0]} with RouterModelCall's own argument, not body")
         if client is None:
             check_client_arguments(
-                "RouterModelCall", model=model, base_url=base_url, timeout=timeout
+                "RouterModelCall",
+                model=model,
+                base_url=base_url,
+                timeout=timeout,
+                keepalive_s=keepalive_s,
             )
+        else:
+            check_keepalive_without_client("RouterModelCall", keepalive_s)
         warn_dropped(body or {}, "RouterModelCall's body", request=True)
         self.body = dict(body or {})
         self.config = config
@@ -182,6 +200,7 @@ class RouterModelCall:
                 api_key=settings.api_key.get_secret_value(),
                 max_retries=0,
                 timeout=timeout,
+                http_client=keepalive_http_client(keepalive_s, timeout),
             )
             llm_config_id = llm_config_id or settings.llm_config_id
         # needs the router config and the pinned model together

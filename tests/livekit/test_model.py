@@ -12,7 +12,9 @@ from dataclasses import replace
 from typing import Any
 
 import httpx2
+import pytest
 from livekit.agents import AgentSession, APIConnectOptions, APIError, llm, metrics
+from livekit.agents.voice.agent import ModelSettings
 from pydantic import BaseModel
 
 from tests.livekit.fake import Reply, ScriptedLLM, call
@@ -25,9 +27,10 @@ from unmute_core.livekit import UnmuteAgent
 from unmute_core.livekit._model import (
     RUNNING_PLACEHOLDER_KEY,
     ModelCallLLM,
-    request_context,
+    ModelNode,
 )
 from unmute_core.model import (
+    SUMMARY_SITE,
     FallbackModelCall,
     ModelEvent,
     ModelRequest,
@@ -220,26 +223,44 @@ async def test_a_hook_written_call_keeps_its_provider_data() -> None:
     assert written.extra == SIGNED
 
 
-def test_a_request_drops_the_running_call_livekit_adds_and_reads_the_prompt_now() -> None:
+@pytest.mark.parametrize(
+    ("site", "side", "roles"),
+    [
+        pytest.param("", False, ["system", "user", "assistant", "tool"], id="agent"),
+        pytest.param("task:order", False, ["system", "user"], id="step"),
+        pytest.param(SUMMARY_SITE, True, ["system", "user"], id="summary"),
+    ],
+)
+async def test_only_the_agents_own_request_keeps_the_running_call_livekit_adds(
+    site: str, side: bool, roles: list[str]
+) -> None:
     ctx = llm.ChatContext()
     ctx.add_message(role="system", content="old prompt", id="lk.agent_task.instructions")
     ctx.add_message(role="user", content="hi")
-    running = llm.FunctionCall(
-        call_id="c1", name="order_flow", arguments="{}", extra={RUNNING_PLACEHOLDER_KEY: True}
-    )
     ctx.insert(
         [
-            running,
+            llm.FunctionCall(
+                call_id="c1",
+                name="order_flow",
+                arguments="{}",
+                extra={RUNNING_PLACEHOLDER_KEY: True},
+            ),
             llm.FunctionCallOutput(call_id="c1", name="order_flow", output="...", is_error=False),
         ]
     )
+    called = ScriptedCall("Done.")
+    node = ModelNode(state=None, model=called, trace=None)
 
-    request = request_context(ctx, "new prompt")
+    [
+        _
+        async for _ in node.stream(
+            None, ctx, [], ModelSettings(), prompt="new prompt", site=site, side=side
+        )
+    ]
 
-    assert [item.type for item in request.items] == ["message", "message"]
-    prompt = request.items[0]
-    assert isinstance(prompt, llm.ChatMessage) and prompt.text_content == "new prompt"
-    assert len(ctx.items) == 4
+    [request] = called.requests
+    assert [message["role"] for message in request.messages] == roles
+    assert request.messages[0]["content"] == "new prompt"
 
 
 async def test_reasoning_tags_never_reach_what_the_agent_says() -> None:
@@ -373,6 +394,27 @@ async def test_llm_metrics_carry_the_cached_tokens_and_the_answers_id() -> None:
 
     [reported] = [item for item in collected if isinstance(item, metrics.LLMMetrics)]
     assert (reported.prompt_cached_tokens, reported.request_id) == (8, "chatcmpl-1")
+
+
+class CountedUsageCall(ScriptedCall):
+    """A scripted model call whose provider counts its thinking apart, in its own total."""
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        async for event in super().stream(request):
+            yield event
+        yield Usage(11, 4, reasoning_tokens=3, total_tokens=20)
+
+
+async def test_llm_metrics_carry_the_reasoning_tokens_and_the_providers_total() -> None:
+    collected: list[metrics.AgentMetrics] = []
+    agent = UnmuteAgent(AgentSpec("Orders.", model=CountedUsageCall("Hello.")))
+    async with AgentSession() as session:
+        session.on("metrics_collected", lambda event: collected.append(event.metrics))
+        await session.start(agent)
+        await session.run(user_input="Hi")
+
+    [reported] = [item for item in collected if isinstance(item, metrics.LLMMetrics)]
+    assert (reported.reasoning_tokens, reported.total_tokens) == (3, 20)
 
 
 async def test_each_model_call_request_of_a_turn_reports_once_steps_included() -> None:
