@@ -428,7 +428,7 @@ webhook_tool(
 )
 ```
 
-1. `max_messages` is the newest messages to send. The default is 200. It must be 1 or more. The result is also capped at `TRANSCRIPT_MAX_BYTES` (32 KiB). Over that, the oldest messages go first, and the newest message is always kept.
+1. `max_messages` is the newest messages to send. The default is 200. It must be 1 or more. The result is also capped at `max_bytes`, `TRANSCRIPT_MAX_BYTES` (32 KiB) by default. Over that, the oldest messages go first, and the newest message is always kept. `Transcript(max_bytes=None)` sets no cap of its own, and `max_bytes=100_000` raises it. A webhook request is still limited to 64 KiB (`MAX_REQUEST_BYTES`) with its URL and headers, and a larger one fails the tool call. See [Send the transcript](/core/reference/tools#send-the-transcript).
 2. `text=False` (default) sends a list of `{"role", "content"}` messages. `text=True` sends one text with a `role: content` line per message.
 3. The model never sees a locked argument.
 

@@ -145,12 +145,15 @@ class Transcript:
         max_messages: The newest messages to send, at least one.
         text: True sends one text, a ``role: content`` line per message. False sends the
             messages as a list.
-
-    Over ``TRANSCRIPT_MAX_BYTES`` the oldest messages are dropped, so the newest always go.
+        max_bytes: The most bytes to send, as the request body encodes them. Over it the
+            oldest messages are dropped, so the newest always go. The default is
+            ``TRANSCRIPT_MAX_BYTES``. None sets no cap of its own. A webhook request is
+            still limited, whatever this says.
     """
 
     max_messages: Annotated[int, Field(ge=1)] = 200
     text: bool = False
+    max_bytes: Annotated[int | None, Field(ge=1)] = TRANSCRIPT_MAX_BYTES
 
     def read(self, context: Mapping[str, object] | None) -> list[dict[str, Any]] | str:
         """Return the newest messages of the call, as a list or as text."""
@@ -160,20 +163,28 @@ class Transcript:
         )
         newest = messages[-self.max_messages :]
         if not self.text:
-            return _within_budget(newest, [json.dumps(m, default=str) for m in newest], 2, 2)
+            if self.max_bytes is None:
+                return newest
+            encoded = [json.dumps(m, default=str) for m in newest]
+            return _within_budget(newest, encoded, 2, 2, self.max_bytes)
         lines = [f"{m.get('role', '')}: {m.get('content', '')}" for m in newest]
+        if self.max_bytes is None:
+            return "\n".join(lines)
         escaped = [json.dumps(line)[1:-1] for line in lines]
-        return "\n".join(_within_budget(lines, escaped, 2, 2))
+        return "\n".join(_within_budget(lines, escaped, 2, 2, self.max_bytes))
 
 
-def _within_budget(items: list[Any], encoded: list[str], overhead: int, gap: int) -> list[Any]:
-    """Drop the oldest items until their encoding fits ``TRANSCRIPT_MAX_BYTES``.
+def _within_budget(
+    items: list[Any], encoded: list[str], overhead: int, gap: int, limit: int
+) -> list[Any]:
+    """Drop the oldest items until their encoding fits ``limit`` bytes.
 
     Args:
         items: The items, oldest first.
         encoded: Each item as the text that is sent, JSON-escaped as a request body sends it.
         overhead: Bytes around the whole (the brackets of a JSON list).
         gap: Bytes between two items.
+        limit: The most bytes the whole may take.
 
     Returns:
         The newest items that fit, at least the newest one.
@@ -181,7 +192,7 @@ def _within_budget(items: list[Any], encoded: list[str], overhead: int, gap: int
     sizes = [len(text.encode()) for text in encoded]
     total = overhead + sum(sizes) + gap * max(len(sizes) - 1, 0)
     start = 0
-    while total > TRANSCRIPT_MAX_BYTES and start < len(items) - 1:
+    while total > limit and start < len(items) - 1:
         total -= sizes[start] + gap
         start += 1
     return items[start:]
