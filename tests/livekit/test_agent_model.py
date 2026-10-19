@@ -20,7 +20,7 @@ from unmute_core.agent import AgentSpec
 from unmute_core.handoff import HandoffContext
 from unmute_core.livekit import LiveKitModel, UnmuteAgent
 from unmute_core.livekit._step import StepTask
-from unmute_core.model import FallbackModelCall, ModelRequest, TextDelta, ToolCall
+from unmute_core.model import FallbackModelCall, ModelRequest, TextDelta, ToolCall, Usage
 from unmute_core.state import CallState
 from unmute_core.telemetry import Telemetry
 
@@ -186,6 +186,31 @@ async def test_livekit_model_streams_a_request_as_any_model_call() -> None:
     assert sent.prompt == "Help Ana."
     assert sent.tools == ["lookup_order"]
     assert (LiveKitModel(plugin).model, LiveKitModel(plugin).provider) == ("gpt-4o", "scripted")
+
+
+async def test_livekit_model_reads_the_cache_write_tokens_of_a_plugin() -> None:
+    counted = llm.CompletionUsage(
+        completion_tokens=4,
+        prompt_tokens=11,
+        prompt_cached_tokens=3,
+        cache_creation_tokens=5,
+        total_tokens=15,
+    )
+    plugin = ScriptedLLM(
+        Reply("Hi.", usage=counted),
+        Reply(
+            "Hi.", usage=llm.CompletionUsage(completion_tokens=4, prompt_tokens=11, total_tokens=15)
+        ),
+    )
+    asked = ModelRequest(messages=[{"role": "user", "content": "Hi."}])
+
+    [_, written] = [event async for event in LiveKitModel(plugin).stream(asked)]
+    [_, plain] = [event async for event in LiveKitModel(plugin).stream(asked)]
+
+    assert isinstance(written, Usage)
+    assert isinstance(plain, Usage)
+    assert (written.cached_input_tokens, written.cache_write_tokens) == (3, 5)
+    assert plain.cache_write_tokens is None
 
 
 SIGNED = {"google": {"thought_signature": "sig-1"}}
