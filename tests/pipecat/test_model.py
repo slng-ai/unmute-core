@@ -266,6 +266,15 @@ async def test_the_usage_chunk_carries_the_cached_tokens_and_the_answers_id() ->
     assert last.id == "chatcmpl-1"
 
 
+async def test_the_usage_chunk_carries_the_reasoning_tokens_and_the_providers_total() -> None:
+    counted = Usage(10, 2, reasoning_tokens=5, total_tokens=17)
+    llm = service(Scripted([TextDelta("Hi"), counted, Usage(10, 2)]))
+    chunks = [chunk async for chunk in await llm.get_chat_completions(LLMContext())]
+    [first, plain] = [chunk.usage for chunk in chunks if chunk.usage is not None]
+    assert (first.completion_tokens_details.reasoning_tokens, first.total_tokens) == (5, 17)
+    assert (plain.completion_tokens_details, plain.total_tokens) == (None, 12)
+
+
 async def test_no_trace_headers_are_sent_by_default() -> None:
     model = Scripted([TextDelta("Hi")])
     _ = [chunk async for chunk in await service(model).get_chat_completions(LLMContext())]

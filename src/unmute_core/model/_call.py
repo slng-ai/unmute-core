@@ -132,6 +132,11 @@ class Usage:
         response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
         request_id: The provider's id for the HTTP request, its ``x-request-id``
             response header, or None. Support tickets and provider logs use it.
+        reasoning_tokens: How many output tokens the provider spent on hidden reasoning,
+            or None when it did not say.
+        total_tokens: The provider's own total, or None when it did not say. It can be
+            more than input plus output, for example when a provider counts thinking
+            separately.
     """
 
     input_tokens: SkipValidation[int]
@@ -139,6 +144,8 @@ class Usage:
     cached_input_tokens: SkipValidation[int | None] = None
     response_id: str | None = None
     request_id: str | None = None
+    reasoning_tokens: SkipValidation[int | None] = None
+    total_tokens: SkipValidation[int | None] = None
 
 
 ModelEvent = TextDelta | ToolCall | Usage

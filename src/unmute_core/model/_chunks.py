@@ -18,9 +18,9 @@ async def chunk_events(
     calls in one chunk stay separate calls. A piece with neither continues the last call.
     Calls come out in the order they first appeared. A provider's ``extra_content`` on a piece,
     like Gemini's thought signature, stays on the finished call. The ``Usage`` carries the
-    cached input tokens. Every event carries the answer's id from its chunks, as far as
-    they have named it, and ``request_id``, so a reply cut off before its ``Usage`` still
-    names both.
+    cached input tokens, the reasoning tokens and the provider's own total. Every event
+    carries the answer's id from its chunks, as far as they have named it, and
+    ``request_id``, so a reply cut off before its ``Usage`` still names both.
 
     Args:
         chunks: ``ChatCompletionChunk`` objects, as the ``openai`` SDK streams them.
@@ -35,10 +35,13 @@ async def chunk_events(
         response_id = chunk.id or response_id
         if chunk.usage is not None:
             details = getattr(chunk.usage, "prompt_tokens_details", None)
+            output_details = getattr(chunk.usage, "completion_tokens_details", None)
             usage = Usage(
                 chunk.usage.prompt_tokens,
                 chunk.usage.completion_tokens,
                 cached_input_tokens=getattr(details, "cached_tokens", None),
+                reasoning_tokens=getattr(output_details, "reasoning_tokens", None),
+                total_tokens=getattr(chunk.usage, "total_tokens", None),
             )
         for choice in chunk.choices:
             if choice.delta.content:

@@ -6,6 +6,10 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ## Unreleased
 
+### Added
+
+- `Usage` carries `reasoning_tokens` and `total_tokens`: the output tokens a provider spent on hidden reasoning, and the provider's own total, which can be more than input plus output when it counts thinking separately. Both are `None` when the provider did not say, and they come after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.reasoning_tokens` is set and `LLMMetrics.total_tokens` is the provider's total, not input plus output. On Pipecat, the usage chunk carries them, so `LLMTokenUsage.reasoning_tokens` and `total_tokens` are set. Before, both were dropped.
+
 ### Fixed
 
 - `RouterModelCall` and `OpenAIModelCall` now keep parallel tool calls apart when the provider sends no `index` on them. Some OpenAI-compatible endpoints, like Google Gemini's, leave `index` null and may put several whole calls in one chunk. Before, all of them joined into one call with the names and the JSON arguments glued together, so no tool could run. Now a call is numbered by its `index` when it has one, else by its `id`, and a piece with neither continues the last call. A stream numbered the usual way gives the same events as before.
