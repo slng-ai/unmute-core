@@ -59,7 +59,7 @@ from unmute_core.pipecat._history import (
 from unmute_core.pipecat._model import ModelCallLLMService
 from unmute_core.pipecat._replies import ReplyTracker
 from unmute_core.pipecat._side import SideRequests
-from unmute_core.pipecat._tools import FunctionHandler, joins_context
+from unmute_core.pipecat._tools import FunctionHandler, ParametersFlowManager, joins_context
 from unmute_core.tasks import (
     FINISH_TOOL_NAME,
     CallTasks,
@@ -399,7 +399,9 @@ class RunLifecycle:
         removes.
         """
         if self._flow is None:
-            flow = FlowManager(llm=self._llm, context_aggregator=self._aggregators, worker=worker)
+            flow = ParametersFlowManager(
+                llm=self._llm, context_aggregator=self._aggregators, worker=worker
+            )
             flow.register_action(SHAPE_HISTORY, self._shape_action)
             await flow.initialize()
             self._flow = flow

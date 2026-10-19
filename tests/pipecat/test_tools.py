@@ -1,18 +1,23 @@
 """``tools_schema``: an agent without tasks gets each tool's announce, effect and interruption."""
 
 import asyncio
+import json
 from datetime import date
 from types import SimpleNamespace
 from typing import Any, cast
 
+from pipecat.adapters.schemas.tools_schema import ToolsSchema
+from pipecat.adapters.services.open_ai_adapter import OpenAILLMAdapter
 from pipecat.frames.frames import BotStoppedSpeakingFrame, TTSSpeakFrame
 from pydantic import BaseModel
 
 from tests.outputs import AnyResult
+from tests.pipecat.harness import FakeWorker
 from tests.pipecat.test_realtime import live, realtime
 from tests.tasks.job import Canned, Sending
 from unmute_core.call import CallHooks
 from unmute_core.pipecat import tools_schema
+from unmute_core.pipecat._tools import ParametersFlowManager, flows_function, tool_dicts
 from unmute_core.tools import ToolRegistry, ToolReply, ToolSpec
 
 OPEN = {"type": "object", "properties": {}, "additionalProperties": True}
@@ -246,3 +251,46 @@ async def test_plain_tools_have_their_sends_drained_at_the_calls_end() -> None:
     tools_schema(tools, hooks=hooks)
     await hooks.end("ended")
     assert sending.drained
+
+
+LOCKED = {
+    "type": "object",
+    "properties": {"flavor": {"type": "string"}, "count": {"type": "integer"}},
+    "required": ["flavor"],
+    "additionalProperties": False,
+    "description": "Order cupcakes.",
+}
+
+
+def _locked_registry() -> ToolRegistry:
+    return ToolRegistry([ToolSpec("order_cupcakes", "Order.", LOCKED, AnyResult, Canned())])
+
+
+def test_the_openai_adapter_sends_the_registry_schema_as_it_is() -> None:
+    registry = _locked_registry()
+    sent = OpenAILLMAdapter().to_provider_tools_format(tools_schema(registry))
+    assert json.dumps(sent) == json.dumps(registry.schemas())
+
+
+def test_the_parts_the_other_adapters_read_stay_set() -> None:
+    """The Anthropic, Gemini and realtime adapters read ``properties`` and ``required``."""
+    (schema,) = tools_schema(_locked_registry()).standard_tools
+    assert schema.properties == LOCKED["properties"]
+    assert schema.required == ["flavor"]
+
+
+async def test_a_flows_node_function_sends_the_registry_schema_as_it_is() -> None:
+    registry = _locked_registry()
+
+    async def handler(_args: dict[str, Any], _flow: Any) -> tuple[object, None]:
+        return {}, None
+
+    manager = ParametersFlowManager(
+        llm=cast(Any, None), context_aggregator=None, worker=cast(Any, FakeWorker())
+    )
+    node_function = flows_function(tool_dicts(registry)[0], handler)
+    schema = await manager._create_function_schema(node_function)
+    sent = OpenAILLMAdapter().to_provider_tools_format(ToolsSchema(standard_tools=[schema]))
+    assert json.dumps(sent) == json.dumps(registry.schemas())
+    assert schema.handler is not None
+    assert schema.handler is not handler
