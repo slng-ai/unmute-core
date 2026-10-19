@@ -110,6 +110,37 @@ async def test_a_rate_limit_retries_only_once(sleeps: list[float]) -> None:
     assert (sleeps, first.calls) == ([1.0], 2)
 
 
+NO_WAIT = [{"Retry-After": "0"}, {"Retry-After": "Thu, 01 Jan 1970 00:00:00 GMT"}]
+
+
+@pytest.mark.parametrize("headers", NO_WAIT, ids=["zero", "past date"])
+async def test_a_retry_after_for_no_wait_is_a_normal_retry(
+    sleeps: list[float], headers: dict[str, str]
+) -> None:
+    events: list[Retry] = []
+    busy = StatusError(429, headers)
+    first = FakeCall(busy, busy, ["again"])
+    chain = FallbackModelCall(
+        [first, FakeCall(["x"])], same_model_retries=SAME_MODEL_RETRIES_S, on_retry=events.append
+    )
+    assert await collect(chain) == ["again"]
+    assert (sleeps, first.calls, [(e.attempt, e.waited) for e in events]) == (
+        [0.25, 0.75],
+        3,
+        [(1, False), (2, False)],
+    )
+
+
+@pytest.mark.parametrize("headers", NO_WAIT, ids=["zero", "past date"])
+async def test_a_retry_after_for_no_wait_fails_over_when_there_are_no_retries(
+    sleeps: list[float], headers: dict[str, str]
+) -> None:
+    first = FakeCall(StatusError(429, headers))
+    chain = FallbackModelCall([first, FakeCall(["x"])], max_wait_s=0.0)
+    assert await collect(chain) == ["x"]
+    assert (sleeps, first.calls) == ([], 1)
+
+
 @pytest.mark.parametrize("headers", [{"Retry-After": "30"}, {}])
 async def test_a_long_or_missing_retry_after_fails_over(
     sleeps: list[float], headers: dict[str, str]
