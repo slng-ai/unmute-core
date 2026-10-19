@@ -228,6 +228,8 @@ class LiveKitModel(NativeModelCall):
                         chunk.usage.completion_tokens,
                         cached_input_tokens=chunk.usage.prompt_cached_tokens,
                         response_id=chunk.id or None,
+                        reasoning_tokens=chunk.usage.reasoning_tokens or None,
+                        total_tokens=chunk.usage.total_tokens,
                     )
                 if chunk.delta is None:
                     continue
@@ -806,6 +808,8 @@ class _ReplyRecorder:
                 self.usage.prompt_tokens,
                 self.usage.completion_tokens,
                 cached_input_tokens=self.usage.prompt_cached_tokens or None,
+                reasoning_tokens=self.usage.reasoning_tokens or None,
+                total_tokens=self.usage.total_tokens,
             )
             if self.usage
             else None,
@@ -858,6 +862,7 @@ class _ReplyRecorder:
                 total_tokens=usage.total_tokens if usage else 0,
                 tokens_per_second=usage.completion_tokens / duration if usage and duration else 0.0,
                 prompt_cached_tokens=usage.prompt_cached_tokens if usage else 0,
+                reasoning_tokens=usage.reasoning_tokens if usage else 0,
                 metadata=Metadata(model_name=answered or self.model, model_provider=self.provider),
             ),
         )
@@ -992,7 +997,12 @@ async def _chunks(
                 completion_tokens=event.output_tokens,
                 prompt_tokens=event.input_tokens,
                 prompt_cached_tokens=event.cached_input_tokens or 0,
-                total_tokens=event.input_tokens + event.output_tokens,
+                reasoning_tokens=event.reasoning_tokens or 0,
+                total_tokens=(
+                    event.total_tokens
+                    if event.total_tokens is not None
+                    else event.input_tokens + event.output_tokens
+                ),
             )
             yield llm.ChatChunk(id=event.response_id or utils.shortuuid("unmute_"), usage=usage)
             continue
