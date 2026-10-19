@@ -228,7 +228,12 @@ class RouterModelCall:
             await self.client.close()
 
     async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
-        """Send the request unfilled, each ``{{a.b}}`` written ``{{a__b}}``, and stream the answer.
+        """Send the request unfilled and stream the answer.
+
+        When the request or the call's ``body`` carries template variables, the router fills
+        the prompt, so each ``{{ a.b }}`` goes out as ``{{a__b}}``, the only form it reads.
+        When there are none, nothing is filled and the messages go out exactly as written, so
+        a prompt that shows a literal ``{{ name }}`` reaches the model unchanged.
 
         The answer ends with its ``Usage``. Each request carries a new ``X-Slng-Request-Id``,
         unless its headers set one, and a failure logs it.
@@ -259,7 +264,9 @@ class RouterModelCall:
             owned["slng_pure_proxy"] = True
         variables = shortened(self.body.get("template_variables", {}) | dict(request.variables))
         try:
-            async for event in self._stream(request, headers, owned | router_body(variables)):
+            async for event in self._stream(
+                request, headers, owned | router_body(variables), rewrite=bool(variables)
+            ):
                 yield event
         except Exception:
             request_id = next(
@@ -269,14 +276,28 @@ class RouterModelCall:
             raise
 
     async def _stream(
-        self, request: ModelRequest, headers: dict[str, str], owned: dict[str, Any]
+        self,
+        request: ModelRequest,
+        headers: dict[str, str],
+        owned: dict[str, Any],
+        *,
+        rewrite: bool,
     ) -> AsyncIterator[ModelEvent]:
-        """Send one request and turn the router's chunks into events."""
+        """Send one request and turn the router's chunks into events.
+
+        Args:
+            request: The request to send.
+            headers: The headers to send.
+            owned: The body fields the router owns.
+            rewrite: True when the router fills variables, so placeholders are written in
+                the form it reads. False sends the messages as written.
+        """
+        messages = router_messages(request.messages) if rewrite else request.messages
         async with self.client.chat.completions.with_streaming_response.create(
             model=self.model,
             messages=cast(
                 "list[ChatCompletionMessageParam]",
-                signed_tool_calls(router_messages(request.messages), gemini=self._gemini),
+                signed_tool_calls(messages, gemini=self._gemini),
             ),
             tools=cast("list[ChatCompletionToolUnionParam]", request.tools)
             if request.tools

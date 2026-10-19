@@ -117,7 +117,7 @@ router = RouterModelCall(
 OpenAI refuses function tools with reasoning on `/v1/chat/completions`, and answers 400. The router sends the request there. So an agent with tools sends `reasoning_effort` `"none"`. An agent with no tools may leave it out.
 
 - It sends `config` as `slng_config` with every request. See [Your router config](#your-router-config).
-- It sends the prompt unfilled, with `{{a.b}}` written `{{a__b}}`.
+- It sends the prompt unfilled. When the request carries template variables, `{{ a.b }}` is written `{{a__b}}`, the only form the router fills. With no variables, the router fills nothing and the prompt goes out exactly as written, so a literal `{{ name }}` in it reaches the model unchanged.
 - It sends the values as `template_variables`. The router fills the prompt.
 - The `provider` attribute is `slng`. The `model` attribute defaults to `slng/auto`.
 - `aclose()` closes the client only when the call built it. A client you pass in stays open.

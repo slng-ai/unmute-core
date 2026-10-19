@@ -710,3 +710,40 @@ async def test_reasoning_effort_and_include_pass_in_params() -> None:
 def test_the_router_refuses_headers_in_place_of_the_call() -> None:
     with pytest.raises(TypeError, match=r"takes the call's CallInfo, like state.call"):
         RouterModelCall(RouterHeaders("salon", "call-1"), client=FakeRouter().client())  # ty: ignore[invalid-argument-type]
+
+
+SPACED = [
+    {"role": "system", "content": "Say {{ name }} and {{ a.b }} as text."},
+    {"role": "developer", "content": [{"type": "text", "text": "Keep {{ x.y }}."}]},
+    {"role": "user", "content": "hi"},
+]
+
+
+async def test_a_request_with_no_variables_sends_its_placeholders_as_written() -> None:
+    router = FakeRouter()
+    [event async for event in router_call(router).stream(ModelRequest(messages=SPACED))]
+
+    assert router.body["messages"] == SPACED
+    assert router.body["template_variables"] == {}
+
+
+async def test_a_request_with_variables_writes_placeholders_the_router_reads() -> None:
+    router = FakeRouter()
+    request = ModelRequest(messages=SPACED, variables={"name": "Ana", "a__b": "1", "x__y": "2"})
+    [event async for event in router_call(router).stream(request)]
+
+    assert router.body["messages"][0]["content"] == "Say {{name}} and {{a__b}} as text."
+    assert router.body["messages"][1]["content"][0]["text"] == "Keep {{x__y}}."
+
+
+async def test_variables_from_the_calls_body_also_make_the_router_fill() -> None:
+    router = FakeRouter()
+    call = RouterModelCall(
+        CALL,
+        model="gpt-test",
+        body={"template_variables": {"name": "Ana"}},
+        client=router.client(),
+    )
+    [event async for event in call.stream(ModelRequest(messages=SPACED))]
+
+    assert router.body["messages"][0]["content"] == "Say {{name}} and {{a__b}} as text."
