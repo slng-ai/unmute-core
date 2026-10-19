@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Fixed
 
-- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#TBD).
+- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#71).
 
 ## 0.19.1
 
