@@ -9,6 +9,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Added
 
 - `Usage` carries `reasoning_tokens` and `total_tokens`: the output tokens a provider spent on hidden reasoning, and the provider's own total, which can be more than input plus output when it counts thinking separately. Both are `None` when the provider did not say, and they come after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.reasoning_tokens` is set and `LLMMetrics.total_tokens` is the provider's total, not input plus output. On Pipecat, the usage chunk carries them, so `LLMTokenUsage.reasoning_tokens` and `total_tokens` are set. Before, both were dropped.
+- `FallbackModelCall(usage_counts_as_answer=True)` takes a call that sent its `Usage` and nothing else as an empty reply, which ends the request there. Only a call that sent no event at all moves to the next call. A provider that reports usage has finished its answer, so its empty reply is the model's own, while a stream with no event at all is often a broken response. The default, `False`, works as before.
 
 ### Changed
 

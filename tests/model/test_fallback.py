@@ -433,3 +433,18 @@ async def test_an_empty_answer_can_end_the_request_instead_of_failing_over() -> 
     chain = FallbackModelCall([first, second], empty_fails_over=False, on_fail_over=moves.append)
     assert [event async for event in chain.stream(REQUEST)] == [usage]
     assert (second.calls, moves) == (0, [])
+
+
+@pytest.mark.parametrize(
+    ("answer", "moves_on"),
+    [([Usage(10, 0)], False), ([], True)],
+    ids=["usage only", "no event"],
+)
+async def test_a_usage_can_count_as_an_empty_answer(answer: list, moves_on: bool) -> None:
+    moves: list[FailOver] = []
+    first, second = FakeCall(answer), FakeCall(["x"])
+    chain = FallbackModelCall(
+        [first, second], usage_counts_as_answer=True, on_fail_over=moves.append
+    )
+    expected = (["x"], 1, 1) if moves_on else ([], 0, 0)
+    assert (await collect(chain), second.calls, len(moves)) == expected
