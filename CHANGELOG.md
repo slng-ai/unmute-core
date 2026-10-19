@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Fixed
+
+- `RouterModelCall` and `OpenAIModelCall` now keep parallel tool calls apart when the provider sends no `index` on them. Some OpenAI-compatible endpoints, like Google Gemini's, leave `index` null and may put several whole calls in one chunk. Before, all of them joined into one call with the names and the JSON arguments glued together, so no tool could run. Now a call is numbered by its `index` when it has one, else by its `id`, and a piece with neither continues the last call. A stream numbered the usual way gives the same events as before.
+
 ## 0.18.3
 
 This release names the answer on each model chunk, lets a prompt hold `{{name}}` as plain text, and lets a fallback stay on a model that gave an empty answer. No API was removed. `unmute_core.require("0.18.0")` accepts 0.18.3, so code built for 0.18.0 needs no change.
