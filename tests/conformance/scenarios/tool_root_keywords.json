@@ -1,0 +1,83 @@
+{
+  "name": "tool_root_keywords",
+  "about": "A tool locks its arguments with additionalProperties false at the root of its parameters. The model gets the parameters object as it is, with the same keys in the same order, on every adapter.",
+  "instructions": "You answer calls for a small bakery.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_options": {
+    "search_web": {
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "description": "What to look for."
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "turns": [
+    {
+      "caller": "Do you bake rye bread?",
+      "model": [
+        {
+          "site": "",
+          "tool_parameters": {
+            "search_web": {
+              "type": "object",
+              "properties": {
+                "q": {
+                  "type": "string",
+                  "description": "What to look for."
+                }
+              },
+              "required": [
+                "q"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "rye bread"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "Yes, we bake rye every morning."
+        }
+      ],
+      "spoken": [
+        "Yes, we bake rye every morning."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "rye bread"
+        }
+      }
+    ],
+    "events": []
+  }
+}

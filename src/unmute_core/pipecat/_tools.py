@@ -6,8 +6,10 @@ A tool here is the ``{"name", "description", "parameters"}`` shape the core hand
 
 import asyncio
 import contextlib
+import copy
 import weakref
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
 from typing import Any
 
 from pipecat.adapters.schemas.direct_function import tool_options
@@ -81,15 +83,91 @@ type FunctionHandler = Callable[[FunctionCallParams], Awaitable[None]]
 type FlowsHandler = Callable[[dict[str, Any], FlowManager], Awaitable[tuple[object, object | None]]]
 
 
-def _parts(tool: Mapping[str, Any]) -> dict[str, Any]:
-    """Return the arguments both schema classes take, refs inlined."""
+def _parameters(tool: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a tool's parameters as the model gets them: refs inlined, root keywords kept."""
     parameters = inline_refs(tool.get("parameters") or {})
-    return {
-        "name": tool["name"],
-        "description": tool.get("description", ""),
-        "properties": dict(parameters.get("properties") or {}),
-        "required": list(parameters.get("required") or []),
-    }
+    return parameters or {"type": "object", "properties": {}, "required": []}
+
+
+class ParametersSchema(FunctionSchema):
+    """A ``FunctionSchema`` that sends the tool's whole parameters object.
+
+    Pipecat's own schema rebuilds ``parameters`` from ``properties`` and ``required``, so a
+    root keyword like ``additionalProperties`` is lost. This one gives the chat adapters the
+    same object LiveKit sends. ``properties`` and ``required`` still hold the two parts that
+    the adapters of realtime and other providers read.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        description: str,
+        parameters: Mapping[str, Any],
+        handler: Any = None,
+    ) -> None:
+        """Keep the parameters, and the parts of them that Pipecat reads.
+
+        Args:
+            name: The tool's name.
+            description: What the tool does.
+            parameters: The JSON schema of the arguments, with refs inlined.
+            handler: The handler Pipecat registers, or None.
+        """
+        super().__init__(
+            name,
+            description,
+            dict(parameters.get("properties") or {}),
+            list(parameters.get("required") or []),
+            handler=handler,
+        )
+        self._parameters = dict(parameters)
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        """The tool's whole parameters object."""
+        return self._parameters
+
+    def to_default_dict(self) -> dict[str, Any]:
+        """Return the tool with its parameters as given, root keywords and order kept."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": copy.deepcopy(self._parameters),
+        }
+
+    def with_handler(self, handler: Any) -> "ParametersSchema":
+        """Return the same tool with another handler."""
+        return ParametersSchema(self.name, self.description, self._parameters, handler=handler)
+
+
+@dataclass
+class FlowsParametersSchema(FlowsFunctionSchema):
+    """A Flows node function that keeps the tool's whole parameters object.
+
+    Flows turns it into a ``FunctionSchema`` when the node is set, in
+    ``ParametersFlowManager``.
+    """
+
+    parameters: dict[str, Any] = field(default_factory=dict)
+
+    def to_function_schema(self) -> ParametersSchema:
+        """Return the tool as a ``ParametersSchema`` with no handler."""
+        return ParametersSchema(self.name, self.description, self.parameters)
+
+
+class ParametersFlowManager(FlowManager):
+    """A ``FlowManager`` that keeps the parameters of a ``FlowsParametersSchema``.
+
+    Flows rebuilds each node function from its ``properties`` and ``required`` and drops
+    the rest. This keeps the whole parameters object, and the handler Flows wraps.
+    """
+
+    async def _create_function_schema(self, tool: Any) -> FunctionSchema:
+        """Return the node function's schema, with the parameters of a ``FlowsParametersSchema``."""
+        schema = await super()._create_function_schema(tool)
+        if isinstance(tool, FlowsParametersSchema):
+            return tool.to_function_schema().with_handler(schema.handler)
+        return schema
 
 
 def function_schema(
@@ -97,16 +175,18 @@ def function_schema(
     handler: FunctionHandler | None = None,
     *,
     cancel_on_interruption: bool = True,
-) -> FunctionSchema:
+) -> ParametersSchema:
     """Return a tool as a Pipecat ``FunctionSchema``. Pipecat registers its handler."""
     if handler is not None and not cancel_on_interruption:
         handler = mark_keeps_running(tool_options(handler, cancel_on_interruption=False))
-    return FunctionSchema(**_parts(tool), handler=handler)
+    return ParametersSchema(
+        tool["name"], tool.get("description", ""), _parameters(tool), handler=handler
+    )
 
 
 def flows_function(
     tool: Mapping[str, Any], handler: FlowsHandler, *, cancel_on_interruption: bool = True
-) -> FlowsFunctionSchema:
+) -> FlowsParametersSchema:
     """Return a tool as a Flows node function.
 
     ``cancel_on_interruption`` is set even when True, because Flows defaults to False, an
@@ -114,8 +194,15 @@ def flows_function(
     """
     if not cancel_on_interruption:
         mark_keeps_running(handler)
-    return FlowsFunctionSchema(
-        **_parts(tool), handler=handler, cancel_on_interruption=cancel_on_interruption
+    parameters = _parameters(tool)
+    return FlowsParametersSchema(
+        name=tool["name"],
+        description=tool.get("description", ""),
+        properties=dict(parameters.get("properties") or {}),
+        required=list(parameters.get("required") or []),
+        handler=handler,
+        cancel_on_interruption=cancel_on_interruption,
+        parameters=parameters,
     )
 
 

@@ -10,6 +10,10 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - `FallbackModelCall(on_retry=...)` is called before each pause that sends the same call again, with a `Retry`: the call, which retry it is, the pause, whether it is a `Retry-After` wait, and the error. Before, only a move to the next call was reported, through `on_fail_over`, and a same-model retry was only logged.
 
+### Fixed
+
+- On Pipecat, a tool's parameters now reach the model as they do on LiveKit. Before, Pipecat's `FunctionSchema` rebuilt them from `properties` and `required`, so a root keyword like `"additionalProperties": false` was lost and the root keys changed order. Now the tools of `tools_schema()` and of a task step send the whole parameters object, refs inlined as before. Flows needs `ParametersFlowManager` for this, and the library builds it for a call. A realtime service still sends only `properties` and `required`, as its Pipecat adapter builds them.
+
 ## 0.18.1
 
 This release lets a step's opening say the line its replies pick. No API changed. `unmute_core.require("0.18.0")` accepts 0.18.1, so code built for 0.18.0 needs no change.

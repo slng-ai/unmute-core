@@ -233,3 +233,9 @@ async def test_flows_still_wraps_a_handler_in_a_function_that_closes_over_it() -
 
     wrapped = await flow._create_transition_func("slow", handler)
     assert handler in [cell.cell_contents for cell in cast(Any, wrapped).__closure__ or ()]
+
+
+def test_flows_still_builds_a_node_function_schema_in_a_method_we_extend() -> None:
+    """``ParametersFlowManager`` extends ``_create_function_schema``, which drops the parameters."""
+    parameters = inspect.signature(FlowManager._create_function_schema).parameters
+    assert list(parameters) == ["self", "tool"]

@@ -104,6 +104,7 @@ from unmute_core.pipecat._side import RequestSpans, SideRequests
 from unmute_core.pipecat._tools import (
     FlowsHandler,
     FunctionHandler,
+    ParametersSchema,
     announcer,
     flows_function,
     function_schema,
@@ -1132,6 +1133,8 @@ class UnmuteFlows:
                 refusal, properties=FunctionCallResultProperties(run_llm=False)
             )
 
+        if isinstance(tool, ParametersSchema):
+            return tool.with_handler(hand_off)
         return FunctionSchema(
             name=tool.name,
             description=tool.description,
