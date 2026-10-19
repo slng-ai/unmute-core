@@ -15,7 +15,9 @@ async def chunk_events(
 
     Tool call pieces are joined by their index. A provider's ``extra_content`` on a piece,
     like Gemini's thought signature, stays on the finished call. The ``Usage`` carries the
-    cached input tokens, the answer's id from its chunks, and ``request_id``.
+    cached input tokens. Every event carries the answer's id from its chunks, as far as
+    they have named it, and ``request_id``, so a reply cut off before its ``Usage`` still
+    names both.
 
     Args:
         chunks: ``ChatCompletionChunk`` objects, as the ``openai`` SDK streams them.
@@ -36,7 +38,9 @@ async def chunk_events(
             )
         for choice in chunk.choices:
             if choice.delta.content:
-                yield TextDelta(choice.delta.content)
+                yield TextDelta(
+                    choice.delta.content, response_id=response_id, request_id=request_id
+                )
             for part in choice.delta.tool_calls or []:
                 call = calls.setdefault(part.index, {"id": "", "name": "", "arguments": ""})
                 call["id"] = part.id or call["id"]
@@ -46,6 +50,11 @@ async def chunk_events(
                 if isinstance(extra := (part.model_extra or {}).get(EXTRA_CONTENT), dict):
                     extras[part.index] = extras.get(part.index, {}) | extra
     for index, call in calls.items():
-        yield ToolCall(**call, extra=extras.get(index, {}))
+        yield ToolCall(
+            **call,
+            extra=extras.get(index, {}),
+            response_id=response_id,
+            request_id=request_id,
+        )
     if usage is not None:
         yield replace(usage, response_id=response_id, request_id=request_id)

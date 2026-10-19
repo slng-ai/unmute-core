@@ -9,6 +9,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Added
 
 - `FallbackModelCall(empty_fails_over=False)` ends a request with a call's empty answer instead of moving to the next call. An app that handles an empty reply itself, like asking the same model again, then stays on that model. The default, `True`, works as before.
+- `TextDelta` and `ToolCall` carry `response_id` and `request_id`, as `Usage` does: the answer's id from its chunks and the provider's `x-request-id`. `RouterModelCall` and `OpenAIModelCall` fill them. A reply cut off before its `Usage`, like one a caller talks over, still names its answer and its HTTP request. Before, only the `Usage` at the end carried them. Both default to `None`, so a call of your own needs no change.
 - `ModelCallLLM(prompts_as_written=True)` on LiveKit and `ModelCallLLMService(prompts_as_written=True)` on Pipecat send each prompt as written. A `{{name}}` in it is plain text, so a prompt that shows the model JSON, code or a template of its own works without a call state. Before, every `{{name}}` was a placeholder, and one the state did not have raised `MissingVariablesError` before the request went out. `template_variables(..., as_written=True)` is the same rule for code that fills prompts itself.
 
 ### Fixed

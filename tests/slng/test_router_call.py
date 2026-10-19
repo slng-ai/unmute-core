@@ -132,10 +132,10 @@ async def test_text_and_tool_calls_stream_back() -> None:
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
     assert events == [
-        TextDelta("One "),
-        TextDelta("moment."),
-        ToolCall(id="t1", name="book", arguments='{"day": 1}'),
-        ToolCall(id="t2", name="find", arguments="{}"),
+        TextDelta("One ", response_id="c1"),
+        TextDelta("moment.", response_id="c1"),
+        ToolCall(id="t1", name="book", arguments='{"day": 1}', response_id="c1"),
+        ToolCall(id="t2", name="find", arguments="{}", response_id="c1"),
     ]
 
 
@@ -194,8 +194,8 @@ async def test_a_tool_calls_provider_data_streams_back_as_its_extra() -> None:
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
     assert events == [
-        ToolCall(id="t1", name="book", arguments="{}", extra=SIGNED),
-        ToolCall(id="t2", name="find", arguments="{}"),
+        ToolCall(id="t1", name="book", arguments="{}", extra=SIGNED, response_id="c1"),
+        ToolCall(id="t2", name="find", arguments="{}", response_id="c1"),
     ]
 
 
@@ -392,10 +392,10 @@ async def test_usage_comes_back_last() -> None:
     }
     router = FakeRouter([chunk({"content": "Hi."}), usage_chunk])
     events = [event async for event in router_call(router).stream(REQUEST)]
-    assert events == [TextDelta("Hi."), Usage(120, 7, response_id="c1")]
+    assert events == [TextDelta("Hi.", response_id="c1"), Usage(120, 7, response_id="c1")]
 
 
-async def test_usage_carries_the_cached_tokens_and_the_answers_ids() -> None:
+async def test_every_event_carries_the_answers_ids_and_usage_the_cached_tokens() -> None:
     usage_chunk = {
         **chunk({}),
         "id": "chatcmpl-9",
@@ -412,6 +412,7 @@ async def test_usage_carries_the_cached_tokens_and_the_answers_ids() -> None:
         headers={"x-request-id": "req-42"},
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
+    assert events[0] == TextDelta("Hi.", response_id="chatcmpl-9", request_id="req-42")
     assert events[-1] == Usage(
         120, 7, cached_input_tokens=96, response_id="chatcmpl-9", request_id="req-42"
     )
