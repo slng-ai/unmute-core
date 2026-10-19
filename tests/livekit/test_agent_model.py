@@ -179,7 +179,8 @@ async def test_livekit_model_streams_a_request_as_any_model_call() -> None:
 
     events: list[Any] = [event async for event in model.stream(request)]
 
-    assert events[0] == TextDelta("Hi Ana.")
+    assert isinstance(events[0], TextDelta)
+    assert events[0].text == "Hi Ana."
     assert isinstance(events[1], ToolCall)
     assert (events[1].name, json.loads(events[1].arguments)) == ("lookup_order", {"id": "A-12"})
     [sent] = plugin.requests

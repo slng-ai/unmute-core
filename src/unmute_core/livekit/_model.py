@@ -244,9 +244,9 @@ class LiveKitModel(NativeModelCall):
                 if chunk.delta is None:
                     continue
                 if chunk.delta.content:
-                    yield TextDelta(chunk.delta.content)
+                    yield TextDelta(chunk.delta.content, response_id=chunk.id or None)
                 for call in chunk.delta.tool_calls:
-                    yield _tool_call(call)
+                    yield replace(_tool_call(call), response_id=chunk.id or None)
         if usage is not None:
             yield usage
 
@@ -287,19 +287,20 @@ class _ModelCallStream(llm.LLMStream):
         chain or the router, makes its error final, so LiveKit does not walk the chain again.
         A request is never retried once text or a tool call went out: the caller would hear
         the reply twice. ``ModelNode.stream`` ends such a reply instead of raising.
+
+        Every chunk carries the id the provider gave the answer. Text the provider named
+        no id for, like the words a reasoning filter held back, takes the id of the chunk
+        before it.
         """
+        answer_id: str | None = None
         try:
             async for chunk in self._node.stream(
                 None, self.chat_ctx, self.tools, self._settings, prompt=None, site=self._owner.site
             ):
-                self._event_ch.send_nowait(
-                    chunk
-                    if isinstance(chunk, llm.ChatChunk)
-                    else llm.ChatChunk(
-                        id=utils.shortuuid("unmute_"),
-                        delta=llm.ChoiceDelta(role="assistant", content=chunk),
-                    )
-                )
+                if isinstance(chunk, str):
+                    chunk = _text_chunk(chunk, answer_id)
+                answer_id = chunk.id
+                self._event_ch.send_nowait(chunk)
         except APIError:
             raise
         except Exception as error:
@@ -388,10 +389,7 @@ class _AttemptStream(llm.LLMStream):
                 ) is None:
                     continue
                 if isinstance(chunk, str):
-                    chunk = llm.ChatChunk(
-                        id=event.response_id or utils.shortuuid("unmute_"),
-                        delta=llm.ChoiceDelta(role="assistant", content=chunk),
-                    )
+                    chunk = _text_chunk(chunk, event.response_id)
                 self._event_ch.send_nowait(chunk)
         except Exception as error:
             self._events.put_nowait(error)
@@ -1143,17 +1141,20 @@ async def _chunks(
 def _event_chunk(event: ModelEvent) -> llm.ChatChunk | str | None:
     """Return one model event as LiveKit reads it: text, a chunk, or None for no chunk.
 
-    Text with provider data goes out as a chunk with the data as ``ChoiceDelta.extra``.
-    LiveKit keeps it on the assistant message and sends it back as the message's
-    ``extra_content``, as with its own OpenAI-compatible models.
+    Every chunk carries the id the provider gave the answer, and a random id only when it
+    named none, so LiveKit's metrics and spans name the provider's own id. Text goes out as
+    a plain string when it has no id and no provider data. Text with provider data goes out
+    as a chunk with the data as ``ChoiceDelta.extra``. LiveKit keeps it on the assistant
+    message and sends it back as the message's ``extra_content``, as with its own
+    OpenAI-compatible models.
     """
     if isinstance(event, TextDelta):
-        if not event.extra:
+        if not event.extra and not (event.text and event.response_id):
             return event.text
         return llm.ChatChunk(
             id=event.response_id or utils.shortuuid("unmute_"),
             delta=llm.ChoiceDelta(
-                role="assistant", content=event.text or None, extra=dict(event.extra)
+                role="assistant", content=event.text or None, extra=dict(event.extra) or None
             ),
         )
     if isinstance(event, Usage):
@@ -1178,10 +1179,18 @@ def _event_chunk(event: ModelEvent) -> llm.ChatChunk | str | None:
             extra=dict(event.extra) or None,
         )
         return llm.ChatChunk(
-            id=utils.shortuuid("unmute_"),
+            id=event.response_id or utils.shortuuid("unmute_"),
             delta=llm.ChoiceDelta(role="assistant", tool_calls=[call]),
         )
     return None
+
+
+def _text_chunk(text: str, chunk_id: str | None) -> llm.ChatChunk:
+    """Return text as a chunk with the given id, or a random one when there is none."""
+    return llm.ChatChunk(
+        id=chunk_id or utils.shortuuid("unmute_"),
+        delta=llm.ChoiceDelta(role="assistant", content=text),
+    )
 
 
 def _hook_prompt(ctx: llm.ChatContext, hooks: Hooks, info: PromptInfo) -> None:
