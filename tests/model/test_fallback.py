@@ -400,3 +400,36 @@ async def test_aclose_closes_each_call_that_can_close() -> None:
 
 def test_a_chain_retries_itself() -> None:
     assert FallbackModelCall([FakeCall()]).retries_itself is True
+
+
+class Tracked:
+    """Streams texts, then waits forever, and records when its stream is closed."""
+
+    def __init__(self, *texts: str) -> None:
+        self.texts = texts
+        self.closed = asyncio.Event()
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        try:
+            for text in self.texts:
+                yield TextDelta(text)
+            await asyncio.Event().wait()
+        finally:
+            self.closed.set()
+
+
+async def test_a_reader_that_stops_early_closes_the_calls_stream() -> None:
+    call = Tracked("Your table is booked")
+    stream = FallbackModelCall([call]).stream(REQUEST)
+    assert await anext(stream) == TextDelta("Your table is booked")
+    await stream.aclose()
+    assert call.closed.is_set()
+
+
+async def test_an_empty_answer_can_end_the_request_instead_of_failing_over() -> None:
+    moves: list[FailOver] = []
+    usage = Usage(10, 0)
+    first, second = FakeCall([usage]), FakeCall(["x"])
+    chain = FallbackModelCall([first, second], empty_fails_over=False, on_fail_over=moves.append)
+    assert [event async for event in chain.stream(REQUEST)] == [usage]
+    assert (second.calls, moves) == (0, [])
