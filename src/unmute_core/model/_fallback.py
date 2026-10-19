@@ -135,6 +135,7 @@ class FallbackModelCall:
         on_retry: SkipValidation[Callable[[Retry], None]] | None = None,
         sticky: bool = False,
         empty_fails_over: bool = True,
+        usage_counts_as_answer: bool = False,
         start_ends_budget: bool = False,
     ) -> None:
         """Keep the calls in the order they are tried.
@@ -164,6 +165,11 @@ class FallbackModelCall:
             empty_fails_over: An answer with nothing in it moves to the next call, as a
                 failure does. False ends the request there with the empty answer, for an app
                 that handles an empty reply itself, like asking the same model again.
+            usage_counts_as_answer: A call that sent its ``Usage`` and nothing else answered
+                with an empty reply, which ends the request there. Only a call that sent no
+                event at all moves on through ``empty_fails_over``. A provider that reports
+                usage has finished its answer, while a stream with no event at all is often
+                a broken response.
             start_ends_budget: End ``first_event_timeout_s`` at a call's ``AnswerStarted``,
                 the provider's first chunk, instead of at its first text or tool call. A
                 reply that is only a long tool call then counts as started at once.
@@ -186,6 +192,7 @@ class FallbackModelCall:
         self._on_retry = on_retry
         self._sticky = sticky
         self._empty_fails_over = empty_fails_over
+        self._usage_counts_as_answer = usage_counts_as_answer
         self._start_ends_budget = start_ends_budget
         self._active = 0
         self._answered = 0
@@ -387,7 +394,8 @@ class FallbackModelCall:
                             self._fail_over(index, next_index, status, error)
                             break
                         continue
-                    if first is None and not last and self._empty_fails_over:
+                    answered_empty = self._usage_counts_as_answer and usage is not None
+                    if first is None and not last and self._empty_fails_over and not answered_empty:
                         logger.warning("model call %d answered nothing, trying the next one", index)
                         self._fail_over(index, next_index, None, None)
                         break

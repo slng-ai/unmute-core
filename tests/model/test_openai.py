@@ -3,6 +3,7 @@
 import builtins
 from typing import Any
 
+import openai
 import pytest
 
 from tests.slng.router_fake import FakeRouter, chunk
@@ -164,3 +165,36 @@ async def test_two_system_messages_stay_two_for_other_models(
 def test_a_timeout_that_is_not_seconds_above_zero_is_refused(timeout: Any) -> None:
     with pytest.raises(ValueError, match=r"OpenAIModelCall\ntimeout\n.*seconds above zero"):
         OpenAIModelCall("gpt-test", api_key="k", timeout=timeout)
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expiry"),
+    [({}, 120.0), ({"keepalive_s": 30}, 30), ({"keepalive_s": None}, None)],
+)
+def test_the_client_it_builds_keeps_an_idle_connection_for_keepalive_s(
+    monkeypatch: pytest.MonkeyPatch, arguments: dict[str, Any], expiry: float | None
+) -> None:
+    built: list[dict[str, Any]] = []
+    real = openai.DefaultAsyncHttpxClient
+    monkeypatch.setattr(
+        openai, "DefaultAsyncHttpxClient", lambda **kwargs: built.append(kwargs) or real(**kwargs)
+    )
+    OpenAIModelCall("m", api_key="k", **arguments)
+    [limits] = [kwargs["limits"] for kwargs in built]
+    assert limits.keepalive_expiry == expiry
+    assert limits.max_connections == openai.DEFAULT_CONNECTION_LIMITS.max_connections
+    assert (
+        limits.max_keepalive_connections
+        == openai.DEFAULT_CONNECTION_LIMITS.max_keepalive_connections
+    )
+
+
+@pytest.mark.parametrize("keepalive_s", [0, -5, "a"])
+def test_a_keepalive_that_is_not_seconds_above_zero_is_refused(keepalive_s: Any) -> None:
+    with pytest.raises(ValueError, match=r"OpenAIModelCall\nkeepalive_s\n"):
+        OpenAIModelCall("m", api_key="k", keepalive_s=keepalive_s)
+
+
+def test_a_ready_client_refuses_keepalive_s() -> None:
+    with pytest.raises(ValueError, match="keepalive_s only applies to a client OpenAIModelCall"):
+        OpenAIModelCall("m", client=FakeRouter().client(), keepalive_s=30)
