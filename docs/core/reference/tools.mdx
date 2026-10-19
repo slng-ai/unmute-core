@@ -443,11 +443,16 @@ webhook_tool(
 ```
 
 <ParamField path="max_messages" type="int" default="200">
-  The newest messages to send. It must be 1 or more. A smaller number raises a Pydantic `ValidationError`. Whatever the number, the result stays within `TRANSCRIPT_MAX_BYTES` (32 KiB): the oldest messages go first, and the newest is always kept.
+  The newest messages to send. It must be 1 or more. A smaller number raises a Pydantic `ValidationError`. Whatever the number, the result stays within `max_bytes`.
 </ParamField>
 <ParamField path="text" type="bool" default="False">
   `False` sends a list of `{"role", "content"}` messages. `True` sends one text with a `role: content` line per message.
 </ParamField>
+<ParamField path="max_bytes" type="int | None" default="TRANSCRIPT_MAX_BYTES">
+  The most bytes to send, as the request body encodes them. The default is `TRANSCRIPT_MAX_BYTES` (32 KiB). Over the cap the oldest messages go first, and the newest is always kept, even when it is over the cap alone. It must be 1 or more. `None` sets no cap of its own.
+</ParamField>
+
+A webhook request is still limited, whatever `max_bytes` says. The URL, the headers and the body together may be `MAX_REQUEST_BYTES` (64 KiB, in `unmute_core.tools._executors`) at most. A larger request is not sent. The tool call fails with "webhook request exceeded the size limit", and the model reads that error. On a tool on an event, the run counts as failed, so `tool_failed:<tool>` follows. Keep `max_bytes` well under 64 KiB, so the rest of the request still fits. A tool of your own that is not a webhook has no such limit.
 
 ## Webhooks
 
@@ -592,7 +597,7 @@ webhook_tool(..., wait_for_response=False)
 ```
 
 1. `timeout` is one deadline for the whole request: DNS, the connection, every redirect and the answer. It is 10 seconds by default.
-2. The request and the answer may each be 64 KiB at most. A larger one fails the tool call, and the model reads the error.
+2. The request and the answer may each be 64 KiB at most (`MAX_REQUEST_BYTES` and `MAX_RESPONSE_BYTES`). The request counts its URL, its headers and its body. A larger one fails the tool call, and the model reads the error. A `Transcript` argument has its own cap, `max_bytes`, which does not raise this one. See [Send the transcript](#send-the-transcript).
 3. With `wait_for_response=False`, the model reads `{"ok": true, "accepted": true}` at once. The request goes on in the background. The tool's `output` is then `Accepted`.
 
 **Why it works this way.** The caller waits through every second a webhook

@@ -22,6 +22,8 @@ from unmute_core.call import (
 from unmute_core.hooks import FailureHandler, Hooks, PromptSuffix
 from unmute_core.prefetch import Lookup, Prefetch
 from unmute_core.state import CallState
+from unmute_core.tasks import CallStartResults
+from unmute_core.tasks._texts import INPUT_NOT_AVAILABLE
 from unmute_core.tools import ToolError, ToolRegistry, ToolSpec, Transcript, local_tool
 
 NO_ARGS: dict[str, Any] = {"type": "object", "properties": {}}
@@ -717,3 +719,245 @@ def test_skipped_model_hooks_warn_once_and_never_when_an_adapter_runs_them(caplo
         served.warn_skipped_model_hooks("served")
     assert "served" not in caplog.text
     assert CallHooks().model_hooks == []
+
+
+def _gated(log: Log, name: str, gate: asyncio.Event, **options: Any):
+    """A local tool that logs its start, waits for ``gate``, then logs its end."""
+
+    async def run() -> dict:
+        log.ran.append((name, {}))
+        await gate.wait()
+        log.ran.append((f"{name} done", {}))
+        return {"ok": True, "tool": name}
+
+    run.__name__ = name
+    run.__doc__ = f"The {name} tool."
+    return local_tool(run, output=AnyResult, **options)
+
+
+async def _book(log: Log, hooks: Hooks) -> tuple[CallHooks, ToolRegistry]:
+    """Build a call, and run its ``book`` tool as the model would."""
+    call = log.bind(CallHooks(hooks=hooks))
+    registry = ToolRegistry([log.tool("book")])
+    call.watch(registry)
+    await registry.call("book", {}, hooks=call)
+    await asyncio.sleep(0.01)  # time for the tools on the event to start
+    return call, registry
+
+
+async def test_a_request_does_not_wait_for_a_tool_with_wait_false() -> None:
+    log, gate = Log(), asyncio.Event()
+    call, _ = await _book(
+        log, Hooks(EventTool(_gated(log, "ping", gate), ["tool_succeeded:book"], wait=False))
+    )
+    async with asyncio.timeout(1):
+        await call.before_request(None)
+    assert [name for name, _ in log.ran] == ["book", "ping"]
+    gate.set()
+    await call.end("participant_disconnected")
+
+
+async def test_a_request_still_waits_for_a_tool_that_waits() -> None:
+    log, gate = Log(), asyncio.Event()
+    call, _ = await _book(log, Hooks(EventTool(_gated(log, "ping", gate), ["tool_succeeded:book"])))
+    waiting = asyncio.ensure_future(call.before_request(None))
+    await asyncio.sleep(0.01)  # time for a request that does not wait to go ahead
+    assert not waiting.done()
+    gate.set()
+    await asyncio.wait_for(waiting, 1)
+    assert [name for name, _ in log.ran] == ["book", "ping", "ping done"]
+
+
+async def test_a_tool_with_wait_false_does_not_delay_the_other_tools_of_its_event() -> None:
+    log, gate = Log(), asyncio.Event()
+    call, _ = await _book(
+        log,
+        Hooks(
+            EventTool(_gated(log, "slow", gate), ["tool_succeeded:book"], wait=False),
+            EventTool(log.tool("quick"), ["tool_succeeded:book"]),
+        ),
+    )
+    async with asyncio.timeout(1):
+        await call.before_request(None)
+    assert sorted(name for name, _ in log.ran) == ["book", "quick", "slow"]
+    gate.set()
+    await call.end("participant_disconnected")
+
+
+async def test_the_end_waits_for_a_tool_with_wait_false() -> None:
+    log, gate = Log(), asyncio.Event()
+    call, _ = await _book(
+        log, Hooks(EventTool(_gated(log, "ping", gate), ["tool_succeeded:book"], wait=False))
+    )
+    asyncio.get_running_loop().call_later(0.05, gate.set)
+    async with asyncio.timeout(1):
+        await call.end("participant_disconnected")
+    assert [name for name, _ in log.ran] == ["book", "ping", "ping done"]
+
+
+async def test_the_end_gives_up_on_a_tool_with_wait_false_after_the_end_timeout(caplog) -> None:
+    log, gate = Log(), asyncio.Event()
+    call = log.bind(
+        CallHooks(
+            hooks=Hooks(EventTool(_gated(log, "ping", gate), ["call_end"], wait=False)),
+            end_timeout_s=0.05,
+        )
+    )
+    with caplog.at_level(logging.WARNING):
+        async with asyncio.timeout(1):
+            await call.end("participant_disconnected")
+    assert "cut short" in caplog.text
+    gate.set()
+
+
+async def test_a_tool_with_wait_false_on_call_end_finishes_before_the_end_reports() -> None:
+    log, gate = Log(), asyncio.Event()
+    ended: list[object] = []
+    call = log.bind(
+        CallHooks(
+            hooks=on_end(
+                lambda end: ended.append((end, list(log.ran))),
+                EventTool(_gated(log, "report", gate), ["call_end"], wait=False),
+            )
+        )
+    )
+    asyncio.get_running_loop().call_later(0.05, gate.set)
+    async with asyncio.timeout(1):
+        await call.end("participant_disconnected")
+    assert [name for name, _ in log.ran] == ["report", "report done"]
+    assert len(ended) == 1
+
+
+async def test_the_tools_after_a_tool_with_wait_false_still_run_and_keep_their_own_wait() -> None:
+    log, gate, audit_gate = Log(), asyncio.Event(), asyncio.Event()
+    call, _ = await _book(
+        log,
+        Hooks(
+            EventTool(_gated(log, "ping", gate), ["tool_succeeded:book"], wait=False),
+            EventTool(_gated(log, "audit", audit_gate), ["tool_succeeded:ping"]),
+            EventTool(log.tool("alert"), ["tool_failed:ping"], wait=False),
+        ),
+    )
+    async with asyncio.timeout(1):
+        await call.before_request(None)
+    gate.set()
+    await asyncio.sleep(0.01)  # time for the follower to start
+    assert [name for name, _ in log.ran] == ["book", "ping", "ping done", "audit"]
+    waiting = asyncio.ensure_future(call.before_request(None))
+    await asyncio.sleep(0.01)
+    assert not waiting.done()
+    audit_gate.set()
+    await asyncio.wait_for(waiting, 1)
+    assert [name for name, _ in log.ran][-1] == "audit done"
+
+
+async def test_a_failed_tool_with_wait_false_starts_the_tools_that_follow_its_failure() -> None:
+    log = Log()
+    call, _ = await _book(
+        log,
+        Hooks(
+            EventTool(log.tool("ping", fail=True), ["tool_succeeded:book"], wait=False),
+            EventTool(log.tool("alert"), ["tool_failed:ping"], wait=False),
+        ),
+    )
+    await call.end("participant_disconnected")
+    assert [name for name, _ in log.ran] == ["book", "ping", "alert"]
+
+
+async def test_a_tool_with_wait_false_can_still_leave_a_note_for_a_later_request() -> None:
+    log, gate = Log(), asyncio.Event()
+    call, _ = await _book(
+        log,
+        Hooks(EventTool(_gated(log, "ping", gate), ["tool_succeeded:book"], wait=False, note=True)),
+    )
+    await call.before_request(None)
+    assert call.notes == ()
+    gate.set()
+    await call.end("participant_disconnected")
+    assert len(call.notes) == 1
+
+
+def test_a_loop_through_tools_with_wait_false_is_still_refused() -> None:
+    log = Log()
+    with pytest.raises(ValueError, match="loop"):
+        CallHooks(
+            hooks=Hooks(
+                EventTool(log.tool("a"), ["tool_succeeded:b"], wait=False),
+                EventTool(log.tool("b"), ["tool_succeeded:a"], wait=False),
+            )
+        )
+
+
+async def test_a_lookup_with_wait_false_does_not_hold_the_first_request() -> None:
+    log, gate = Log(), asyncio.Event()
+    state = CallState(State)
+    prefetch = Prefetch(
+        [
+            Lookup(
+                "ping", _gated(log, "ping", gate), {"customer": "tool"}, background=True, wait=False
+            )
+        ]
+    )
+    call = log.bind(CallHooks(state, prefetch=prefetch))
+    assert await call.open()
+    async with asyncio.timeout(1):
+        await call.before_request("hello")
+    assert [name for name, _ in log.ran] == ["ping"]
+    gate.set()
+    await call.end("participant_disconnected")
+
+
+async def test_a_lookup_with_wait_false_does_not_delay_a_lookup_that_waits() -> None:
+    log, gate = Log(), asyncio.Event()
+    state = CallState(State)
+    prefetch = Prefetch(
+        [
+            Lookup("ping", _gated(log, "ping", gate), {}, background=True, wait=False),
+            Lookup("who", lambda _state: {"name": "Ana"}, {"customer": "name"}, background=True),
+        ]
+    )
+    call = log.bind(CallHooks(state, prefetch=prefetch))
+    await call.open()
+    async with asyncio.timeout(1):
+        await call.before_request(None)
+    assert state.plain("customer") == "Ana"
+    gate.set()
+    await call.end("participant_disconnected")
+
+
+async def test_the_end_waits_for_a_lookup_with_wait_false_and_a_failure_does_not_stop_it() -> None:
+    log, gate = Log(), asyncio.Event()
+    prefetch = Prefetch(
+        [Lookup("ping", _gated(log, "ping", gate), {}, background=True, wait=False)]
+    )
+    call = log.bind(CallHooks(CallState(State), prefetch=prefetch))
+    await call.open()
+    await asyncio.sleep(0)
+    call.end_requested("agent_ended")
+    asyncio.get_running_loop().call_later(0.05, gate.set)
+    async with asyncio.timeout(1):
+        await call.end("participant_disconnected")
+    assert [name for name, _ in log.ran] == ["ping", "ping done"]
+
+
+def test_a_lookup_with_wait_false_needs_background() -> None:
+    log = Log()
+    with pytest.raises(ValueError, match="wait=False needs background=True"):
+        Lookup("ping", log.tool("ping"), {}, wait=False)
+
+
+async def test_run_background_runs_only_the_lookups_of_the_wait_it_is_given() -> None:
+    state = CallState(State)
+    prefetch = Prefetch(
+        [
+            Lookup("a", lambda _state: {"v": "kept"}, {"customer": "v"}, background=True),
+            Lookup("b", Log().tool("b", {"v": "ping"}), {}, background=True, wait=False),
+        ]
+    )
+    results = CallStartResults()
+    await prefetch.run_background(state, results=results, wait=False)
+    assert results.describe("b") == '{"v": "ping"}'
+    assert results.describe("a") == INPUT_NOT_AVAILABLE
+    assert state.plain("customer") is None
+    await prefetch.run_background(state, results=results, wait=True)
+    assert state.plain("customer") == "kept"

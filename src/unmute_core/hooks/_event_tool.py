@@ -59,12 +59,19 @@ class EventTool:
         assign: State value name to the top-level result key it gets, saved when the tool
             succeeds.
         note: True also shows the result to the model as a note. A failure is noted too.
+        wait: True (the default) holds the next model request until the run ends, for up to
+            ``first_request_timeout_s``. False starts the run on its event and never holds a
+            request, so a tool that only tells another system something can be slow. The
+            call's end still waits for it, for up to ``end_timeout_s``. The tools that follow
+            it keep their own ``wait``. With ``note=True``, a note from a run nobody waited
+            for can only reach a request that starts after the run ended.
     """
 
     tool: ToolSpec
     on: Annotated[Sequence[str], AfterValidator(_events)]
     assign: Mapping[str, str] = field(default_factory=dict)
     note: bool = False
+    wait: bool = True
 
     @model_validator(mode="after")
     def _runs_alone(self) -> Self:
