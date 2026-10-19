@@ -601,6 +601,43 @@ async def test_it_closes_only_a_client_it_built(monkeypatch: pytest.MonkeyPatch)
     assert built.client.is_closed()
 
 
+@pytest.mark.parametrize(
+    ("arguments", "expiry"),
+    [({}, 120.0), ({"keepalive_s": 30}, 30), ({"keepalive_s": None}, None)],
+)
+def test_the_client_it_builds_keeps_an_idle_connection_for_keepalive_s(
+    monkeypatch: pytest.MonkeyPatch, arguments: dict[str, Any], expiry: float | None
+) -> None:
+    monkeypatch.setenv("SLNG_API_KEY", "k")
+    built: list[dict[str, Any]] = []
+    real = openai.DefaultAsyncHttpxClient
+    monkeypatch.setattr(
+        openai, "DefaultAsyncHttpxClient", lambda **kwargs: built.append(kwargs) or real(**kwargs)
+    )
+    RouterModelCall(CALL, base_url="https://router.test/v1", **arguments)
+    [limits] = [kwargs["limits"] for kwargs in built]
+    assert limits.keepalive_expiry == expiry
+    assert limits.max_connections == openai.DEFAULT_CONNECTION_LIMITS.max_connections
+    assert (
+        limits.max_keepalive_connections
+        == openai.DEFAULT_CONNECTION_LIMITS.max_keepalive_connections
+    )
+
+
+@pytest.mark.parametrize("keepalive_s", [0, -5, "a"])
+def test_a_keepalive_that_is_not_seconds_above_zero_is_refused(
+    monkeypatch: pytest.MonkeyPatch, keepalive_s: Any
+) -> None:
+    monkeypatch.setenv("SLNG_API_KEY", "k")
+    with pytest.raises(ValueError, match=r"RouterModelCall\nkeepalive_s\n"):
+        RouterModelCall(CALL, base_url="https://router.test/v1", keepalive_s=keepalive_s)
+
+
+def test_a_ready_client_refuses_keepalive_s() -> None:
+    with pytest.raises(ValueError, match="keepalive_s only applies to a client RouterModelCall"):
+        RouterModelCall(CALL, client=FakeRouter().client(), keepalive_s=30)
+
+
 @pytest.fixture
 def warned(monkeypatch: pytest.MonkeyPatch) -> set[str]:
     from unmute_core.slng import _blocked

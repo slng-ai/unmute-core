@@ -10,6 +10,10 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - `Usage` carries `reasoning_tokens` and `total_tokens`: the output tokens a provider spent on hidden reasoning, and the provider's own total, which can be more than input plus output when it counts thinking separately. Both are `None` when the provider did not say, and they come after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.reasoning_tokens` is set and `LLMMetrics.total_tokens` is the provider's total, not input plus output. On Pipecat, the usage chunk carries them, so `LLMTokenUsage.reasoning_tokens` and `total_tokens` are set. Before, both were dropped.
 
+### Changed
+
+- `RouterModelCall` and `OpenAIModelCall` keep an idle connection to the provider open for 120 s by default, set with the new `keepalive_s=` argument. Before, the client they build closed it after 5 s, which is openai's default. In a voice call the turns are often more than 5 s apart, so almost every turn paid a new TCP and TLS handshake before its first token. Pass `keepalive_s=5.0` for the old value, or `None` to keep a connection open with no limit. It only applies to the client the call builds: with `client=` it raises `ValueError`.
+
 ### Fixed
 
 - `RouterModelCall` and `OpenAIModelCall` now keep parallel tool calls apart when the provider sends no `index` on them. Some OpenAI-compatible endpoints, like Google Gemini's, leave `index` null and may put several whole calls in one chunk. Before, all of them joined into one call with the names and the JSON arguments glued together, so no tool could run. Now a call is numbered by its `index` when it has one, else by its `id`, and a piece with neither continues the last call. A stream numbered the usual way gives the same events as before.
