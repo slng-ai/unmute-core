@@ -2,13 +2,10 @@
 
 import asyncio
 import gc
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 
 import pytest
 from livekit.agents import llm
-from livekit.agents.telemetry import set_tracer_provider
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 from unmute_core.livekit import ModelCallLLM
@@ -34,16 +31,6 @@ class Model:
             raise self.answer
         yield TextDelta(self.answer)
         yield Usage(12, 1)
-
-
-@pytest.fixture
-def spans() -> Iterator[InMemorySpanExporter]:
-    exporter = InMemorySpanExporter()
-    provider = TracerProvider()
-    provider.add_span_processor(SimpleSpanProcessor(exporter))
-    set_tracer_provider(provider)
-    yield exporter
-    set_tracer_provider(TracerProvider())
 
 
 async def _say(model: ModelCallLLM) -> str:
