@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Fixed
+
+- `FallbackModelCall` now closes a call's stream when its reader stops early, like a caller who talks over the reply. Before, the call's request stayed open, and its `finally` blocks ran, only once the stream was garbage collected.
+
 ## 0.18.2
 
 This release reports same-model retries, keeps the cached tokens and the answer's ids in `Usage`, and sends a tool's whole parameters on Pipecat. No API was removed. `unmute_core.require("0.18.0")` accepts 0.18.2, so code built for 0.18.0 needs no change.
