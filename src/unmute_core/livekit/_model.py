@@ -11,12 +11,13 @@ openai.py:51), so the signature survives this way too.
 """
 
 import asyncio
+import functools
 import json
 import logging
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, replace
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from livekit.agents import (
     APIConnectionError,
@@ -47,7 +48,6 @@ from unmute_core.livekit._history import CallerHistory
 from unmute_core.livekit._trace import SessionTrace
 from unmute_core.model import (
     EXTRA_CONTENT,
-    AnswerStarted,
     ModelAnswer,
     ModelCall,
     ModelEvent,
@@ -67,6 +67,7 @@ from unmute_core.model import (
     template_variables,
     tool_choice,
     variable_key_max,
+    with_attempts,
 )
 from unmute_core.model._failover import transport_failure
 from unmute_core.state import CallState
@@ -104,6 +105,7 @@ class ModelCallLLM(llm.LLM):
         site: str = "",
         call: CallHooks | None = None,
         prompts_as_written: bool = False,
+        trace_attempts: bool = False,
     ) -> None:
         """Keep the model call and what each request reads.
 
@@ -117,6 +119,10 @@ class ModelCallLLM(llm.LLM):
                 with their notes. None uses the trace's.
             prompts_as_written: True sends each prompt as written, for prompts that are not
                 templates: a ``{{name}}`` in them is plain text, not a placeholder.
+            trace_attempts: True traces each call a ``FallbackModelCall`` tries, as
+                LiveKit's ``FallbackAdapter`` does: an ``llm_fallback_adapter`` span for the
+                request, and under it one ``llm_request`` span pair per call tried, a failed
+                one marked as an error. It reaches a chain the model call builds itself.
         """
         super().__init__()
         self._model = model
@@ -126,8 +132,10 @@ class ModelCallLLM(llm.LLM):
             trace=trace,
             call=call or (trace.call if trace else None),
             prompts_as_written=prompts_as_written,
+            trace_attempts=trace_attempts,
         )
         self.site = site
+        self._stream_class = _ChainStream if trace_attempts else _ModelCallStream
 
     @property
     def model(self) -> str:
@@ -160,7 +168,7 @@ class ModelCallLLM(llm.LLM):
         extra_kwargs: NotGivenOr[dict[str, Any]] = NOT_GIVEN,
     ) -> llm.LLMStream:
         """Send one request through the model call and stream the reply as chunks."""
-        return _ModelCallStream(
+        return self._stream_class(
             self,
             node=self._node,
             model=self._model,
@@ -301,6 +309,121 @@ class _ModelCallStream(llm.LLMStream):
             raise converted from error
 
 
+class _ChainStream(_ModelCallStream):
+    """A ``ModelCallLLM`` request whose chain traces each call it tries.
+
+    It names its span as LiveKit's ``FallbackAdapter`` does. Each attempt draws its own
+    ``llm_request`` pair under it (``_AttemptStream``).
+    """
+
+    _llm_request_span_name: ClassVar[str] = "llm_fallback_adapter"
+    _llm_attempt_span_name: ClassVar[str | None] = None
+    _genai_operation_name: ClassVar[str | None] = None
+
+
+class _AttemptLLM(llm.LLM):
+    """One call of a chain as a LiveKit LLM, so its attempt's spans name its model."""
+
+    def __init__(self, call: ModelCall) -> None:
+        """Keep the call the attempt sends to."""
+        super().__init__()
+        self._call = call
+
+    @property
+    def model(self) -> str:
+        """The call's model name, or ``unknown``."""
+        return model_name(self._call)
+
+    @property
+    def provider(self) -> str:
+        """Who serves the call, or ``unknown``."""
+        return provider_name(self._call)
+
+    def chat(self, **_: Any) -> llm.LLMStream:
+        """Refuse a request: an attempt's LLM only names its call.
+
+        Raises:
+            TypeError: Always. ``ModelCallLLM`` sends the request.
+        """
+        raise TypeError("an attempt's LLM only names its call. Send through ModelCallLLM")
+
+
+_ATTEMPT_OPTIONS = APIConnectOptions(max_retry=0)
+"""An attempt is tried once: the chain decides about retries."""
+
+
+class _AttemptStream(llm.LLMStream):
+    """One attempt of a chain as a LiveKit stream: LiveKit draws and records its span pair.
+
+    The call's own events go back to the chain through ``events``, in order, then None, or
+    the error the call raised.
+    """
+
+    def __init__(
+        self,
+        call: ModelCall,
+        request: ModelRequest,
+        *,
+        chat_ctx: llm.ChatContext,
+        tools: list[llm.Tool],
+        events: "asyncio.Queue[ModelEvent | Exception | None]",
+    ) -> None:
+        """Start the attempt. LiveKit runs ``_run`` in the background."""
+        self._call = call
+        self._request = request
+        self._events = events
+        super().__init__(
+            _AttemptLLM(call), chat_ctx=chat_ctx, tools=tools, conn_options=_ATTEMPT_OPTIONS
+        )
+
+    async def _run(self) -> None:
+        """Send the attempt: each event goes to the chain, and as a chunk to LiveKit."""
+        speech = ReasoningFilter()
+        try:
+            async for event in self._call.stream(self._request):
+                self._events.put_nowait(event)
+                if (chunk := _event_chunk(event)) is None:
+                    continue
+                if isinstance(chunk, str) and (text := speech.feed(chunk)):
+                    chunk = llm.ChatChunk(
+                        id=event.response_id or utils.shortuuid("unmute_"),
+                        delta=llm.ChoiceDelta(role="assistant", content=text),
+                    )
+                if isinstance(chunk, llm.ChatChunk):
+                    self._event_ch.send_nowait(chunk)
+        except Exception as error:
+            self._events.put_nowait(error)
+            raise
+        self._events.put_nowait(None)
+
+
+async def _attempt_events(
+    call: ModelCall,
+    request: ModelRequest,
+    *,
+    chat_ctx: llm.ChatContext,
+    tools: list[llm.Tool],
+) -> AsyncIterator[ModelEvent]:
+    """Run one attempt of a chain as its own LiveKit stream, and yield the call's events.
+
+    A ``LiveKitModel`` traces itself through its plugin, so it runs as it is. The error a
+    call raises comes back as it was raised, for the chain to read its status.
+    """
+    if isinstance(call, LiveKitModel):
+        async for event in call.stream(request):
+            yield event
+        return
+    events: asyncio.Queue[ModelEvent | Exception | None] = asyncio.Queue()
+    stream = _AttemptStream(call, request, chat_ctx=chat_ctx, tools=tools, events=events)
+    try:
+        while (event := await events.get()) is not None:
+            if isinstance(event, Exception):
+                raise event
+            yield event
+    finally:
+        await stream.aclose()
+
+
 def livekit_error(error: BaseException) -> APIError | None:
     """Return a model call's failure as LiveKit's own error, or None for any other error.
 
@@ -383,6 +506,7 @@ class ModelNode:
         call: CallHooks | None = None,
         metrics_llm: llm.LLM | None = None,
         prompts_as_written: bool = False,
+        trace_attempts: bool = False,
     ) -> None:
         """Keep what every request reads.
 
@@ -399,6 +523,8 @@ class ModelNode:
                 reports itself, and so does one that ``ModelCallLLM.chat`` runs.
             prompts_as_written: True sends each prompt as written: a ``{{name}}`` in it is
                 plain text, not a placeholder.
+            trace_attempts: True runs each call a ``FallbackModelCall`` tries as its own
+                LiveKit stream, with its own ``llm_request`` span pair.
         """
         self.state = state
         self.model = model
@@ -406,6 +532,7 @@ class ModelNode:
         self.call = call
         self.metrics_llm = metrics_llm
         self.prompts_as_written = prompts_as_written
+        self.trace_attempts = trace_attempts
 
     def adopt_trace(self, trace: SessionTrace) -> None:
         """Record every request into ``trace`` from now on, as a handoff's new agent does."""
@@ -485,6 +612,10 @@ class ModelNode:
         source, label = _source(
             prepared, agent, session, filled, tools, model_settings, variables, headers
         )
+        if self.trace_attempts:
+            source = with_attempts(
+                source, functools.partial(_attempt_events, chat_ctx=filled, tools=tools)
+            )
         operation = (
             prepared.dev.request_started(
                 name=label,
@@ -1002,35 +1133,39 @@ async def _chunks(
     """Stream one attempt of the request through the model call, as chunks."""
     events = hooks.run_model(request, model.stream) if hooks is not None else model.stream(request)
     async for event in events:
-        if isinstance(event, AnswerStarted):
-            continue
-        if isinstance(event, TextDelta):
-            yield event.text
-            continue
-        if isinstance(event, Usage):
-            usage = llm.CompletionUsage(
-                completion_tokens=event.output_tokens,
-                prompt_tokens=event.input_tokens,
-                prompt_cached_tokens=event.cached_input_tokens or 0,
-                reasoning_tokens=event.reasoning_tokens or 0,
-                total_tokens=(
-                    event.total_tokens
-                    if event.total_tokens is not None
-                    else event.input_tokens + event.output_tokens
-                ),
-            )
-            yield llm.ChatChunk(id=event.response_id or utils.shortuuid("unmute_"), usage=usage)
-            continue
+        if (chunk := _event_chunk(event)) is not None:
+            yield chunk
+
+
+def _event_chunk(event: ModelEvent) -> llm.ChatChunk | str | None:
+    """Return one model event as LiveKit reads it: text, a chunk, or None for no chunk."""
+    if isinstance(event, TextDelta):
+        return event.text
+    if isinstance(event, Usage):
+        usage = llm.CompletionUsage(
+            completion_tokens=event.output_tokens,
+            prompt_tokens=event.input_tokens,
+            prompt_cached_tokens=event.cached_input_tokens or 0,
+            reasoning_tokens=event.reasoning_tokens or 0,
+            total_tokens=(
+                event.total_tokens
+                if event.total_tokens is not None
+                else event.input_tokens + event.output_tokens
+            ),
+        )
+        return llm.ChatChunk(id=event.response_id or utils.shortuuid("unmute_"), usage=usage)
+    if isinstance(event, ToolCall):
         call = llm.FunctionToolCall(
             name=event.name,
             arguments=event.arguments,
             call_id=event.id,
             extra=dict(event.extra) or None,
         )
-        yield llm.ChatChunk(
+        return llm.ChatChunk(
             id=utils.shortuuid("unmute_"),
             delta=llm.ChoiceDelta(role="assistant", tool_calls=[call]),
         )
+    return None
 
 
 def _hook_prompt(ctx: llm.ChatContext, hooks: Hooks, info: PromptInfo) -> None:

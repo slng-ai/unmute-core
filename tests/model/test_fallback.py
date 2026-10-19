@@ -21,6 +21,7 @@ from unmute_core.model import (
     Usage,
     answered_model,
     variable_key_max,
+    with_attempts,
 )
 from unmute_core.model._fallback import SAME_MODEL_RETRIES_S
 
@@ -493,3 +494,21 @@ async def test_a_call_that_starts_then_fails_still_fails_over() -> None:
         [StartsThenFails(), FakeCall(["next"])], first_event_timeout_s=1.0, start_ends_budget=True
     )
     assert await collect(chain) == ["next"]
+
+
+async def test_with_attempts_runs_each_attempt_of_a_chain_inside_through_its_stream() -> None:
+    tried: list[object] = []
+
+    async def stream(call, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        tried.append(call)
+        async for event in call.stream(request):
+            yield event
+
+    first, second = FakeCall(RuntimeError("down")), FakeCall(["ok"])
+    chain = FallbackModelCall([first, second])
+    events = [event async for event in with_attempts(chain.stream(REQUEST), stream)]
+    assert (events, tried) == ([TextDelta("ok")], [first, second])
+    assert [event async for event in FallbackModelCall([FakeCall(["ok"])]).stream(REQUEST)] == [
+        TextDelta("ok")
+    ]
+    assert tried == [first, second]

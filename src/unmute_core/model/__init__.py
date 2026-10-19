@@ -6,6 +6,7 @@ runs a framework's own LLM and fills the prompt here. The SLNG Context Router is
 way the model sees the same final prompt.
 """
 
+from unmute_core.model._attempts import AttemptStream, with_attempts
 from unmute_core.model._call import (
     FINISH_TOOL_NAME,
     STEP_START_CUE,
@@ -75,6 +76,7 @@ __all__ = [
     "STOP_STATUSES",
     "SUMMARY_SITE",
     "AnswerStarted",
+    "AttemptStream",
     "FailOver",
     "FallbackModelCall",
     "MissingVariablesError",
@@ -112,4 +114,5 @@ __all__ = [
     "template_variables",
     "tool_choice",
     "variable_key_max",
+    "with_attempts",
 ]
