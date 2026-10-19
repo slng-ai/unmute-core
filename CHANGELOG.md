@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `Usage.cache_write_tokens` is the number of input tokens a provider wrote to its prompt cache, or `None` when it did not say. It comes after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` read it from `usage.prompt_tokens_details.cache_write_tokens`, as LiveKit's own OpenAI-compatible models do. On LiveKit, `LLMMetrics.cache_creation_tokens` is set, and `LiveKitModel` reads it from a plugin's `CompletionUsage.cache_creation_tokens`. On Pipecat, the usage chunk carries it in `prompt_tokens_details.cache_write_tokens`, which Pipecat's OpenAI service turns into `LLMTokenUsage.cache_creation_input_tokens`. Before, it was dropped (#TBD).
+
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
