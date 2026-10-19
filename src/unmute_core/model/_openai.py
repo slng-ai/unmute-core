@@ -159,7 +159,9 @@ class OpenAIModelCall(NativeModelCall):
             extra_headers=request.headers or None,
             extra_body=self.params | request.params,
         )
-        async for event in chunk_events(stream):
+        response = getattr(stream, "response", None)
+        request_id = response.headers.get("x-request-id") if response is not None else None
+        async for event in chunk_events(stream, request_id=request_id):
             yield event
 
     async def aclose(self) -> None:

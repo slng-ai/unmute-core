@@ -67,7 +67,7 @@ async def test_it_streams_text_a_tool_call_with_its_extra_content_and_usage_last
     assert events == [
         TextDelta("ok"),
         ToolCall("t1", "book", '{"a":1}', signature),
-        Usage(3, 4),
+        Usage(3, 4, response_id="c1"),
     ]
 
 

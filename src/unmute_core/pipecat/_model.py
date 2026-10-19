@@ -25,7 +25,7 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCall,
     ChoiceDeltaToolCallFunction,
 )
-from openai.types.completion_usage import CompletionUsage
+from openai.types.completion_usage import CompletionUsage, PromptTokensDetails
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.services.openai.llm import OpenAILLMService
 from pipecat.utils.http import TIMEOUT_EXCEPTIONS
@@ -314,9 +314,14 @@ async def _chunks(
                 completion_tokens=event.output_tokens,
                 prompt_tokens=event.input_tokens,
                 total_tokens=event.input_tokens + event.output_tokens,
+                prompt_tokens_details=(
+                    PromptTokensDetails(cached_tokens=event.cached_input_tokens)
+                    if event.cached_input_tokens is not None
+                    else None
+                ),
             )
             yield ChatCompletionChunk(
-                id="",
+                id=event.response_id or "",
                 choices=[],
                 created=0,
                 model=model,
