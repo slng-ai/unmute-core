@@ -17,6 +17,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Fixed
 
 - `RouterModelCall` and `OpenAIModelCall` now keep parallel tool calls apart when the provider sends no `index` on them. Some OpenAI-compatible endpoints, like Google Gemini's, leave `index` null and may put several whole calls in one chunk. Before, all of them joined into one call with the names and the JSON arguments glued together, so no tool could run. Now a call is numbered by its `index` when it has one, else by its `id`, and a piece with neither continues the last call. A stream numbered the usual way gives the same events as before.
+- On LiveKit, an agent whose tool is still running when the caller speaks no longer calls that tool again. LiveKit adds the running call and a note that it is still in progress to the agent's request. The library left that pair out of every request, so the model could not see the tool was running. Now the agent's own request keeps the pair. A task step's request and the side requests, like a summary, still leave it out, because a step never made the call that is still running.
 
 ## 0.18.3
 
