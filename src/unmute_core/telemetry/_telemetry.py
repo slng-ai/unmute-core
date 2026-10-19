@@ -377,6 +377,7 @@ class Telemetry:
         tool_calls: Sequence[Mapping[str, Any]] = (),
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        cached_input_tokens: int | None = None,
         finish_reason: str | None = None,
         ttfb: float | None = None,
         error: str | None = None,
@@ -392,8 +393,10 @@ class Telemetry:
             text: The text the model wrote.
             tool_calls: The calls the model chose, in OpenAI format: ``{"id", "type":
                 "function", "function": {"name", "arguments"}}`` with arguments as JSON text.
-            input_tokens: Tokens in the prompt.
+            input_tokens: Tokens in the prompt, cached ones included.
             output_tokens: Tokens in the answer.
+            cached_input_tokens: Prompt tokens the provider served from its cache. None or
+                0 leaves the attribute out.
             finish_reason: Why the model stopped, like ``stop`` or ``tool_calls``.
             ttfb: Seconds to the first token.
             error: The error type, when the request failed.
@@ -413,6 +416,7 @@ class Telemetry:
                 "output.value": output,
                 "gen_ai.usage.input_tokens": input_tokens,
                 "gen_ai.usage.output_tokens": output_tokens,
+                "gen_ai.usage.cache_read.input_tokens": cached_input_tokens or None,
                 "gen_ai.response.finish_reasons": [finish_reason] if finish_reason else None,
                 "metrics.ttfb": _seconds(ttfb),
                 COMPLETION_START: _completion_start(span, _seconds(ttfb)),

@@ -120,7 +120,7 @@ A call streams three kinds of event.
 |---|---|---|
 | `TextDelta` | `text` | The next piece of the answer. |
 | `ToolCall` | `id`, `name`, `arguments`, `extra` | One whole tool call. `arguments` is the JSON text the model wrote. |
-| `Usage` | `input_tokens`, `output_tokens` | The token counts, once, at the end. |
+| `Usage` | `input_tokens`, `output_tokens`, `cached_input_tokens`, `response_id`, `request_id` | The token counts, once, at the end. `cached_input_tokens` is the part of the prompt the provider served from its cache. `response_id` is the answer's id, like `chatcmpl-...`, and `request_id` the provider's `x-request-id`. Each is `None` when the provider did not send it. |
 
 1. `extra` on a `ToolCall` holds provider data sent with the call, like a Gemini thought signature. It is empty when there is none. See [Thought signatures](/core/reference/slng#gemini-thought-signatures).
 2. Both adapters put `Usage` on the `llm` span. Code that reads events skips a `Usage` it has no use for.

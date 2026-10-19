@@ -9,6 +9,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 ### Added
 
 - `FallbackModelCall(on_retry=...)` is called before each pause that sends the same call again, with a `Retry`: the call, which retry it is, the pause, whether it is a `Retry-After` wait, and the error. Before, only a move to the next call was reported, through `on_fail_over`, and a same-model retry was only logged.
+- `Usage` carries `cached_input_tokens`, `response_id` and `request_id`: the prompt tokens the provider served from its cache, the answer's id from its chunks, and the provider's `x-request-id`. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.prompt_cached_tokens` and `request_id` now carry them. On Pipecat, the usage chunk carries the cached tokens, so `LLMTokenUsage.cache_read_input_tokens` is set. The `llm` span shows them as `gen_ai.usage.cache_read.input_tokens` on both adapters, and `Telemetry.end_model_request` takes `cached_input_tokens`. Before, all three were dropped.
 
 ### Fixed
 

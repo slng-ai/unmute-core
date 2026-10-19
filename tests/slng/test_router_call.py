@@ -392,7 +392,29 @@ async def test_usage_comes_back_last() -> None:
     }
     router = FakeRouter([chunk({"content": "Hi."}), usage_chunk])
     events = [event async for event in router_call(router).stream(REQUEST)]
-    assert events == [TextDelta("Hi."), Usage(120, 7)]
+    assert events == [TextDelta("Hi."), Usage(120, 7, response_id="c1")]
+
+
+async def test_usage_carries_the_cached_tokens_and_the_answers_ids() -> None:
+    usage_chunk = {
+        **chunk({}),
+        "id": "chatcmpl-9",
+        "choices": [],
+        "usage": {
+            "prompt_tokens": 120,
+            "completion_tokens": 7,
+            "total_tokens": 127,
+            "prompt_tokens_details": {"cached_tokens": 96},
+        },
+    }
+    router = FakeRouter(
+        [{**chunk({"content": "Hi."}), "id": "chatcmpl-9"}, usage_chunk],
+        headers={"x-request-id": "req-42"},
+    )
+    events = [event async for event in router_call(router).stream(REQUEST)]
+    assert events[-1] == Usage(
+        120, 7, cached_input_tokens=96, response_id="chatcmpl-9", request_id="req-42"
+    )
 
 
 async def test_a_refusal_carries_its_code_and_logs_its_request_id(caplog) -> None:

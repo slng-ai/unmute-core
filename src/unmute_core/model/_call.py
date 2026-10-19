@@ -111,10 +111,22 @@ class Usage:
 
     The counts pass through unchecked, as a provider sends them: a provider that leaves
     one null must not fail the stream at its last chunk.
+
+    Attributes:
+        input_tokens: The prompt's tokens, cached ones included.
+        output_tokens: The answer's tokens.
+        cached_input_tokens: How many input tokens the provider served from its prompt
+            cache, or None when it did not say.
+        response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
+        request_id: The provider's id for the HTTP request, its ``x-request-id``
+            response header, or None. Support tickets and provider logs use it.
     """
 
     input_tokens: SkipValidation[int]
     output_tokens: SkipValidation[int]
+    cached_input_tokens: SkipValidation[int | None] = None
+    response_id: str | None = None
+    request_id: str | None = None
 
 
 ModelEvent = TextDelta | ToolCall | Usage

@@ -1,0 +1,38 @@
+{
+  "name": "cached_tokens_reach_the_span",
+  "about": "A bakery's agent answers a repeat caller. The provider served most of the long prompt from its prompt cache and says so in the answer's usage. The request's llm span shows the cached tokens beside the token counts.",
+  "instructions": "You take orders for a small bakery. Be brief.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "turns": [
+    {
+      "caller": "Do you have rye bread today?",
+      "model": [
+        {
+          "site": "",
+          "text": "Yes, we have rye bread today.",
+          "usage": [
+            1200,
+            8
+          ],
+          "cached_tokens": 1024
+        }
+      ],
+      "spoken": [
+        "Yes, we have rye bread today."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [],
+    "events": []
+  }
+}

@@ -257,6 +257,15 @@ async def test_trace_headers_join_the_request_and_win_over_its_own() -> None:
     assert model.requests[0].headers == {"traceparent": "00-1-2-01"}
 
 
+async def test_the_usage_chunk_carries_the_cached_tokens_and_the_answers_id() -> None:
+    usage = Usage(10, 2, cached_input_tokens=4, response_id="chatcmpl-1")
+    llm = service(Scripted([TextDelta("Hi"), usage]))
+    chunks = [chunk async for chunk in await llm.get_chat_completions(LLMContext())]
+    [last] = [chunk for chunk in chunks if chunk.usage is not None]
+    assert last.usage.prompt_tokens_details.cached_tokens == 4
+    assert last.id == "chatcmpl-1"
+
+
 async def test_no_trace_headers_are_sent_by_default() -> None:
     model = Scripted([TextDelta("Hi")])
     _ = [chunk async for chunk in await service(model).get_chat_completions(LLMContext())]

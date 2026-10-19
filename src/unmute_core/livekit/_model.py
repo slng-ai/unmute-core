@@ -216,7 +216,12 @@ class LiveKitModel(NativeModelCall):
         ) as stream:
             async for chunk in stream:
                 if chunk.usage is not None:
-                    usage = Usage(chunk.usage.prompt_tokens, chunk.usage.completion_tokens)
+                    usage = Usage(
+                        chunk.usage.prompt_tokens,
+                        chunk.usage.completion_tokens,
+                        cached_input_tokens=chunk.usage.prompt_cached_tokens,
+                        response_id=chunk.id or None,
+                    )
                 if chunk.delta is None:
                     continue
                 if chunk.delta.content:
@@ -783,7 +788,13 @@ class _ReplyRecorder:
         answer = ModelAnswer(
             "".join(self.text),
             tuple(_tool_call(call) for call in self.calls),
-            Usage(self.usage.prompt_tokens, self.usage.completion_tokens) if self.usage else None,
+            Usage(
+                self.usage.prompt_tokens,
+                self.usage.completion_tokens,
+                cached_input_tokens=self.usage.prompt_cached_tokens or None,
+            )
+            if self.usage
+            else None,
         )
         interrupted = not self.finished and self.error is None
         if self.telemetry is not None and self.span is not None:
@@ -795,6 +806,7 @@ class _ReplyRecorder:
                 tool_calls=[call.to_openai() for call in answer.calls],
                 input_tokens=answer.usage.input_tokens if answer.usage else None,
                 output_tokens=answer.usage.output_tokens if answer.usage else None,
+                cached_input_tokens=answer.usage.cached_input_tokens if answer.usage else None,
                 ttfb=self.ttfb,
                 error=self.error,
                 interrupted=interrupted,
@@ -831,7 +843,7 @@ class _ReplyRecorder:
                 prompt_tokens=usage.prompt_tokens if usage else 0,
                 total_tokens=usage.total_tokens if usage else 0,
                 tokens_per_second=usage.completion_tokens / duration if usage and duration else 0.0,
-                prompt_cached_tokens=0,
+                prompt_cached_tokens=usage.prompt_cached_tokens if usage else 0,
                 metadata=Metadata(model_name=answered or self.model, model_provider=self.provider),
             ),
         )
@@ -965,9 +977,10 @@ async def _chunks(
             usage = llm.CompletionUsage(
                 completion_tokens=event.output_tokens,
                 prompt_tokens=event.input_tokens,
+                prompt_cached_tokens=event.cached_input_tokens or 0,
                 total_tokens=event.input_tokens + event.output_tokens,
             )
-            yield llm.ChatChunk(id=utils.shortuuid("unmute_"), usage=usage)
+            yield llm.ChatChunk(id=event.response_id or utils.shortuuid("unmute_"), usage=usage)
             continue
         call = llm.FunctionToolCall(
             name=event.name,

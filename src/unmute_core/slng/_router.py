@@ -279,5 +279,7 @@ class RouterModelCall:
             if scope:
                 logger.info("slng router: %s", answer_line(scope, self.last_response))
             chunks = cast("AsyncStream[ChatCompletionChunk]", await response.parse())
-            async for event in chunk_events(chunks):
+            async for event in chunk_events(
+                chunks, request_id=response.headers.get("x-request-id")
+            ):
                 yield event
