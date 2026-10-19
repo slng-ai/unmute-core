@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Changed
 
-- On LiveKit, every text and tool call chunk of a `ModelCallLLM` reply now carries the `response_id` of the model event, the id the provider gave the answer. Before, text and tool calls got a random `unmute_` id, so `LLMMetrics.request_id` and the span attribute `lk.provider_request_ids` could name random ids instead of the completion id, for example after a barge-in or with no usage chunk. A random id is used only when the provider named none. `LiveKitModel` passes its plugin's chunk id on as the `response_id` of its text and tool call events (#TBD).
+- On LiveKit, every text and tool call chunk of a `ModelCallLLM` reply now carries the `response_id` of the model event, the id the provider gave the answer. Before, text and tool calls got a random `unmute_` id, so `LLMMetrics.request_id` and the span attribute `lk.provider_request_ids` could name random ids instead of the completion id, for example after a barge-in or with no usage chunk. A random id is used only when the provider named none. `LiveKitModel` passes its plugin's chunk id on as the `response_id` of its text and tool call events (#76).
 
 ## 0.19.1
 
