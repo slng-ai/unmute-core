@@ -8,15 +8,9 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
-<<<<<<< HEAD
-- `EventTool(..., wait=False)` runs a tool on an event that no model request waits for. Before, every run of a tool on an event held the next model request for up to `first_request_timeout_s`, even a tool that only tells another system something, like a "tool succeeded" ping. A `wait=False` run starts on its event, never holds a request, and still fires the `tool_succeeded` and `tool_failed` events that follow it. The tools after it keep their own `wait`. The call's end still waits for it, within `end_timeout_s`. With `note=True`, its note can only reach a request that starts after the run ended. The default, `True`, works as before (#75).
-- `Lookup(..., background=True, wait=False)` does the same for a call-start tool: no model request waits for it, the call's end waits for it, and neither the end nor a failure stops it. It needs `background=True`. `Prefetch.run_background` takes `wait=` to run only the lookups that wait, or only the ones that do not. The default runs them all (#75).
-- `Transcript(max_bytes=...)` sets how many bytes a transcript argument may take. Before, it was cut at `TRANSCRIPT_MAX_BYTES` (32 KiB) with no way to change that. The default is still `TRANSCRIPT_MAX_BYTES`, and `None` sets no cap of its own. A webhook request is still limited to `MAX_REQUEST_BYTES` (64 KiB) with its URL and headers, and a larger one fails the tool call (#75).
-=======
 - `EventTool(..., wait=False)` runs a tool on an event that no model request waits for. Before, every run of a tool on an event held the next model request for up to `first_request_timeout_s`, even a tool that only tells another system something, like a "tool succeeded" ping. A `wait=False` run starts on its event, never holds a request, and still fires the `tool_succeeded` and `tool_failed` events that follow it. The tools after it keep their own `wait`. The call's end still waits for it, within `end_timeout_s`. With `note=True`, its note can only reach a request that starts after the run ended. The default, `True`, works as before (#74).
 - `Lookup(..., background=True, wait=False)` does the same for a call-start tool: no model request waits for it, the call's end waits for it, and neither the end nor a failure stops it. It needs `background=True`. `Prefetch.run_background` takes `wait=` to run only the lookups that wait, or only the ones that do not. The default runs them all (#74).
->>>>>>> r3/event-tool-no-wait
-
+- `Transcript(max_bytes=...)` sets how many bytes a transcript argument may take. Before, it was cut at `TRANSCRIPT_MAX_BYTES` (32 KiB) with no way to change that. The default is still `TRANSCRIPT_MAX_BYTES`, and `None` sets no cap of its own. A webhook request is still limited to `MAX_REQUEST_BYTES` (64 KiB) with its URL and headers, and a larger one fails the tool call (#75).
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
