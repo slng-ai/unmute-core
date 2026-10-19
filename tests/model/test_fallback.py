@@ -6,6 +6,7 @@ The cases check behaviour only, with fake calls instead of LiveKit streams.
 import asyncio
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -525,6 +526,122 @@ async def test_a_call_that_starts_then_fails_still_fails_over() -> None:
         [StartsThenFails(), FakeCall(["next"])], first_event_timeout_s=1.0, start_ends_budget=True
     )
     assert await collect(chain) == ["next"]
+
+
+class StartsThen:
+    """Starts its answer at once, then plays ``rest``: events, or an error to raise."""
+
+    def __init__(self, *rest: ModelEvent | BaseException) -> None:
+        self.rest = rest
+        self.calls = 0
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        self.calls += 1
+        yield AnswerStarted(response_id="r1")
+        for item in self.rest:
+            if isinstance(item, BaseException):
+                raise item
+            yield item
+
+
+def watched(*calls: Any, **options: Any) -> tuple[FallbackModelCall, list[object]]:
+    """Return a chain with both callbacks and the list they fill."""
+    seen: list[object] = []
+    chain = FallbackModelCall(
+        list(calls),
+        on_fail_over=seen.append,
+        on_retry=seen.append,
+        **options,
+    )
+    return chain, seen
+
+
+async def test_the_start_of_an_answer_ends_the_budget_when_it_is_the_answer() -> None:
+    chain, seen = watched(
+        SlowToolCall(0.2), FakeCall(["next"]), first_event_timeout_s=0.05, start_is_answer=True
+    )
+    events = [event async for event in chain.stream(REQUEST)]
+    assert (events, seen) == ([AnswerStarted(response_id="r1"), ToolCall("t1", "book", "{}")], [])
+
+
+async def test_the_start_of_an_answer_is_passed_on_once_when_it_is_the_answer() -> None:
+    chain, _ = watched(StartsThen(TextDelta("Hi"), Usage(1, 2)), start_is_answer=True)
+    assert [event async for event in chain.stream(REQUEST)] == [
+        AnswerStarted(response_id="r1"),
+        TextDelta("Hi"),
+        Usage(1, 2),
+    ]
+
+
+async def test_the_start_of_an_answer_is_not_passed_on_by_default() -> None:
+    chain, _ = watched(StartsThen(TextDelta("Hi")), start_ends_budget=True)
+    assert [event async for event in chain.stream(REQUEST)] == [TextDelta("Hi")]
+
+
+@pytest.mark.parametrize("retries", [(), (0.0,)], ids=["no retries", "one retry"])
+async def test_an_error_after_the_start_is_raised_without_retry_or_fail_over(
+    retries: tuple[float, ...], sleeps: list[float]
+) -> None:
+    first, second = StartsThen(StatusError(503)), FakeCall(["next"])
+    chain, seen = watched(first, second, start_is_answer=True, same_model_retries=retries)
+    stream = chain.stream(REQUEST)
+    events = [await anext(stream)]
+    with pytest.raises(StatusError):
+        await anext(stream)
+    assert (events, first.calls, second.calls, seen, sleeps) == (
+        [AnswerStarted(response_id="r1")],
+        1,
+        0,
+        [],
+        [],
+    )
+
+
+async def test_an_error_before_the_start_still_fails_over_when_the_start_is_the_answer() -> None:
+    first, second = FakeCall(StatusError(503)), StartsThen(TextDelta("next"))
+    chain, seen = watched(first, second, start_is_answer=True)
+    events = [event async for event in chain.stream(REQUEST)]
+    assert events == [AnswerStarted(response_id="r1"), TextDelta("next")]
+    assert [type(item) for item in seen] == [FailOver]
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{}, {"usage_counts_as_answer": True}, {"empty_fails_over": True}],
+    ids=["default", "usage counts", "empty fails over"],
+)
+async def test_a_start_then_nothing_is_an_empty_answer_of_that_call(
+    options: dict[str, bool],
+) -> None:
+    first, second = StartsThen(), FakeCall(["next"])
+    chain, seen = watched(first, second, start_is_answer=True, **options)
+    events = [event async for event in chain.stream(REQUEST)]
+    assert (events, second.calls, seen, chain.answered) == (
+        [AnswerStarted(response_id="r1")],
+        0,
+        [],
+        "unknown",
+    )
+
+
+async def test_a_start_is_not_passed_on_by_a_chain_that_does_not_set_the_option() -> None:
+    inner = FallbackModelCall([StartsThen(TextDelta("Hi"))], start_is_answer=True)
+    outer = FallbackModelCall([inner, FakeCall(["next"])])
+    assert [event async for event in outer.stream(REQUEST)] == [TextDelta("Hi")]
+
+
+async def test_with_attempts_sees_each_attempt_when_the_start_is_the_answer() -> None:
+    tried: list[object] = []
+
+    async def stream(call, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        tried.append(call)
+        async for event in call.stream(request):
+            yield event
+
+    first, second = FakeCall(RuntimeError("down")), StartsThen(TextDelta("ok"))
+    chain = FallbackModelCall([first, second], start_is_answer=True)
+    events = [event async for event in with_attempts(chain.stream(REQUEST), stream)]
+    assert (events, tried) == ([AnswerStarted(response_id="r1"), TextDelta("ok")], [first, second])
 
 
 async def test_with_attempts_runs_each_attempt_of_a_chain_inside_through_its_stream() -> None:
