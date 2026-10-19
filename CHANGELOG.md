@@ -8,19 +8,9 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Fixed
 
-<<<<<<< HEAD
-- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#73).
-- `RouterModelCall` sends the headers of a plain streamed `chat.completions.create`. It used openai's `with_streaming_response`, which adds `x-stainless-raw-response: stream`. It now reads the response headers, like `x-request-id` and `x-slng-*`, from the stream's own response (#73).
-- `RouterModelCall` and `OpenAIModelCall` apply the openai request options in `params` (a call's, and a request's) as `client.chat.completions.create(**params)` does. `timeout` sets the request's timeout, `max_retries` its retry count, `extra_query` its URL query parameters, and `extra_headers` its headers, with the router's identity headers still winning. The fields of `extra_body` join the body. Before, all five went into the JSON body, where the endpoint ignored them. A value the SDK cannot use raises `ValueError`, and `stream_options` is refused inside `extra_body` too (#73).
-=======
-<<<<<<< HEAD
-- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#72).
-- `RouterModelCall` sends the headers of a plain streamed `chat.completions.create`. It used openai's `with_streaming_response`, which adds `x-stainless-raw-response: stream`. It now reads the response headers, like `x-request-id` and `x-slng-*`, from the stream's own response (#72).
-=======
 - `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#71).
->>>>>>> r3/router-placeholders
->>>>>>> r3/router-sdk-headers
-
+- `RouterModelCall` sends the headers of a plain streamed `chat.completions.create`. It used openai's `with_streaming_response`, which adds `x-stainless-raw-response: stream`. It now reads the response headers, like `x-request-id` and `x-slng-*`, from the stream's own response (#72).
+- `RouterModelCall` and `OpenAIModelCall` apply the openai request options in `params` (a call's, and a request's) as `client.chat.completions.create(**params)` does. `timeout` sets the request's timeout, `max_retries` its retry count, `extra_query` its URL query parameters, and `extra_headers` its headers, with the router's identity headers still winning. The fields of `extra_body` join the body. Before, all five went into the JSON body, where the endpoint ignored them. A value the SDK cannot use raises `ValueError`, and `stream_options` is refused inside `extra_body` too (#73).
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
