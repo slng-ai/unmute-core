@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Changed
+
+- On LiveKit, every text and tool call chunk of a `ModelCallLLM` reply now carries the `response_id` of the model event, the id the provider gave the answer. Before, text and tool calls got a random `unmute_` id, so `LLMMetrics.request_id` and the span attribute `lk.provider_request_ids` could name random ids instead of the completion id, for example after a barge-in or with no usage chunk. A random id is used only when the provider named none. `LiveKitModel` passes its plugin's chunk id on as the `response_id` of its text and tool call events (#TBD).
+
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
