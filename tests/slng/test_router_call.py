@@ -675,7 +675,7 @@ async def test_a_body_field_the_router_drops_is_sent_with_one_warning(
     ]
 
 
-@pytest.mark.parametrize("key", ["api_key", "extra_headers", "vertex_project"])
+@pytest.mark.parametrize("key", ["api_key", "vertex_project"])
 async def test_a_request_param_the_router_drops_is_sent_with_one_warning(
     key: str, warned: set[str], caplog: pytest.LogCaptureFixture
 ) -> None:

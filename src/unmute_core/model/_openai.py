@@ -33,6 +33,13 @@ DEFAULT_KEEPALIVE_S = 120.0
 than the gap between two turns of a voice call, so every turn would open a new connection."""
 
 
+SDK_OPTIONS = frozenset({"timeout", "max_retries", "extra_query", "extra_headers", "extra_body"})
+"""Names in ``params`` that are openai request options, not body fields. They act as in
+``client.chat.completions.create(**params)``: ``timeout`` is the request's timeout,
+``max_retries`` its retry count, ``extra_query`` its URL query, ``extra_headers`` its
+headers, and ``extra_body`` fields join the JSON body."""
+
+
 def _seconds_or_timeout(value: object) -> object:
     """Pass None, seconds above zero, or a timeout object like ``openai.Timeout``."""
     if value is None or hasattr(value, "connect"):
@@ -40,6 +47,64 @@ def _seconds_or_timeout(value: object) -> object:
     if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
         return value
     raise ValueError("timeout must be seconds above zero or an openai.Timeout")
+
+
+def split_options(params: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Split ``params`` into JSON body fields and openai request options.
+
+    Args:
+        params: Body fields and ``SDK_OPTIONS``, like ``{"temperature": 0, "timeout": 3}``.
+
+    Returns:
+        The body fields, with the fields of ``extra_body`` joined in, and the options that
+        were set: ``timeout``, ``max_retries``, ``extra_query`` and ``extra_headers``.
+
+    Raises:
+        ValueError: If ``timeout`` is not seconds above zero, None or an ``openai.Timeout``,
+            ``max_retries`` is not a whole number of 0 or more, or ``extra_query``,
+            ``extra_headers`` or ``extra_body`` is not a mapping.
+    """
+    for name in ("extra_query", "extra_headers", "extra_body"):
+        if name in params and not isinstance(params[name], Mapping):
+            raise ValueError(f"{name} must be a mapping, got {type(params[name]).__name__}")
+    if "timeout" in params:
+        _seconds_or_timeout(params["timeout"])
+    retries = params.get("max_retries", 0)
+    if isinstance(retries, bool) or not isinstance(retries, int) or retries < 0:
+        raise ValueError("max_retries must be a whole number of 0 or more")
+    body = {name: value for name, value in params.items() if name not in SDK_OPTIONS}
+    body |= params.get("extra_body", {})
+    options = {name: params[name] for name in SDK_OPTIONS - {"extra_body"} if name in params}
+    return body, options
+
+
+def merged_headers(*layers: Mapping[str, Any]) -> dict[str, Any]:
+    """Join header layers, a later layer winning on a name in any letter case."""
+    kept: dict[str, tuple[str, Any]] = {}
+    for layer in layers:
+        kept |= {name.lower(): (name, value) for name, value in layer.items()}
+    return dict(kept.values())
+
+
+def join_options(base: Mapping[str, Any], over: Mapping[str, Any]) -> dict[str, Any]:
+    """Lay one set of request options over another.
+
+    ``timeout`` and ``max_retries`` in ``over`` replace those in ``base``. ``extra_query``
+    and ``extra_headers`` join, and ``over`` wins on a shared name.
+
+    Args:
+        base: Options from ``split_options``, like the call's own.
+        over: Options from ``split_options``, like one request's.
+
+    Returns:
+        A new dict.
+    """
+    joined = dict(base) | dict(over)
+    if "extra_query" in base and "extra_query" in over:
+        joined["extra_query"] = {**base["extra_query"], **over["extra_query"]}
+    if "extra_headers" in base and "extra_headers" in over:
+        joined["extra_headers"] = merged_headers(base["extra_headers"], over["extra_headers"])
+    return joined
 
 
 class ClientArguments(BaseModel):
@@ -152,7 +217,10 @@ class OpenAIModelCall(NativeModelCall):
             client: A ready client, for tests. Then ``base_url``, ``api_key`` and ``timeout``
                 are not used, and ``aclose`` leaves the client open.
             params: Body fields sent on every request, like ``{"temperature": 0}``. A
-                request's own ``params`` win.
+                request's own ``params`` win. The openai request options in ``SDK_OPTIONS``
+                act as in ``create(**params)``: ``timeout``, ``max_retries``,
+                ``extra_query`` and ``extra_headers`` are not body fields, and ``extra_body``
+                joins the body.
             timeout: The client's timeout. None waits 15 s to connect and 5 s for each read,
                 as ``RouterModelCall`` does. The default client never retries: the failover
                 rules decide that.
@@ -164,7 +232,8 @@ class OpenAIModelCall(NativeModelCall):
 
         Raises:
             ImportError: If the ``openai`` package is missing.
-            ValueError: If ``params`` sets a field in ``RESERVED_PARAMS``, or ``model``,
+            ValueError: If ``params`` sets a field in ``RESERVED_PARAMS``, or one of its
+                request options is not valid, or ``model``,
                 ``base_url``, ``timeout`` or ``keepalive_s`` is not one the client can use, or
                 ``keepalive_s`` is set together with ``client``.
         """
@@ -174,7 +243,8 @@ class OpenAIModelCall(NativeModelCall):
             raise ImportError(
                 "OpenAIModelCall needs the openai package: install unmute-core[slng], or add openai"
             ) from error
-        if reserved := sorted(set(params or {}) & RESERVED_PARAMS):  # a plain dict, not a model
+        fields, _ = split_options(params or {})
+        if reserved := sorted(set(fields) & RESERVED_PARAMS):  # a plain dict, not a model
             raise ValueError(f"set {reserved[0]} with OpenAIModelCall's own behaviour, not params")
         if client is None:
             check_client_arguments(
@@ -218,24 +288,34 @@ class OpenAIModelCall(NativeModelCall):
 
         Raises:
             openai.APIStatusError: When the endpoint answers with an error status.
-            ValueError: If the request's ``params`` set a field in ``RESERVED_PARAMS``.
+            ValueError: If the request's ``params`` set a field in ``RESERVED_PARAMS``, or one
+                of its request options is not valid.
         """
-        if reserved := sorted(set(request.params) & RESERVED_PARAMS):  # per request, at send
+        fields, requested = split_options(request.params)
+        if reserved := sorted(set(fields) & RESERVED_PARAMS):  # per request, at send
             raise ValueError(f"a request's params must not set {reserved[0]}: OpenAIModelCall does")
         from openai import omit
+
+        own_fields, own = split_options(self.params)
+        options = join_options(own, requested)
+        headers = merged_headers(options.pop("extra_headers", {}), request.headers)
+        client = self.client
+        if "max_retries" in options:
+            client = client.with_options(max_retries=options.pop("max_retries"))
 
         messages = request.messages
         if self._one_system_message:
             messages = folded_system(messages)
-        stream = await self.client.chat.completions.create(
+        stream = await client.chat.completions.create(
             model=self.model,
             messages=cast("Any", signed_tool_calls(messages, gemini=is_gemini(self.model))),
             tools=cast("Any", request.tools) if request.tools else omit,
             tool_choice=request.tool_choice if request.tools and request.tool_choice else omit,
             stream=True,
             stream_options={"include_usage": True},
-            extra_headers=request.headers or None,
-            extra_body=self.params | request.params,
+            extra_headers=headers or None,
+            extra_body=own_fields | fields,
+            **options,
         )
         response = getattr(stream, "response", None)
         request_id = response.headers.get("x-request-id") if response is not None else None

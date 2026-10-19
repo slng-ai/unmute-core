@@ -107,7 +107,7 @@ A frozen Pydantic dataclass. It holds one request, with the prompt still unfille
   The name of the model that answers, like `gpt-5.6-luna`. A `before_model` hook can read it. Under `FallbackModelCall` it is the first call's name. It is empty when unknown.
 </ParamField>
 <ParamField path="params" type="dict[str, Any]" default="{}">
-  Extra body fields for this request only, like `{"temperature": 0}`. `RouterModelCall` sends them. An OpenAI compatible framework LLM gets them as `extra_body`.
+  Extra body fields for this request only, like `{"temperature": 0}`. `RouterModelCall` and `OpenAIModelCall` send them. An OpenAI compatible framework LLM gets them as `extra_body`. In these two calls, `timeout`, `max_retries`, `extra_query`, `extra_headers` and `extra_body` are openai request options, not body fields.
 </ParamField>
 
 The call's `before_model` hooks may change a request. `wrap_model` hooks run around a `ModelCall`. See [Hooks](/core/build/hooks).
@@ -287,7 +287,7 @@ gemini = OpenAIModelCall(
   A ready client. `base_url`, `api_key` and `timeout` are then unused.
 </ParamField>
 <ParamField path="params" type="Mapping[str, object] | None" default="None">
-  Body fields for every request, like `{"temperature": 0}`. A request's own `params` win. It may not set `stream_options`.
+  Body fields for every request, like `{"temperature": 0}`. A request's own `params` win. It may not set `stream_options`, in `extra_body` either. Five names are openai request options, not body fields, as in `client.chat.completions.create(**params)`: `timeout`, `max_retries`, `extra_query` and `extra_headers` set the request's timeout, retry count, URL query parameters and headers, and the fields of `extra_body` join the body. A request's option wins over the call's, and `extra_query` and `extra_headers` join by name. A value the SDK cannot use raises `ValueError`.
 </ParamField>
 <ParamField path="timeout" type="openai.Timeout | float | None" default="None">
   The client timeout: seconds above zero, or an `openai.Timeout`. `0` raises `ValueError`. The default is 15 seconds to connect and 5 seconds for each read.

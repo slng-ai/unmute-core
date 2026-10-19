@@ -21,7 +21,10 @@ from unmute_core.model._openai import (
     DEFAULT_KEEPALIVE_S,
     check_client_arguments,
     check_keepalive_without_client,
+    join_options,
     keepalive_http_client,
+    merged_headers,
+    split_options,
 )
 from unmute_core.slng._blocked import warn_dropped
 from unmute_core.slng._config import RouterConfig
@@ -131,7 +134,10 @@ class RouterModelCall:
                 tier only.
             body: Extra body fields sent on every request, like ``reasoning_effort``. A
                 request's ``params`` win over it. Its ``template_variables`` join each
-                request's own, which win on a shared name.
+                request's own, which win on a shared name. The openai request options in
+                ``SDK_OPTIONS`` act as in ``create(**body)``: ``timeout``, ``max_retries``,
+                ``extra_query`` and ``extra_headers`` are not body fields, and
+                ``extra_body`` joins the body.
             extra_headers: Headers sent on every request. They never replace the identity
                 headers.
             timeout: The client's timeout. ``TIMEOUT`` by default.
@@ -149,7 +155,8 @@ class RouterModelCall:
             SlngConfigError: If the key, or both the URL and the world part, are neither
                 passed nor set.
             ValueError: If ``model`` names no model of ``config``, or ``body`` sets a field
-                in ``RESERVED_BODY`` other than ``template_variables``, or ``keepalive_s``
+                in ``RESERVED_BODY`` other than ``template_variables``, or one of its request
+                options is not valid, or ``keepalive_s``
                 is set together with ``client``. A field the router
                 drops, like ``api_base`` or ``metadata``, is sent with one warning.
             ValidationError: If ``llm_config_id`` is empty, too long, or holds a comma,
@@ -162,7 +169,8 @@ class RouterModelCall:
                 f"{type(call).__name__}. Pass llm_config_id= on its own"
             )
         # a router rule at the plug point: which body fields the router owns
-        if reserved := sorted(set(body or {}) & (RESERVED_BODY - {"template_variables"})):
+        fields, _ = split_options(body or {})
+        if reserved := sorted(set(fields) & (RESERVED_BODY - {"template_variables"})):
             raise ValueError(f"set {reserved[0]} with RouterModelCall's own argument, not body")
         if client is None:
             check_client_arguments(
@@ -174,7 +182,7 @@ class RouterModelCall:
             )
         else:
             check_keepalive_without_client("RouterModelCall", keepalive_s)
-        warn_dropped(body or {}, "RouterModelCall's body", request=True)
+        warn_dropped(fields, "RouterModelCall's body", request=True)
         self.body = dict(body or {})
         self.config = config
         self.pure_proxy = pure_proxy
@@ -245,14 +253,20 @@ class RouterModelCall:
         Raises:
             openai.APIStatusError: When the router answers with an error status.
                 ``unmute_core.model.http_status`` reads it.
-            ValueError: If the request's ``params`` set a field in ``RESERVED_BODY``. A field
-                the router drops is sent with one warning.
+            ValueError: If the request's ``params`` set a field in ``RESERVED_BODY``, or one of
+                its request options is not valid. A field the router drops is sent with one
+                warning.
         """
+        fields, requested = split_options(request.params)
         # a router rule at the plug point: the request must not set the fields the router owns
-        if reserved := sorted(set(request.params) & RESERVED_BODY):
+        if reserved := sorted(set(fields) & RESERVED_BODY):
             raise ValueError(f"a request's params must not set {reserved[0]}: RouterModelCall does")
-        warn_dropped(request.params, "a request's params", request=True)
-        overlay = self.extra_headers | request.headers
+        warn_dropped(fields, "a request's params", request=True)
+        own_fields, own = split_options(self.body)
+        options = join_options(own, requested)
+        overlay = merged_headers(
+            self.extra_headers, options.pop("extra_headers", {}), request.headers
+        )
         if all(name.lower() != REQUEST_ID_HEADER.lower() for name in overlay):
             overlay[REQUEST_ID_HEADER] = uuid.uuid4().hex
         headers = self.headers.build(request.site, overlay)
@@ -261,10 +275,14 @@ class RouterModelCall:
             owned["slng_config"] = self._slng_config
         if self.pure_proxy:
             owned["slng_pure_proxy"] = True
-        variables = shortened(self.body.get("template_variables", {}) | dict(request.variables))
+        variables = shortened(own_fields.get("template_variables", {}) | dict(request.variables))
         try:
             async for event in self._stream(
-                request, headers, owned | router_body(variables), rewrite=bool(variables)
+                request,
+                headers,
+                own_fields | fields | owned | router_body(variables),
+                options,
+                rewrite=bool(variables),
             ):
                 yield event
         except Exception:
@@ -278,7 +296,8 @@ class RouterModelCall:
         self,
         request: ModelRequest,
         headers: dict[str, str],
-        owned: dict[str, Any],
+        body: dict[str, Any],
+        options: dict[str, Any],
         *,
         rewrite: bool,
     ) -> AsyncIterator[ModelEvent]:
@@ -287,12 +306,17 @@ class RouterModelCall:
         Args:
             request: The request to send.
             headers: The headers to send.
-            owned: The body fields the router owns.
+            body: The extra body fields to send, the router's own among them.
+            options: The openai request options: ``timeout``, ``max_retries`` and
+                ``extra_query``.
             rewrite: True when the router fills variables, so placeholders are written in
                 the form it reads. False sends the messages as written.
         """
         messages = router_messages(request.messages) if rewrite else request.messages
-        stream = await self.client.chat.completions.create(
+        client = self.client
+        if "max_retries" in options:
+            client = client.with_options(max_retries=options.pop("max_retries"))
+        stream = await client.chat.completions.create(
             model=self.model,
             messages=cast(
                 "list[ChatCompletionMessageParam]",
@@ -305,7 +329,8 @@ class RouterModelCall:
             stream=True,
             stream_options={"include_usage": True},
             extra_headers=headers,
-            extra_body=self.body | request.params | owned,
+            extra_body=body,
+            **options,
         )
         async with stream:
             response = stream.response
