@@ -185,7 +185,11 @@ def _render(name: str, state: CallState, site: str) -> str:
 
 
 def template_variables(
-    messages: list[dict[str, Any]], state: CallState | None, site: str = ""
+    messages: list[dict[str, Any]],
+    state: CallState | None,
+    site: str = "",
+    *,
+    as_written: bool = False,
 ) -> dict[str, str]:
     """Render every placeholder the messages use from the call state.
 
@@ -194,6 +198,8 @@ def template_variables(
         state: The call state, or None for an agent without one.
         site: The prompt reading the values, like ``task:verify_customer``. A value waiting
             for the caller to confirm it reads as empty, except at its own task.
+        as_written: True for prompts that are not templates: a ``{{name}}`` in them is
+            plain text, so nothing is read and the result is empty.
 
     Returns:
         The router's placeholder name (``key``) to its text, ready for ``fill_messages``
@@ -202,7 +208,7 @@ def template_variables(
     Raises:
         MissingVariablesError: If a placeholder names no value of the state.
     """
-    names = placeholders(messages)
+    names = [] if as_written else placeholders(messages)
     if not names:
         return {}
     if state is None:

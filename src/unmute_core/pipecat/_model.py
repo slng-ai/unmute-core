@@ -88,6 +88,7 @@ class ModelCallLLMService(OpenAILLMService):
         *,
         state: CallState | None = None,
         call: CallHooks | None = None,
+        prompts_as_written: bool = False,
         **kwargs: Any,
     ) -> None:
         """Wrap the model call.
@@ -96,11 +97,14 @@ class ModelCallLLMService(OpenAILLMService):
             model_call: Where the requests go.
             state: The call state, read for each request's variables.
             call: The call's hooks, run on each request.
+            prompts_as_written: True sends each prompt as written, for prompts that are not
+                templates: a ``{{name}}`` in them is plain text, not a placeholder.
             **kwargs: ``OpenAILLMService`` arguments, such as ``settings``. A key or a
                 base URL is not used.
         """
         self.model_call = model_call
         self.state = state
+        self.prompts_as_written = prompts_as_written
         self.site = ""
         self.failure_is_final = False
         self.call = call
@@ -157,7 +161,10 @@ class ModelCallLLMService(OpenAILLMService):
         if hooks is not None:
             request = await hooks.run_before_model(request)
         request = replace(
-            request, variables=template_variables(request.messages, self.state, self.site)
+            request,
+            variables=template_variables(
+                request.messages, self.state, self.site, as_written=self.prompts_as_written
+            ),
         )
         if self.trace_headers is not None:
             request = replace(request, headers=request.headers | dict(self.trace_headers()))
