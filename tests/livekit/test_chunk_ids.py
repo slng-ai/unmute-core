@@ -3,7 +3,7 @@
 import asyncio
 from collections import deque
 from collections.abc import AsyncIterator, Sequence
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from livekit.agents import AgentSession, APIConnectOptions, NotGivenOr, llm, metrics
@@ -134,7 +134,7 @@ async def test_every_span_names_only_the_completion_id(
     )
     await _chunks(model)
     named = [
-        tuple((span.attributes or {})["lk.provider_request_ids"])
+        tuple(cast("Sequence[str]", (span.attributes or {})["lk.provider_request_ids"]))
         for span in spans.get_finished_spans()
         if "lk.provider_request_ids" in (span.attributes or {})
     ]
