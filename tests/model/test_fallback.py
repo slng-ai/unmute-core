@@ -424,3 +424,12 @@ async def test_a_reader_that_stops_early_closes_the_calls_stream() -> None:
     assert await anext(stream) == TextDelta("Your table is booked")
     await stream.aclose()
     assert call.closed.is_set()
+
+
+async def test_an_empty_answer_can_end_the_request_instead_of_failing_over() -> None:
+    moves: list[FailOver] = []
+    usage = Usage(10, 0)
+    first, second = FakeCall([usage]), FakeCall(["x"])
+    chain = FallbackModelCall([first, second], empty_fails_over=False, on_fail_over=moves.append)
+    assert [event async for event in chain.stream(REQUEST)] == [usage]
+    assert (second.calls, moves) == (0, [])

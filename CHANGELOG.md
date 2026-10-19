@@ -6,6 +6,10 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ## Unreleased
 
+### Added
+
+- `FallbackModelCall(empty_fails_over=False)` ends a request with a call's empty answer instead of moving to the next call. An app that handles an empty reply itself, like asking the same model again, then stays on that model. The default, `True`, works as before.
+
 ### Fixed
 
 - `FallbackModelCall` now closes a call's stream when its reader stops early, like a caller who talks over the reply. Before, the call's request stayed open, and its `finally` blocks ran, only once the stream was garbage collected.

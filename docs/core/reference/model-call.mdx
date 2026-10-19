@@ -330,6 +330,9 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
 <ParamField path="sticky" type="bool" default="False">
   `True` starts each request with the call that answered last, then the others in the given order. A dead first call is then tried once and not on every request. `False` always starts with the first call. LiveKit's `FallbackAdapter` works the same way.
 </ParamField>
+<ParamField path="empty_fails_over" type="bool" default="True">
+  `True` moves to the next call when a call answers with nothing, as a failure does. `False` ends the request there with the empty answer, so an app that handles an empty reply itself, like asking the same model again, stays on that model. The last call's empty answer always ends the request.
+</ParamField>
 <ParamField path="on_fail_over" type="Callable[[FailOver], None] | None" default="None">
   Called at each move to the next call. A callback that raises is logged and the chain goes on.
 </ParamField>

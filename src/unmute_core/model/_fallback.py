@@ -133,6 +133,7 @@ class FallbackModelCall:
         on_fail_over: SkipValidation[Callable[[FailOver], None]] | None = None,
         on_retry: SkipValidation[Callable[[Retry], None]] | None = None,
         sticky: bool = False,
+        empty_fails_over: bool = True,
     ) -> None:
         """Keep the calls in the order they are tried.
 
@@ -158,6 +159,9 @@ class FallbackModelCall:
             sticky: Start each request with the call that answered last, then the others in
                 the given order, as LiveKit's ``FallbackAdapter(sticky=True)`` does. A dead
                 first call is then tried once, not on every request.
+            empty_fails_over: An answer with nothing in it moves to the next call, as a
+                failure does. False ends the request there with the empty answer, for an app
+                that handles an empty reply itself, like asking the same model again.
 
         Raises:
             ValueError: If ``calls`` is empty, or a wait is below zero.
@@ -175,6 +179,7 @@ class FallbackModelCall:
         self._on_fail_over = on_fail_over
         self._on_retry = on_retry
         self._sticky = sticky
+        self._empty_fails_over = empty_fails_over
         self._active = 0
         self._answered = 0
 
@@ -372,12 +377,12 @@ class FallbackModelCall:
                             self._fail_over(index, next_index, status, error)
                             break
                         continue
-                    if first is None and not last:
+                    if first is None and not last and self._empty_fails_over:
                         logger.warning("model call %d answered nothing, trying the next one", index)
                         self._fail_over(index, next_index, None, None)
                         break
                     if first is None:
-                        logger.warning("the last model call answered nothing: an empty reply")
+                        logger.warning("model call %d answered nothing: an empty reply", index)
                         if usage is not None:
                             yield usage
                     if first is not None:
