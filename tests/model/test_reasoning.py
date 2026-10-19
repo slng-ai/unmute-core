@@ -93,8 +93,9 @@ def test_the_standard_tags_are_unchanged_when_markers_are_given():
     ("model", "markers"),
     [
         ("google/gemma-4-31b-it", (GEMMA,)),
-        ("gemma-4-31b-it", (GEMMA,)),
-        ("vertex_ai/google/gemma-4-31b-it", (GEMMA,)),
+        ("gemma-4-31b-it", ()),
+        ("vertex_ai/google/gemma-4-31b-it", ()),
+        ("Google/Gemma-4-31B-it", ()),
         ("gpt-4o", ()),
         ("openai/gpt-4o", ()),
         ("gemma-4-31b-it-extra", ()),
@@ -102,12 +103,12 @@ def test_the_standard_tags_are_unchanged_when_markers_are_given():
         ("", ()),
     ],
 )
-def test_a_model_names_its_markers_without_its_provider_prefix(model, markers):
+def test_a_model_names_its_markers_by_its_exact_id(model, markers):
     assert reasoning_markers(model) == markers
 
 
 def test_the_per_model_markers_are_the_ones_livekits_own_models_strip():
-    assert MODEL_REASONING_MARKERS == {"gemma-4-31b-it": GEMMA}
+    assert MODEL_REASONING_MARKERS == {"google/gemma-4-31b-it": GEMMA}
 
 
 @pytest.mark.parametrize(

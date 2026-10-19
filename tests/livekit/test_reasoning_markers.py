@@ -53,11 +53,11 @@ async def test_gemma_markers_are_stripped_for_gemma(trace_attempts: bool) -> Non
 
 
 @TRACE
-async def test_gemma_markers_are_stripped_when_the_model_name_has_no_prefix(
+async def test_gemma_markers_are_left_alone_for_the_bare_model_id(
     trace_attempts: bool,
 ) -> None:
-    call = Speaks("gemma-4-31b-it", "<|channel>thought\n<channel|>Yes.")
-    assert await _said(_llm(trace_attempts, call)) == "Yes."
+    text = "<|channel>thought\n<channel|>Yes."
+    assert await _said(_llm(trace_attempts, Speaks("gemma-4-31b-it", text))) == text
 
 
 @TRACE

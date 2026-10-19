@@ -23,10 +23,10 @@ REASONING_TAGS = ("think", "thought", "thinking", "reasoning")
 Marker = tuple[str, str]
 """An opening and a closing marker, matched as written, like ``("<|channel>thought", "<channel|>")``."""
 MODEL_REASONING_MARKERS: Mapping[str, Marker] = MappingProxyType(
-    {"gemma-4-31b-it": ("<|channel>thought", "<channel|>")}
+    {"google/gemma-4-31b-it": ("<|channel>thought", "<channel|>")}
 )
-"""The markers of models that use their own, by model name without a provider prefix. They are
-the ones LiveKit's own inference models strip."""
+"""The markers of models that use their own, by the exact model id. They are the ones LiveKit's
+own inference models strip, under the same ids."""
 _NAMES = "|".join(REASONING_TAGS)
 _TAG_SOURCE = rf"(?i:<(?P<slash>/?)(?P<name>{_NAMES})\b[^<>]*>)"
 _TAG = re.compile(_TAG_SOURCE)
@@ -38,14 +38,14 @@ def reasoning_markers(model: str) -> tuple[Marker, ...]:
     """Return the reasoning markers a model uses besides the standard tags.
 
     Args:
-        model: The model name the request goes to. A provider prefix is dropped, as LiveKit
-            does, so ``google/gemma-4-31b-it`` and ``gemma-4-31b-it`` are the same model.
+        model: The model id the request goes to, matched exactly as LiveKit matches it. A
+            bare ``gemma-4-31b-it`` is not ``google/gemma-4-31b-it``.
 
     Returns:
         The model's opening and closing marker in a tuple, or an empty tuple for a model
         that uses only the standard tags.
     """
-    marker = MODEL_REASONING_MARKERS.get(model.rsplit("/", 1)[-1])
+    marker = MODEL_REASONING_MARKERS.get(model)
     return (marker,) if marker is not None else ()
 
 

@@ -275,16 +275,13 @@ def test_a_stream_still_reports_its_metrics_from_a_task_it_starts_at_constructio
     )
 
 
-def test_the_models_whose_reasoning_markers_livekit_strips_are_the_ones_the_library_knows() -> None:
+def test_the_reasoning_markers_table_is_still_livekits_own_key_for_key() -> None:
     """``MODEL_REASONING_MARKERS`` holds the markers LiveKit's inference models strip."""
     from livekit.agents.inference import llm as inference_llm
 
     from unmute_core.model import MODEL_REASONING_MARKERS
 
-    theirs = {
-        model.split("/")[-1]: markers for model, markers in inference_llm._MODEL_THINK_TAGS.items()
-    }
-    assert theirs == dict(MODEL_REASONING_MARKERS)
+    assert dict(inference_llm._MODEL_THINK_TAGS) == dict(MODEL_REASONING_MARKERS)
 
 
 def test_an_activity_still_listens_for_metrics_on_its_llm() -> None:

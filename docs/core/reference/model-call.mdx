@@ -471,7 +471,7 @@ reasoning_markers("gpt-5.6-terra")  # ()
 
 1. `ReasoningFilter(markers=())` takes the extra pairs. It raises `ValueError` for an empty marker, or a pair whose two markers are the same.
 2. `feed(text)` returns the part of the next chunk that may be spoken. `flush()` returns what was held back at the end, unless a block is open.
-3. `reasoning_markers(model)` returns the pair a model uses besides the standard tags, or `()`. It drops a provider prefix, as LiveKit does. `MODEL_REASONING_MARKERS` holds the table, keyed by model name. It has the markers LiveKit's own inference models strip, like Gemma 4's.
+3. `reasoning_markers(model)` returns the pair a model uses besides the standard tags, or `()`. It matches the exact model id, as LiveKit does, so `google/gemma-4-31b-it` has a pair and a bare `gemma-4-31b-it` does not. `MODEL_REASONING_MARKERS` holds the table, keyed by model id. It equals the table LiveKit's own inference models strip by, like Gemma 4's.
 4. `ModelCallLLM` on LiveKit uses the markers of the model a request goes to by default, and takes more with `reasoning_markers=`. `ModelCallLLMService` on Pipecat takes `reasoning_markers=` and adds none for a model.
 
 ## Write your own
