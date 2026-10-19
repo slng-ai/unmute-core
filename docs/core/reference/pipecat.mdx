@@ -135,6 +135,9 @@ A native Pipecat LLM service, like `OpenAILLMService`, gets its prompts filled b
 <ParamField path="call" type="CallHooks | None" default="None">
   The call's hooks, run on each request. `attach_call(llm=...)` and `UnmuteFlows(call=...)` set it.
 </ParamField>
+<ParamField path="reasoning_markers" type="Iterable[tuple[str, str]]" default="()">
+  Pairs of an opening and a closing marker to keep out of the reply, like `("<|channel>thought", "<channel|>")`. The standard `<think>` tags are always stripped. No marker is added for a model, so the output is unchanged unless you give some. See [ReasoningFilter](/core/reference/model-call#reasoningfilter).
+</ParamField>
 <ParamField path="**kwargs" type="Any">
   `OpenAILLMService` arguments, like `settings`. A key or a base URL is not used.
 </ParamField>
