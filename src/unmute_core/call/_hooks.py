@@ -304,7 +304,9 @@ class CallHooks:
 
         The checks come first, so a failed one sets off no lookup. The background lookups
         run beside the greeting. The first model request waits for them, so a fixed greeting
-        plays at once. The call's end or a failure stops them.
+        plays at once. The call's end or a failure stops them. A background lookup with
+        ``wait=False`` is not waited for, and the end or a failure does not stop it: the end
+        waits for it, for up to ``end_timeout_s``.
 
         Returns:
             True when the call may greet. False after a failed check: the failure line
@@ -318,12 +320,16 @@ class CallHooks:
             return False
         if self.prefetch is not None:
             await self.prefetch.run(self.state, results=self.results)
-            background = self.prefetch.run_background(self.state, results=self.results)
-            self._end.lookups = self._runner.spawn(background)
+            waited = self.prefetch.run_background(self.state, results=self.results, wait=True)
+            self._end.lookups = self._runner.spawn(waited)
+            unwaited = self.prefetch.run_background(self.state, results=self.results, wait=False)
+            self._runner.spawn(unwaited, wait=False)
         return True
 
     async def before_request(self, caller: str | None) -> None:
         """Wait for the tools on events before a model request.
+
+        A tool with ``wait=False`` is not waited for.
 
         Args:
             caller: The newest caller message in the request. The first one starts the

@@ -3,7 +3,8 @@
 Ported from unmute@d0c67f1 internal/generate/prefetch.go, which emits this as per-agent text.
 Nothing here can fail a call: an entry that is skipped, times out or raises leaves its values
 at their defaults, and the call greets on time. A ``Lookup`` may run beside the greeting
-instead, with ``background=True``: then the first model request waits for it.
+instead, with ``background=True``: then the first model request waits for it, unless the
+lookup has ``wait=False``.
 
 What an entry may save where is checked when it is built: a declared, single value,
 of a type the reading fits, and a ``Literal`` that offers every value the reading can give.
@@ -268,6 +269,11 @@ class Lookup:
         needs_confirmed: State values that must not be waiting for the caller.
         background: False runs it before the greeting, inside the prefetch budget. True
             runs it beside the greeting: ``Prefetch.run_background``.
+        wait: True (the default) holds the first model request until a background lookup
+            ends, for up to ``first_request_timeout_s``. False never holds a request, for a
+            lookup that only tells another system something. It needs ``background=True``.
+            The call's end waits for it, for up to ``end_timeout_s``, and neither the end
+            nor a failure stops it.
     """
 
     name: str
@@ -276,6 +282,7 @@ class Lookup:
     inputs: Sequence[str] = ()
     needs_confirmed: Sequence[str] = ()
     background: bool = False
+    wait: bool = True
 
     @model_validator(mode="after")
     def _runs_with_nothing_to_fill(self) -> Self:
@@ -284,6 +291,11 @@ class Lookup:
         Raises:
             ValueError: Naming the entry and the fix.
         """
+        if not self.wait and not self.background:
+            raise ValueError(
+                f"prefetch entry {self.name!r}: wait=False needs background=True, because "
+                "the greeting waits for a lookup that runs before it"
+            )
         if not isinstance(self.run, ToolSpec):
             _check_assign(self.name, self.assign)
             return self
@@ -487,19 +499,24 @@ class Prefetch:
         state: CallState[Any],
         *,
         results: CallStartResults | None = None,
+        wait: bool | None = None,
     ) -> None:
         """Resolve the background lookups in order, each in its own budget. Never raises.
 
         Start it once the greeting has started. ``CallHooks`` does, and holds the first model
-        request until it ends.
+        request until the lookups with ``wait=True`` end.
 
         Args:
             state: The call's state, filled in place.
             results: Keeps what each lookup returned, as for ``run``.
+            wait: True runs only the lookups with ``wait=True``, False only the ones with
+                ``wait=False``. None runs them all.
         """
         loop = asyncio.get_running_loop()
         for entry in self.entries:
             if not (isinstance(entry, Lookup) and entry.background):
+                continue
+            if wait is not None and entry.wait != wait:
                 continue
             try:
                 deadline = loop.time() + self.background_budget

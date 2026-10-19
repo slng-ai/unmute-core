@@ -139,6 +139,7 @@ class FallbackModelCall:
         empty_fails_over: bool = True,
         usage_counts_as_answer: bool = False,
         start_ends_budget: bool = False,
+        start_is_answer: bool = False,
     ) -> None:
         """Keep the calls in the order they are tried.
 
@@ -175,7 +176,16 @@ class FallbackModelCall:
             start_ends_budget: End ``first_event_timeout_s`` at a call's ``AnswerStarted``,
                 the provider's first chunk, instead of at its first text or tool call. A
                 reply that is only a long tool call then counts as started at once.
-                ``AnswerStarted`` is not passed on either way.
+                ``AnswerStarted`` is not passed on, unless ``start_is_answer`` is set.
+            start_is_answer: Take a call's ``AnswerStarted`` as its answer. It implies
+                ``start_ends_budget``. The chain passes that ``AnswerStarted`` on, once,
+                for the call that answers, and stays with the call from then on. An error
+                after it reaches the reader as it is: no retry, no failover, and no
+                ``on_retry`` or ``on_fail_over`` call. A call that sends ``AnswerStarted``
+                and nothing else ends the request with its own empty answer. So a long
+                tool call that began at once is never sent again. A call that sends no
+                ``AnswerStarted`` is judged as before, and ``empty_fails_over`` and
+                ``usage_counts_as_answer`` apply to it only.
 
         Raises:
             ValueError: If ``calls`` is empty, or a wait is below zero.
@@ -196,6 +206,7 @@ class FallbackModelCall:
         self._empty_fails_over = empty_fails_over
         self._usage_counts_as_answer = usage_counts_as_answer
         self._start_ends_budget = start_ends_budget
+        self._start_is_answer = start_is_answer
         self._active = 0
         self._answered = 0
 
@@ -287,13 +298,14 @@ class FallbackModelCall:
 
         A ``Usage`` or an ``AnswerStarted`` is no answer. None when the stream holds nothing
         else. With ``start_ends_budget``, the budget covers the wait for ``AnswerStarted``
-        only.
+        only. With ``start_is_answer``, the ``AnswerStarted`` is the answer and is returned.
         """
+        at_start = self._start_ends_budget or self._start_is_answer
         async with asyncio.timeout(budget):
-            first, usage, started = await _answer(events, None, at_start=self._start_ends_budget)
-        if started:
+            first, usage = await _answer(events, None, at_start=at_start)
+        if isinstance(first, AnswerStarted) and not self._start_is_answer:
             # The provider began within the budget. Its answer may take longer.
-            first, usage, _ = await _answer(events, usage, at_start=False)
+            first, usage = await _answer(events, usage, at_start=False)
         return first, usage
 
     def _decide(
@@ -421,21 +433,19 @@ class FallbackModelCall:
 
 async def _answer(
     events: AsyncIterator[ModelEvent], usage: Usage | None, *, at_start: bool
-) -> tuple[ModelEvent | None, Usage | None, bool]:
+) -> tuple[ModelEvent | None, Usage | None]:
     """Read a call's stream to its first answer event, keeping a ``Usage`` that came first.
 
     Returns:
-        The first answer event, None when the stream holds no other, the last ``Usage``
-        before it, and True when ``at_start`` stopped the read at ``AnswerStarted``.
+        The first answer event, or the ``AnswerStarted`` when ``at_start`` stopped the read
+        there. None when the stream holds no other. Then the last ``Usage`` before it.
     """
     while True:
         event = await anext(events, None)
         if isinstance(event, Usage):
             usage = event
-        elif not isinstance(event, AnswerStarted):
-            return event, usage, False
-        elif at_start:
-            return None, usage, True
+        elif not isinstance(event, AnswerStarted) or at_start:
+            return event, usage
 
 
 @asynccontextmanager

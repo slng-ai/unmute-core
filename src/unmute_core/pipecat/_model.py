@@ -348,8 +348,11 @@ async def _chunks(
                     else None
                 ),
                 prompt_tokens_details=(
-                    PromptTokensDetails(cached_tokens=event.cached_input_tokens)
-                    if event.cached_input_tokens is not None
+                    PromptTokensDetails(
+                        cached_tokens=event.cached_input_tokens,
+                        cache_write_tokens=event.cache_write_tokens,
+                    )
+                    if event.cached_input_tokens is not None or event.cache_write_tokens is not None
                     else None
                 ),
             )

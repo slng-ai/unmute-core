@@ -293,6 +293,14 @@ async def test_the_usage_chunk_carries_the_reasoning_tokens_and_the_providers_to
     assert (plain.completion_tokens_details, plain.total_tokens) == (None, 12)
 
 
+async def test_the_usage_chunk_carries_the_tokens_written_to_the_cache() -> None:
+    llm = service(Scripted([TextDelta("Hi"), Usage(10, 2, cache_write_tokens=6), Usage(10, 2)]))
+    chunks = [chunk async for chunk in await llm.get_chat_completions(LLMContext())]
+    [written, plain] = [chunk.usage for chunk in chunks if chunk.usage is not None]
+    assert written.prompt_tokens_details.cache_write_tokens == 6
+    assert plain.prompt_tokens_details is None
+
+
 async def test_no_trace_headers_are_sent_by_default() -> None:
     model = Scripted([TextDelta("Hi")])
     _ = [chunk async for chunk in await service(model).get_chat_completions(LLMContext())]
