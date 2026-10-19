@@ -1,7 +1,7 @@
 """``chunk_events`` turns OpenAI-compatible stream chunks into model events."""
 
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 from openai._models import construct_type
 from openai.types.chat import ChatCompletionChunk
@@ -93,21 +93,24 @@ def calls_chunk(*pieces: dict[str, Any], finish_reason: str | None = None) -> Ch
     The chunk is built the way the SDK builds a streamed one, without validation, so a piece
     may send a null ``index`` as some providers do.
     """
-    return construct_type(
-        type_=ChatCompletionChunk,
-        value={
-            "id": "c1",
-            "object": "chat.completion.chunk",
-            "created": 0,
-            "model": "m",
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"tool_calls": list(pieces)},
-                    "finish_reason": finish_reason,
-                }
-            ],
-        },
+    return cast(
+        ChatCompletionChunk,
+        construct_type(
+            type_=ChatCompletionChunk,
+            value={
+                "id": "c1",
+                "object": "chat.completion.chunk",
+                "created": 0,
+                "model": "m",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"tool_calls": list(pieces)},
+                        "finish_reason": finish_reason,
+                    }
+                ],
+            },
+        ),
     )
 
 
