@@ -67,9 +67,17 @@ class ModelRequest:
 @original_errors
 @dataclass(frozen=True, slots=True, config=VALUE)
 class TextDelta:
-    """The next piece of the answer's text."""
+    """The next piece of the answer's text.
+
+    Attributes:
+        text: The piece of text.
+        response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
+        request_id: The provider's ``x-request-id`` for the HTTP request, or None.
+    """
 
     text: str
+    response_id: str | None = None
+    request_id: str | None = None
 
 
 @original_errors
@@ -85,12 +93,16 @@ class ToolCall:
             ``extra_content`` form, like Gemini's
             ``{"google": {"thought_signature": "..."}}``. Adapters keep it in the history
             and send it back with the call, as the provider asks. Empty when there is none.
+        response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
+        request_id: The provider's ``x-request-id`` for the HTTP request, or None.
     """
 
     id: str
     name: str
     arguments: str
     extra: Mapping[str, Any] = field(default_factory=dict, hash=False)
+    response_id: str | None = None
+    request_id: str | None = None
 
     def to_openai(self) -> dict[str, Any]:
         """Return the call as an OpenAI ``tool_calls`` entry, without ``extra``.

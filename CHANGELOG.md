@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `TextDelta` and `ToolCall` carry `response_id` and `request_id`, as `Usage` does: the answer's id from its chunks and the provider's `x-request-id`. `RouterModelCall` and `OpenAIModelCall` fill them. A reply cut off before its `Usage`, like one a caller talks over, still names its answer and its HTTP request. Before, only the `Usage` at the end carried them. Both default to `None`, so a call of your own needs no change.
+
 ## 0.18.2
 
 This release reports same-model retries, keeps the cached tokens and the answer's ids in `Usage`, and sends a tool's whole parameters on Pipecat. No API was removed. `unmute_core.require("0.18.0")` accepts 0.18.2, so code built for 0.18.0 needs no change.
