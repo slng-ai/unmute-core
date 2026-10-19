@@ -8,8 +8,12 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Fixed
 
-- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#TBD).
-- `RouterModelCall` sends the headers of a plain streamed `chat.completions.create`. It used openai's `with_streaming_response`, which adds `x-stainless-raw-response: stream`. It now reads the response headers, like `x-request-id` and `x-slng-*`, from the stream's own response (#TBD).
+<<<<<<< HEAD
+- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#72).
+- `RouterModelCall` sends the headers of a plain streamed `chat.completions.create`. It used openai's `with_streaming_response`, which adds `x-stainless-raw-response: stream`. It now reads the response headers, like `x-request-id` and `x-slng-*`, from the stream's own response (#72).
+=======
+- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#71).
+>>>>>>> r3/router-placeholders
 
 ## 0.19.1
 
