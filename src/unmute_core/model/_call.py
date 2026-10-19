@@ -162,8 +162,9 @@ class AnswerStarted:
     It comes once, before the answer's text, tool calls and usage, and says nothing about
     them. A reply that is only a tool call shows its ``ToolCall`` when the whole call has
     streamed, so this is the first sign that the provider is answering.
-    ``FallbackModelCall(start_ends_budget=True)`` ends its first-event budget here. A
-    consumer that has no use for it skips it.
+    ``FallbackModelCall(start_ends_budget=True)`` ends its first-event budget here, and
+    ``start_is_answer=True`` also takes it as the answer. A consumer that has no use for it
+    skips it.
 
     Attributes:
         response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
