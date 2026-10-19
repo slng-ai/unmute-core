@@ -163,7 +163,10 @@ def next_step(
 def retry_delay(
     headers: Mapping[str, str], *, budget_s: float, now: datetime | None = None
 ) -> float | None:
-    """Read how long ``Retry-After`` asks to wait, if the wait fits the budget.
+    """Read how long ``Retry-After`` asks to wait, if it asks for a wait that fits the budget.
+
+    A ``Retry-After`` of 0, or an HTTP date that has passed, asks for no wait. It is read as
+    if the header were absent.
 
     Args:
         headers: The response headers. The lookup ignores case.
@@ -171,7 +174,8 @@ def retry_delay(
         now: The current time, for an HTTP date. Defaults to now.
 
     Returns:
-        Seconds to wait, or None when the header is absent, unreadable or over budget.
+        Seconds to wait, or None when the header is absent, unreadable, asks for no wait or is
+        over budget.
     """
     value = next((v for k, v in headers.items() if k.lower() == "retry-after"), None)
     if value is None:
@@ -185,4 +189,4 @@ def retry_delay(
         except (TypeError, ValueError):
             return None
         delay = max(0.0, (when - (now or datetime.now(UTC))).total_seconds())
-    return delay if delay <= budget_s else None
+    return delay if 0 < delay <= budget_s else None
