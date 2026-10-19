@@ -333,6 +333,9 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
 <ParamField path="on_fail_over" type="Callable[[FailOver], None] | None" default="None">
   Called at each move to the next call. A callback that raises is logged and the chain goes on.
 </ParamField>
+<ParamField path="on_retry" type="Callable[[Retry], None] | None" default="None">
+  Called before each pause that sends the same call again: a `Retry-After` wait, or one of `same_model_retries`. A callback that raises is logged and the chain goes on.
+</ParamField>
 
 ### How it fails over
 
@@ -363,6 +366,32 @@ The object `on_fail_over` receives.
 </ParamField>
 <ParamField path="error" type="BaseException | None" required>
   The error the call raised. `None` when the call answered nothing.
+</ParamField>
+
+### Retry
+
+The object `on_retry` receives.
+
+<ParamField path="index" type="int" required>
+  The position of the call that is sent again.
+</ParamField>
+<ParamField path="model" type="str" required>
+  The model name of that call, or `unknown`.
+</ParamField>
+<ParamField path="attempt" type="int" required>
+  Which retry of this call it is, `1` for the first.
+</ParamField>
+<ParamField path="pause_s" type="float" required>
+  The seconds the chain waits before it sends the call again.
+</ParamField>
+<ParamField path="waited" type="bool" required>
+  `True` when the pause is the error's `Retry-After`. `False` when it is one of `same_model_retries`.
+</ParamField>
+<ParamField path="status" type="int | None" required>
+  The HTTP status of the failure, or `None`.
+</ParamField>
+<ParamField path="error" type="BaseException" required>
+  The error the call raised.
 </ParamField>
 
 A framework's own fallback works without this class. Native LLM plugins keep their own retries and fallback.

@@ -79,6 +79,31 @@ class FailOver:
     error: SkipValidation[BaseException | None]
 
 
+@original_errors
+@dataclass(frozen=True, config=VALUE)
+class Retry:
+    """One retry of the same model call after it failed before it answered.
+
+    Attributes:
+        index: The position of the call that failed and is tried again.
+        model: The model name of that call, or ``unknown``.
+        attempt: Which retry of this call this is, 1 for the first.
+        pause_s: The seconds the chain waits before it sends the call again.
+        waited: True when the pause is the error's ``Retry-After``, False when it is one of
+            ``same_model_retries``.
+        status: The HTTP status of the failure, or None when there was none.
+        error: The error the call raised.
+    """
+
+    index: int
+    model: str
+    attempt: int
+    pause_s: float
+    waited: bool
+    status: int | None
+    error: SkipValidation[BaseException]
+
+
 class FallbackModelCall:
     """A model call that moves to the next one when a call fails before it answers.
 
@@ -105,6 +130,7 @@ class FallbackModelCall:
         stop_statuses: Set[int] = STOP_STATUSES,
         stop_codes: Set[str] | None = None,
         on_fail_over: SkipValidation[Callable[[FailOver], None]] | None = None,
+        on_retry: SkipValidation[Callable[[Retry], None]] | None = None,
         sticky: bool = False,
     ) -> None:
         """Keep the calls in the order they are tried.
@@ -125,6 +151,9 @@ class FallbackModelCall:
                 own ``stop_codes``, like the router's ``project_mode_forbidden``.
             on_fail_over: Called at each move to the next call, with a ``FailOver``. An
                 error it raises is logged and the chain goes on.
+            on_retry: Called before each pause that sends the same call again, with a
+                ``Retry``: a ``Retry-After`` wait or one of ``same_model_retries``. An error
+                it raises is logged and the chain goes on.
             sticky: Start each request with the call that answered last, then the others in
                 the given order, as LiveKit's ``FallbackAdapter(sticky=True)`` does. A dead
                 first call is then tried once, not on every request.
@@ -143,6 +172,7 @@ class FallbackModelCall:
             else (code for call in calls for code in getattr(call, "stop_codes", ()))
         )
         self._on_fail_over = on_fail_over
+        self._on_retry = on_retry
         self._sticky = sticky
         self._active = 0
         self._answered = 0
@@ -207,6 +237,26 @@ class FallbackModelCall:
             self._on_fail_over(event)
         except Exception:
             logger.exception("on_fail_over raised, the chain goes on")
+
+    def _retry(
+        self, index: int, attempt: int, pause_s: float, waited: bool, error: Exception
+    ) -> None:
+        """Tell ``on_retry`` that call ``index`` is sent again after ``pause_s``."""
+        if self._on_retry is None:
+            return
+        event = Retry(
+            index=index,
+            model=model_name(self._calls[index]),
+            attempt=attempt,
+            pause_s=pause_s,
+            waited=waited,
+            status=http_status(error),
+            error=error,
+        )
+        try:
+            self._on_retry(event)
+        except Exception:
+            logger.exception("on_retry raised, the chain goes on")
 
     async def _first(
         self, events: AsyncIterator[ModelEvent], budget: float | None
@@ -302,9 +352,11 @@ class FallbackModelCall:
                     status = http_status(error)
                     decision, delay = self._decide(error, index, last, started, waited, retries)
                     if decision is _Decision.WAIT:
+                        self._retry(index, int(waited) + retries + 1, delay, True, error)
                         await asyncio.sleep(delay)
                         waited = True
                     elif decision is _Decision.RETRY:
+                        self._retry(index, int(waited) + retries + 1, delay, False, error)
                         await asyncio.sleep(delay)
                         retries += 1
                     elif decision is _Decision.RAISE:

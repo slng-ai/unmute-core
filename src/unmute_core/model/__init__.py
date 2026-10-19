@@ -38,7 +38,12 @@ from unmute_core.model._failover import (
     next_step,
     retry_delay,
 )
-from unmute_core.model._fallback import FIRST_EVENT_TIMEOUT_S, FailOver, FallbackModelCall
+from unmute_core.model._fallback import (
+    FIRST_EVENT_TIMEOUT_S,
+    FailOver,
+    FallbackModelCall,
+    Retry,
+)
 from unmute_core.model._openai import OpenAIModelCall
 from unmute_core.model._prompt import (
     MissingVariablesError,
@@ -80,6 +85,7 @@ __all__ = [
     "Next",
     "OpenAIModelCall",
     "ReasoningFilter",
+    "Retry",
     "TextDelta",
     "ToolCall",
     "ToolChoice",
