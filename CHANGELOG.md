@@ -8,11 +8,17 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
+- `FallbackModelCall(start_is_answer=True)` takes a call's `AnswerStarted` as its answer. The first-event budget ends there, as with `start_ends_budget=True`. The chain also passes that `AnswerStarted` on to its reader, once, for the call that answers, and stays with the call. An error after it is raised as it is, like an error after the first text: no retry, no failover, and no `on_retry` or `on_fail_over` call. A call that sends `AnswerStarted` and nothing else ends the request with its own empty answer. Before, an error after the start, but before the first text or the whole tool call, still retried or moved to the next call, so a long tool call stayed inside that window although the provider began at once. The default, `False`, works as before (#67).
 - `Usage.cache_write_tokens` is the number of input tokens a provider wrote to its prompt cache, or `None` when it did not say. It comes after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` read it from `usage.prompt_tokens_details.cache_write_tokens`, as LiveKit's own OpenAI-compatible models do. On LiveKit, `LLMMetrics.cache_creation_tokens` is set, and `LiveKitModel` reads it from a plugin's `CompletionUsage.cache_creation_tokens`. On Pipecat, the usage chunk carries it in `prompt_tokens_details.cache_write_tokens`, which Pipecat's OpenAI service turns into `LLMTokenUsage.cache_creation_input_tokens`. Before, it was dropped (#69).
 
 ### Changed
 
 - `RouterModelCall` and `OpenAIModelCall` yield each `ToolCall` as soon as it is whole, not after the last chunk. A call is whole when the provider starts the next call (a new `index`, or a new `id` when it sends no `index`), or at a chunk whose choice has a `finish_reason`, as LiveKit's own OpenAI-compatible models do. Before, a reader saw every call only after the whole stream, the usage chunk included. A call still open when the stream ends, as when a provider sends no `finish_reason`, comes out at the end as before. The calls keep the order they began in, the `Usage` still comes last, and a call keeps the `extra_content` of all its pieces. A provider must now send the pieces of one call together: a piece that comes after its call went out is dropped with a warning, where before it joined the call. A piece with neither `index` nor `id` still continues the last call (#70).
+
+### Fixed
+
+- A `Retry-After` of 0, or an HTTP date in the past, is no wait hint any more. `retry_delay` returns None for it, as for a missing header. Before, it returned 0.0, which always fits `max_wait_s`, so `FallbackModelCall` took one extra retry with a 0 s pause that did not use up any of `same_model_retries`. Now the call retries on its normal pauses, and the retry counts as one of them. With none left, it moves to the next call. A positive `Retry-After` works as before (#68).
+
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.

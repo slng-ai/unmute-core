@@ -89,9 +89,10 @@ NOW = datetime(2026, 10, 6, 12, 0, 0, tzinfo=UTC)
     [
         ({"Retry-After": "1"}, 1.0),
         ({"retry-after": " 2 "}, 2.0),
-        ({"Retry-After": "0"}, 0.0),
+        ({"Retry-After": "0"}, None),
         ({"Retry-After": "Tue, 06 Oct 2026 12:00:01 GMT"}, 1.0),
-        ({"Retry-After": "Tue, 06 Oct 2026 11:59:00 GMT"}, 0.0),
+        ({"Retry-After": "Tue, 06 Oct 2026 11:59:00 GMT"}, None),
+        ({"Retry-After": "Tue, 06 Oct 2026 12:00:00 GMT"}, None),
         ({"Retry-After": "3"}, None),
         ({"Retry-After": "soon"}, None),
         ({"Retry-After": "-1"}, None),
