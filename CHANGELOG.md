@@ -8,7 +8,12 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
+- `FallbackModelCall(start_is_answer=True)` takes a call's `AnswerStarted` as its answer. The first-event budget ends there, as with `start_ends_budget=True`. The chain also passes that `AnswerStarted` on to its reader, once, for the call that answers, and stays with the call. An error after it is raised as it is, like an error after the first text: no retry, no failover, and no `on_retry` or `on_fail_over` call. A call that sends `AnswerStarted` and nothing else ends the request with its own empty answer. Before, an error after the start, but before the first text or the whole tool call, still retried or moved to the next call, so a long tool call stayed inside that window although the provider began at once. The default, `False`, works as before (#67).
 - `Usage.cache_write_tokens` is the number of input tokens a provider wrote to its prompt cache, or `None` when it did not say. It comes after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` read it from `usage.prompt_tokens_details.cache_write_tokens`, as LiveKit's own OpenAI-compatible models do. On LiveKit, `LLMMetrics.cache_creation_tokens` is set, and `LiveKitModel` reads it from a plugin's `CompletionUsage.cache_creation_tokens`. On Pipecat, the usage chunk carries it in `prompt_tokens_details.cache_write_tokens`, which Pipecat's OpenAI service turns into `LLMTokenUsage.cache_creation_input_tokens`. Before, it was dropped (#69).
+
+### Fixed
+
+- A `Retry-After` of 0, or an HTTP date in the past, is no wait hint any more. `retry_delay` returns None for it, as for a missing header. Before, it returned 0.0, which always fits `max_wait_s`, so `FallbackModelCall` took one extra retry with a 0 s pause that did not use up any of `same_model_retries`. Now the call retries on its normal pauses, and the retry counts as one of them. With none left, it moves to the next call. A positive `Retry-After` works as before (#68).
 
 ## 0.19.1
 
