@@ -58,6 +58,18 @@ Lookup("hours", local_tool(store_hours), {"closes_at": "close"}, background=True
 2. Every model request waits for it, up to `first_request_timeout_s` (10 seconds). A fixed greeting plays at once.
 3. A greeting line may not name a value that only a background lookup fills.
 
+## Start a lookup nobody waits for
+
+A lookup that only tells another system something, like a "call started" ping, needs no wait. Add `wait=False` to a background lookup.
+
+```python
+Lookup("call_started", local_tool(notify_crm), {}, background=True, wait=False)
+```
+
+1. No model request waits for it. A slow one does not delay the first reply.
+2. The call's end waits for it, up to `end_timeout_s` (5 seconds). A failure does not stop it.
+3. It needs `background=True`. Otherwise `Lookup` raises `ValueError`.
+
 ## Use it in a call
 
 Give the prefetch to `CallHooks`. `open_call` runs it for you.

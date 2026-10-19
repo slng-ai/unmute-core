@@ -127,6 +127,7 @@ hooks = Hooks(EventTool(log_call, on=["call_end"]))
 1. The events are `first_user_message`, `call_end`, `tool_succeeded:<tool>` and `tool_failed:<tool>`.
 2. Every required argument must be locked. The model never fills one.
 3. `assign={"booking_ref": "ref"}` saves a key of the result into the State. `note=True` shows the result to the model.
+4. Every model request waits for these tools, up to `first_request_timeout_s`. A tool that only tells another system something can use `wait=False`: no request waits for it, and the call's end still does. A note from such a tool can only reach a later request. See [EventTool](/core/reference/call-lifecycle#eventtool).
 
 ## Handle a failure
 

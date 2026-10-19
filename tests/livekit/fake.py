@@ -16,11 +16,13 @@ class Reply:
     """One scripted model reply: text, then tool calls.
 
     ``extra`` is the provider data of its first call, as Gemini 3 signs only that one.
+    ``usage`` is sent as the last chunk.
     """
 
     text: str = ""
     calls: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     extra: dict[str, Any] = field(default_factory=dict)
+    usage: llm.CompletionUsage | None = None
 
 
 def call(name: str, text: str = "", **arguments: Any) -> Reply:
@@ -127,6 +129,8 @@ class _Stream(llm.LLMStream):
                     delta=llm.ChoiceDelta(role="assistant", tool_calls=[tool]),
                 )
             )
+        if self._reply.usage is not None:
+            self._event_ch.send_nowait(llm.ChatChunk(id=utils.shortuuid(), usage=self._reply.usage))
 
 
 class Voice(tts.TTS):
