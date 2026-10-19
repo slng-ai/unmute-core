@@ -1,0 +1,138 @@
+{
+  "name": "step_tool_root_keywords",
+  "about": "A task step's tool locks its arguments with additionalProperties false at the root of its parameters. The model gets the parameters object as it is, with the same keys in the same order, on every adapter that runs tasks.",
+  "instructions": "You answer calls for a small bakery.",
+  "tasks": {
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "find_order",
+        "when": "The caller asks about an order.",
+        "instructions": "Find the order the caller names.",
+        "tools": [
+          "lookup_order"
+        ],
+        "assign": [
+          {
+            "variable": "order_id",
+            "path": [
+              "order",
+              "id"
+            ],
+            "optional": true
+          }
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {
+              "found": [
+                true
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "task_only_tools": [
+      "lookup_order"
+    ]
+  },
+  "tool_options": {
+    "lookup_order": {
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "additionalProperties": false,
+        "description": "Look up one bakery order."
+      }
+    }
+  },
+  "tool_results": {
+    "lookup_order": [
+      {
+        "found": true,
+        "order": {
+          "id": "B-7"
+        },
+        "status": "open"
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Where is order B-7?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "find_order"
+            }
+          ]
+        },
+        {
+          "site": "task:find_order",
+          "tool_parameters": {
+            "lookup_order": {
+              "type": "object",
+              "properties": {
+                "order_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "order_id"
+              ],
+              "additionalProperties": false,
+              "description": "Look up one bakery order."
+            }
+          },
+          "calls": [
+            {
+              "name": "lookup_order",
+              "arguments": {
+                "order_id": "B-7"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "text": "Order B-7 is in the oven."
+        }
+      ],
+      "spoken": [
+        "Order B-7 is in the oven."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": "B-7",
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "lookup_order",
+        "arguments": {
+          "order_id": "B-7"
+        }
+      }
+    ],
+    "events": [
+      "task.started task=find_order",
+      "task.ended_on_tool task=find_order saved=order_id",
+      "task.completed task=find_order saved=order_id"
+    ]
+  }
+}

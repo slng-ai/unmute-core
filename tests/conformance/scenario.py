@@ -129,6 +129,9 @@ class Reply(_Strict):
             text. What follows the prompt, like a greeting cue, differs by adapter.
         not_last_role: When set, a role the request's last message must not have, like
             ``assistant`` for a request that must not end on the agent's own line.
+        tool_parameters: When set, tool name to the ``parameters`` the request must carry for
+            it, key for key and in the same order. Root keywords like
+            ``additionalProperties`` must reach the model as they are.
     """
 
     site: str
@@ -153,6 +156,7 @@ class Reply(_Strict):
     model: str | None = None
     filled: str | None = None
     not_last_role: str | None = None
+    tool_parameters: dict[str, dict[str, Any]] | None = None
 
 
 class Turn(_Strict):
@@ -561,6 +565,20 @@ class ScriptedModel:
             self.problems.append(
                 f"request {number} offered {tools}, the script expects {reply.tools}"
             )
+        for name, wanted in (reply.tool_parameters or {}).items():
+            sent = next(
+                (
+                    tool["function"].get("parameters")
+                    for tool in request.tools
+                    if tool["function"]["name"] == name
+                ),
+                None,
+            )
+            if json.dumps(sent) != json.dumps(wanted):
+                self.problems.append(
+                    f"request {number} sent {name} with parameters {sent}, the script expects "
+                    f"{wanted}"
+                )
         if reply.model is not None and request.model != reply.model:
             self.problems.append(
                 f"request {number} went to {request.model!r}, the script expects {reply.model!r}"
