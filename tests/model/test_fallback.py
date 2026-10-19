@@ -14,6 +14,7 @@ from unmute_core.model import (
     FallbackModelCall,
     ModelEvent,
     ModelRequest,
+    Retry,
     TextDelta,
     Usage,
     answered_model,
@@ -293,6 +294,32 @@ async def test_on_fail_over_gets_one_event_per_move_in_order() -> None:
         FailOver(index=0, failed="a", next="b", status=503, error=boom),
         FailOver(index=1, failed="b", next="c", status=None, error=None),
     ]
+
+
+async def test_on_retry_gets_one_event_per_pause_before_it(sleeps: list[float]) -> None:
+    busy = StatusError(429, {"retry-after": "1"})
+    down = StatusError(503)
+    calls = [Named("a", busy, down, ["ok"])]
+    events: list[Retry] = []
+    chain = FallbackModelCall(
+        calls, same_model_retries=SAME_MODEL_RETRIES_S, on_retry=events.append
+    )
+    assert await collect(chain) == ["ok"]
+    assert events == [
+        Retry(index=0, model="a", attempt=1, pause_s=1.0, waited=True, status=429, error=busy),
+        Retry(index=0, model="a", attempt=2, pause_s=0.25, waited=False, status=503, error=down),
+    ]
+    assert sleeps == [1.0, 0.25]
+
+
+async def test_a_retry_callback_that_raises_does_not_break_the_chain(sleeps: list[float]) -> None:
+    def broken(event: Retry) -> None:
+        raise RuntimeError("bug")
+
+    chain = FallbackModelCall(
+        [FakeCall(StatusError(503), ["ok"])], same_model_retries=(0.25,), on_retry=broken
+    )
+    assert await collect(chain) == ["ok"]
 
 
 async def test_a_callback_that_raises_does_not_break_the_chain() -> None:

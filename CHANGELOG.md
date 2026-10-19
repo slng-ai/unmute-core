@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `FallbackModelCall(on_retry=...)` is called before each pause that sends the same call again, with a `Retry`: the call, which retry it is, the pause, whether it is a `Retry-After` wait, and the error. Before, only a move to the next call was reported, through `on_fail_over`, and a same-model retry was only logged.
+
 ## 0.18.1
 
 This release lets a step's opening say the line its replies pick. No API changed. `unmute_core.require("0.18.0")` accepts 0.18.1, so code built for 0.18.0 needs no change.
