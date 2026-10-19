@@ -126,7 +126,7 @@ A call streams three kinds of event.
 1. `extra` on a `ToolCall` holds provider data sent with the call, like a Gemini thought signature. It is empty when there is none. See [Thought signatures](/core/reference/slng#gemini-thought-signatures).
 2. `TextDelta` and `ToolCall` carry the same `response_id` and `request_id` as `Usage`, as far as the provider has sent them. So a reply cut off before its `Usage`, like one a caller talks over, still names its answer and its HTTP request. `RouterModelCall` and `OpenAIModelCall` fill them. A call of your own may leave them `None`.
 3. Both adapters put `Usage` on the `llm` span. Code that reads events skips a `Usage` or an `AnswerStarted` it has no use for.
-4. A reply that is only a tool call shows its `ToolCall` when the whole call has streamed. `AnswerStarted` tells you earlier that the provider is answering. `FallbackModelCall(start_ends_budget=True)` uses it.
+4. `RouterModelCall` and `OpenAIModelCall` yield a `ToolCall` as soon as it is whole. A call is whole when the provider starts the next call, or sends a `finish_reason`. A call still open when the stream ends, as when a provider sends no `finish_reason`, comes out at the end. The calls keep the order they began in, and the `Usage` comes last. A provider must send the pieces of one call together. A piece that comes after its call went out is dropped with a warning. `AnswerStarted` tells you earlier that the provider is answering. `FallbackModelCall(start_ends_budget=True)` uses it.
 5. Every event is a frozen Pydantic dataclass. A value of the wrong type, like `ToolCall(id=1, ...)`, raises a `ValidationError`. Token counts in `Usage` pass through unchecked, as a provider sends them.
 
 ### ToolCall

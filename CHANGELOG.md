@@ -10,6 +10,10 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - `Usage.cache_write_tokens` is the number of input tokens a provider wrote to its prompt cache, or `None` when it did not say. It comes after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` read it from `usage.prompt_tokens_details.cache_write_tokens`, as LiveKit's own OpenAI-compatible models do. On LiveKit, `LLMMetrics.cache_creation_tokens` is set, and `LiveKitModel` reads it from a plugin's `CompletionUsage.cache_creation_tokens`. On Pipecat, the usage chunk carries it in `prompt_tokens_details.cache_write_tokens`, which Pipecat's OpenAI service turns into `LLMTokenUsage.cache_creation_input_tokens`. Before, it was dropped (#TBD).
 
+### Changed
+
+- `RouterModelCall` and `OpenAIModelCall` yield each `ToolCall` as soon as it is whole, not after the last chunk. A call is whole when the provider starts the next call (a new `index`, or a new `id` when it sends no `index`), or at a chunk whose choice has a `finish_reason`, as LiveKit's own OpenAI-compatible models do. Before, a reader saw every call only after the whole stream, the usage chunk included. A call still open when the stream ends, as when a provider sends no `finish_reason`, comes out at the end as before. The calls keep the order they began in, the `Usage` still comes last, and a call keeps the `extra_content` of all its pieces. A provider must now send the pieces of one call together: a piece that comes after its call went out is dropped with a warning, where before it joined the call. A piece with neither `index` nor `id` still continues the last call (#TBD).
+
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
