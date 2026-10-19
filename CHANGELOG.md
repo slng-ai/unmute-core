@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Fixed
+
+- `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#TBD).
+
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
