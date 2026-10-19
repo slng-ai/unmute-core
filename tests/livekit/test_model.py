@@ -193,6 +193,52 @@ async def test_a_routed_calls_signature_goes_back_with_the_call() -> None:
     assert find["extra_content"] == SIGNED
 
 
+TEXT_SIGNED = {"google": {"thought_signature": "sig-text"}}
+
+
+async def test_a_spoken_replys_signature_goes_back_with_the_message() -> None:
+    reply = [chunk({"content": "Hello.", "extra_content": TEXT_SIGNED})]
+    router = ScriptedRouter(reply, [chunk({"content": "Bye."})])
+    model = RouterModelCall(
+        CallInfo(agent_id="orders", session_id="call-1"),
+        model="m",
+        base_url="unused",
+        client=router.client(),
+    )
+    await _run(UnmuteAgent(AgentSpec("Orders.", model=model)), None, "Hi", "Thanks")
+
+    [spoken] = [
+        message
+        for message in json.loads(router.requests[-1].content)["messages"]
+        if message["role"] == "assistant"
+    ]
+    assert spoken["content"] == "Hello."
+    assert spoken["extra_content"] == TEXT_SIGNED
+
+
+class SignedText:
+    """Answers with two text pieces, the second one signed."""
+
+    model = "signed"
+    provider = "test"
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        yield TextDelta("<think>no</think>Hel")
+        yield TextDelta("lo.", extra=TEXT_SIGNED)
+
+
+@pytest.mark.parametrize("trace_attempts", [True, False], ids=["each attempt", "the request"])
+async def test_a_chains_text_keeps_its_provider_data(trace_attempts: bool) -> None:
+    ctx = llm.ChatContext()
+    ctx.add_message(role="user", content="Hi")
+    model = ModelCallLLM(FallbackModelCall([SignedText()]), trace_attempts=trace_attempts)
+    async with model.chat(chat_ctx=ctx) as stream:
+        deltas = [chunk.delta async for chunk in stream if chunk.delta]
+
+    assert "".join(delta.content or "" for delta in deltas) == "Hello."
+    assert [delta.extra for delta in deltas if delta.extra] == [TEXT_SIGNED]
+
+
 async def _hooked_native_request(added: list[dict[str, Any]]) -> tuple[Any, llm.ChatContext]:
     """Run one turn on a native LLM whose ``before_model`` hook adds ``added`` to the chat."""
     hooks = Hooks()

@@ -74,6 +74,43 @@ async def test_it_streams_text_a_tool_call_with_its_extra_content_and_usage_last
     ]
 
 
+async def test_the_texts_provider_data_goes_out_on_the_text() -> None:
+    early = {"google": {"thought_signature": "early"}}
+    late = {"google": {"thought_signature": "late"}}
+    router = FakeRouter(
+        [
+            chunk({"extra_content": early}),
+            chunk({"content": "Hi"}),
+            chunk({"content": "!"}),
+            chunk({"content": "", "extra_content": late}),
+        ]
+    )
+    call = OpenAIModelCall("gpt-test", client=router.client())
+
+    events = [event async for event in call.stream(REQUEST)]
+
+    assert events == [
+        AnswerStarted(response_id="c1"),
+        TextDelta("Hi", response_id="c1", extra=early),
+        TextDelta("!", response_id="c1"),
+        TextDelta("", response_id="c1", extra=late),
+    ]
+
+
+async def test_provider_data_with_no_text_never_starts_an_answer() -> None:
+    signature = {"google": {"thought_signature": "sig"}}
+    tool = {"tool_calls": [{"index": 0, "id": "t1", "function": {"name": "book"}}]}
+    router = FakeRouter([chunk({"extra_content": signature}), chunk(tool)])
+    call = OpenAIModelCall("gpt-test", client=router.client())
+
+    events = [event async for event in call.stream(REQUEST)]
+
+    assert events == [
+        AnswerStarted(response_id="c1"),
+        ToolCall("t1", "book", "", response_id="c1"),
+    ]
+
+
 def _usage() -> dict[str, int]:
     return {"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7}
 
