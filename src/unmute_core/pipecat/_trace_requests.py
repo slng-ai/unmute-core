@@ -237,6 +237,8 @@ class RequestTracker:
                     data.value.prompt_tokens,
                     data.value.completion_tokens,
                     cached_input_tokens=data.value.cache_read_input_tokens,
+                    reasoning_tokens=data.value.reasoning_tokens,
+                    total_tokens=data.value.total_tokens,
                 )
             elif isinstance(data, TTFBMetricsData) and isinstance(source, LLMService):
                 self._ttfb = data.value

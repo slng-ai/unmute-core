@@ -318,7 +318,14 @@ class SideRequests:
                 for call in (message.tool_calls or [] if message else [])
                 if call.type == "function"
             ),
-            Usage(usage.prompt_tokens, usage.completion_tokens) if usage else None,
+            Usage(
+                usage.prompt_tokens,
+                usage.completion_tokens,
+                reasoning_tokens=getattr(usage.completion_tokens_details, "reasoning_tokens", None),
+                total_tokens=usage.total_tokens,
+            )
+            if usage
+            else None,
         )
 
     async def google_ask(self, llm: "GoogleLLMService", request: ModelRequest) -> ModelAnswer:
@@ -359,7 +366,12 @@ class SideRequests:
                 for part in parts
                 if (call := part.function_call) is not None
             ),
-            Usage(usage.prompt_token_count or 0, usage.candidates_token_count or 0)
+            Usage(
+                usage.prompt_token_count or 0,
+                usage.candidates_token_count or 0,
+                reasoning_tokens=usage.thoughts_token_count,
+                total_tokens=usage.total_token_count,
+            )
             if usage
             else None,
         )
