@@ -4,7 +4,17 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.19.2
+
+This release makes a fallback chain, its metrics and the SLNG router call behave more like LiveKit's own models, and lets a tool on an event run with nothing waiting for it. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Changed" and "Fixed" before you upgrade, since some streams and requests now look different.
+
+### Highlights
+
+- **Tools nobody waits for.** `EventTool(wait=False)` and `Lookup(background=True, wait=False)` run a notify-only tool without holding any model request.
+- **A first chunk can be the answer.** `FallbackModelCall(start_is_answer=True)` stays with a call once the provider began, so a long tool call is never sent again.
+- **Metrics that name the call that answered.** On LiveKit, chunks carry the provider's answer id, and `ttft` and `duration` after a fallback time the call that answered.
+- **Tool calls sooner.** Each tool call goes out as soon as it is whole.
+- **Requests as written.** The router call sends a plain streamed request, applies openai request options like `timeout` and `extra_query`, and leaves placeholders alone when it fills none.
 
 ### Added
 
