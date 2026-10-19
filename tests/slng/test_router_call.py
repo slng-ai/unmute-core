@@ -143,6 +143,63 @@ SIGNED = {"google": {"thought_signature": "sig-1"}}
 SKIPPED = {"google": {"thought_signature": "skip_thought_signature_validator"}}
 
 
+def _piece(index: int | None, call_id: str | None, name: str | None, arguments: str) -> dict:
+    """One tool call piece, as a provider streams it. A null index or id is sent as null."""
+    function = {"name": name, "arguments": arguments} if name else {"arguments": arguments}
+    return {"index": index, "id": call_id, "type": "function", "function": function}
+
+
+@pytest.mark.parametrize(
+    ("deltas", "expected"),
+    [
+        pytest.param(
+            [
+                [_piece(0, "t1", "book", '{"a"')],
+                [_piece(1, "t2", "find", "{}")],
+                [_piece(0, None, None, ": 1}")],
+            ],
+            [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
+            id="numbered calls join by index",
+        ),
+        pytest.param(
+            [[_piece(None, "t1", "book", '{"a": 1}')], [_piece(None, "t2", "find", "{}")]],
+            [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
+            id="calls without index in separate chunks stay apart",
+        ),
+        pytest.param(
+            [[_piece(None, "t1", "book", '{"a": 1}'), _piece(None, "t2", "find", "{}")]],
+            [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
+            id="calls without index in one chunk stay apart",
+        ),
+        pytest.param(
+            [
+                [_piece(None, "t1", "book", '{"a"')],
+                [_piece(None, "t2", "find", "{")],
+                [_piece(None, None, None, "}")],
+                [_piece(None, "t1", None, ": 1}")],
+            ],
+            [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
+            id="a piece with an id seen before, or with neither, continues a call",
+        ),
+    ],
+)
+async def test_tool_call_pieces_join_by_index_else_by_id(
+    deltas: list[list[dict]], expected: list[tuple[str, str, str]]
+) -> None:
+    router = FakeRouter([chunk({"tool_calls": delta}) for delta in deltas])
+    events = [event async for event in router_call(router).stream(REQUEST)]
+    assert [(e.id, e.name, e.arguments) for e in events if isinstance(e, ToolCall)] == expected
+
+
+async def test_a_call_without_index_keeps_its_provider_data() -> None:
+    first = {**_piece(None, "t1", "book", "{}"), "extra_content": SIGNED}
+    router = FakeRouter(
+        [chunk({"tool_calls": [first, _piece(None, "t2", "find", "{}")]})],
+    )
+    events = [event async for event in router_call(router).stream(REQUEST)]
+    assert [e.extra for e in events if isinstance(e, ToolCall)] == [SIGNED, {}]
+
+
 def _replayed(*calls: dict[str, Any]) -> ModelRequest:
     """A request that replays one assistant message with these tool calls."""
     return ModelRequest(
