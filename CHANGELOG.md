@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `ModelCallLLM(prompts_as_written=True)` on LiveKit and `ModelCallLLMService(prompts_as_written=True)` on Pipecat send each prompt as written. A `{{name}}` in it is plain text, so a prompt that shows the model JSON, code or a template of its own works without a call state. Before, every `{{name}}` was a placeholder, and one the state did not have raised `MissingVariablesError` before the request went out. `template_variables(..., as_written=True)` is the same rule for code that fills prompts itself.
+
 ## 0.18.2
 
 This release reports same-model retries, keeps the cached tokens and the answer's ids in `Usage`, and sends a tool's whole parameters on Pipecat. No API was removed. `unmute_core.require("0.18.0")` accepts 0.18.2, so code built for 0.18.0 needs no change.

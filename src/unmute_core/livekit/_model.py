@@ -102,6 +102,7 @@ class ModelCallLLM(llm.LLM):
         trace: SessionTrace | None = None,
         site: str = "",
         call: CallHooks | None = None,
+        prompts_as_written: bool = False,
     ) -> None:
         """Keep the model call and what each request reads.
 
@@ -113,11 +114,17 @@ class ModelCallLLM(llm.LLM):
             site: The prompt site of each request, until changed.
             call: The call's hooks. Each request waits for the tools on events and ends
                 with their notes. None uses the trace's.
+            prompts_as_written: True sends each prompt as written, for prompts that are not
+                templates: a ``{{name}}`` in them is plain text, not a placeholder.
         """
         super().__init__()
         self._model = model
         self._node = ModelNode(
-            state=state, model=model, trace=trace, call=call or (trace.call if trace else None)
+            state=state,
+            model=model,
+            trace=trace,
+            call=call or (trace.call if trace else None),
+            prompts_as_written=prompts_as_written,
         )
         self.site = site
 
@@ -360,6 +367,7 @@ class ModelNode:
         trace: SessionTrace | None,
         call: CallHooks | None = None,
         metrics_llm: llm.LLM | None = None,
+        prompts_as_written: bool = False,
     ) -> None:
         """Keep what every request reads.
 
@@ -374,12 +382,15 @@ class ModelNode:
                 call request ends with one ``LLMMetrics`` on it, because no LiveKit
                 ``LLMStream`` runs the request and so none reports it. A plugin's request
                 reports itself, and so does one that ``ModelCallLLM.chat`` runs.
+            prompts_as_written: True sends each prompt as written: a ``{{name}}`` in it is
+                plain text, not a placeholder.
         """
         self.state = state
         self.model = model
         self.trace = trace
         self.call = call
         self.metrics_llm = metrics_llm
+        self.prompts_as_written = prompts_as_written
 
     def adopt_trace(self, trace: SessionTrace) -> None:
         """Record every request into ``trace`` from now on, as a handoff's new agent does."""
@@ -438,8 +449,11 @@ class ModelNode:
         )
         ctx, request = prepared.ctx, prepared.request
         prompts = _prompt_messages(ctx)
-        variables = template_variables([message for _, message in prompts], self.state, site)
-        filled = _filled(ctx, prompts, variables)
+        as_written = self.prompts_as_written
+        variables = template_variables(
+            [message for _, message in prompts], self.state, site, as_written=as_written
+        )
+        filled = ctx if as_written else _filled(ctx, prompts, variables)
         telemetry = self.trace.telemetry if self.trace else None
         span = None
         if self.trace is not None and telemetry is not None:

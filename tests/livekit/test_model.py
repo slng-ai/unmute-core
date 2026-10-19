@@ -419,3 +419,16 @@ async def test_save_values_with_a_free_value_shows_the_values_and_offers_the_too
     [request] = called.requests
     assert any(is_values(m["role"], m["content"]) for m in request.messages)
     assert [tool["function"]["name"] for tool in request.tools] == [SAVE_VALUES_TOOL]
+
+
+async def test_a_prompt_sent_as_written_keeps_its_braces() -> None:
+    model = ScriptedCall("Sure.")
+    ctx = llm.ChatContext.empty()
+    ctx.add_message(role="system", content="Reply with {{name}} in braces.")
+    ctx.add_message(role="user", content="Hi")
+    async with ModelCallLLM(model, prompts_as_written=True).chat(chat_ctx=ctx) as stream:
+        [chunk async for chunk in stream]
+
+    [request] = model.requests
+    assert _system(request.messages) == "Reply with {{name}} in braces."
+    assert request.variables == {}

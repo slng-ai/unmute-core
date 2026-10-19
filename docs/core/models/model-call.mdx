@@ -30,7 +30,7 @@ llm = ModelCallLLMService(model, state=state)
 
 </CodeGroup>
 
-1. The library fills the prompt's `{{placeholders}}` from `state`, then sends it.
+1. The library fills the prompt's `{{placeholders}}` from `state`, then sends it. A prompt that is not a template, like one that shows the model JSON or code with `{{` in it, needs `prompts_as_written=True` on either adapter. Without a state, any `{{name}}` raises `MissingVariablesError`.
 2. Pass `base_url=` and `api_key=` to reach another OpenAI-compatible endpoint.
 3. It needs the `openai` package, which comes with the `slng` extra and with Pipecat.
 

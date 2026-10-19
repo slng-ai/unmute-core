@@ -130,6 +130,9 @@ session = AgentSession(llm=ModelCallLLM(router, state=state), ...)
 <ParamField path="call" type="CallHooks | None" default="None">
   The call's hooks. Each request waits for the tools on events and ends with their notes. None uses the trace's hooks.
 </ParamField>
+<ParamField path="prompts_as_written" type="bool" default="False">
+  `True` sends each prompt as written, for prompts that are not templates. A `{{name}}` in them is plain text, so no state is read and no `MissingVariablesError` is raised.
+</ParamField>
 
 ### filled_llm
 

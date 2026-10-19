@@ -128,6 +128,10 @@ def test_the_router_gets_every_path_in_its_own_form() -> None:
     ]
 
 
+def test_a_prompt_sent_as_written_reads_no_placeholder() -> None:
+    assert template_variables([system("Reply in {{json}} only")], None, as_written=True) == {}
+
+
 def test_only_names_the_prompt_uses_are_sent(state: CallState) -> None:
     messages = [system("No placeholders."), {"role": "user", "content": "{{count}}"}]
     assert template_variables(messages, state) == {}

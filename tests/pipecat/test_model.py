@@ -287,3 +287,14 @@ async def test_cleanup_closes_the_summarizer_the_flows_were_given() -> None:
     h = Harness(llm=llm, summarizer=summarizer)
     await h.llm.cleanup()
     assert (first.closed, summarizer.closed) == (1, 1)
+
+
+async def test_a_prompt_sent_as_written_keeps_its_braces() -> None:
+    model = Scripted([TextDelta("Sure.")])
+    llm = service(model, "Reply with {{name}} in braces.", prompts_as_written=True)
+    stream = await llm.get_chat_completions(LLMContext())
+    [chunk async for chunk in stream]
+
+    [request] = model.requests
+    assert request.messages[0]["content"] == "Reply with {{name}} in braces."
+    assert request.variables == {}
