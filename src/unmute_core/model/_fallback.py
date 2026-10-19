@@ -7,7 +7,8 @@ option, off by default: the SLNG Context Router already retries behind its own p
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator, Callable, Sequence, Set
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence, Set
+from contextlib import asynccontextmanager
 from enum import Enum, auto
 from typing import Annotated, ClassVar
 
@@ -324,7 +325,7 @@ class FallbackModelCall:
             return _Decision.RAISE, 0.0
         return _Decision.FAIL_OVER, 0.0
 
-    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+    async def stream(self, request: ModelRequest) -> AsyncGenerator[ModelEvent]:
         """Stream from the first call that starts answering.
 
         Raises:
@@ -345,47 +346,63 @@ class FallbackModelCall:
             retries = 0
             started = loop.time()
             while True:
-                events = aiter(call.stream(request))
-                try:
-                    first, usage = await self._first(events, self._left(started))
-                except Exception as error:
-                    status = http_status(error)
-                    decision, delay = self._decide(error, index, last, started, waited, retries)
-                    if decision is _Decision.WAIT:
-                        self._retry(index, int(waited) + retries + 1, delay, True, error)
-                        await asyncio.sleep(delay)
-                        waited = True
-                    elif decision is _Decision.RETRY:
-                        self._retry(index, int(waited) + retries + 1, delay, False, error)
-                        await asyncio.sleep(delay)
-                        retries += 1
-                    elif decision is _Decision.RAISE:
-                        raise
-                    else:
-                        logger.warning(
-                            "model call %d failed (status %s, %s), trying the next one",
-                            index,
-                            status,
-                            type(error).__name__,
-                        )
-                        self._fail_over(index, next_index, status, error)
+                async with _closing(call.stream(request)) as events:
+                    try:
+                        first, usage = await self._first(events, self._left(started))
+                    except Exception as error:
+                        status = http_status(error)
+                        decision, delay = self._decide(error, index, last, started, waited, retries)
+                        if decision is _Decision.WAIT:
+                            self._retry(index, int(waited) + retries + 1, delay, True, error)
+                            await asyncio.sleep(delay)
+                            waited = True
+                        elif decision is _Decision.RETRY:
+                            self._retry(index, int(waited) + retries + 1, delay, False, error)
+                            await asyncio.sleep(delay)
+                            retries += 1
+                        elif decision is _Decision.RAISE:
+                            raise
+                        else:
+                            logger.warning(
+                                "model call %d failed (status %s, %s), trying the next one",
+                                index,
+                                status,
+                                type(error).__name__,
+                            )
+                            self._fail_over(index, next_index, status, error)
+                            break
+                        continue
+                    if first is None and not last:
+                        logger.warning("model call %d answered nothing, trying the next one", index)
+                        self._fail_over(index, next_index, None, None)
                         break
-                    continue
-                if first is None and not last:
-                    logger.warning("model call %d answered nothing, trying the next one", index)
-                    self._fail_over(index, next_index, None, None)
-                    break
-                if first is None:
-                    logger.warning("the last model call answered nothing: an empty reply")
-                    if usage is not None:
-                        yield usage
-                if first is not None:
-                    self._active = self._answered = (
-                        index  # ponytail: concurrent requests race, last wins
-                    )
-                    yield first
-                    async for event in events:
-                        yield event
-                    if usage is not None:
-                        yield usage
-                return
+                    if first is None:
+                        logger.warning("the last model call answered nothing: an empty reply")
+                        if usage is not None:
+                            yield usage
+                    if first is not None:
+                        self._active = self._answered = (
+                            index  # ponytail: concurrent requests race, last wins
+                        )
+                        yield first
+                        async for event in events:
+                            yield event
+                        if usage is not None:
+                            yield usage
+                    return
+
+
+@asynccontextmanager
+async def _closing(stream: AsyncIterator[ModelEvent]) -> AsyncGenerator[AsyncIterator[ModelEvent]]:
+    """Yield a call's stream, then close it once the chain is done with it.
+
+    A stream is done with when it fails, times out, ends, or its reader stops early, like
+    a caller who talks over the reply. Without the close, the call's request stays open
+    until the stream is garbage collected.
+    """
+    events = aiter(stream)
+    try:
+        yield events
+    finally:
+        if (close := getattr(events, "aclose", None)) is not None:
+            await close()
