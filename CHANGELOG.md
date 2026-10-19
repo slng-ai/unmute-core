@@ -4,11 +4,13 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.19.1
+
+This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
 
 ### Added
 
-- `TextDelta.extra` carries the provider data a model sends with its text, like a Gemini thought signature on a text reply. `RouterModelCall` and `OpenAIModelCall` fill it. Data that comes before any text waits for the first piece, and data with no text at all is dropped, so it never starts an answer. On LiveKit, `ModelCallLLM` passes it on as `ChoiceDelta.extra`, so LiveKit keeps it on the assistant message and sends it back as the message's `extra_content` on later requests, as with LiveKit's own OpenAI-compatible models. Before, it was dropped, and Gemini lost the reasoning of its earlier spoken turns. It comes after the other fields, so `TextDelta("Hi")` works as before.
+- `TextDelta.extra` carries the provider data a model sends with its text, like a Gemini thought signature on a text reply. `RouterModelCall` and `OpenAIModelCall` fill it. Data that comes before any text waits for the first piece, and data with no text at all is dropped, so it never starts an answer. On LiveKit, `ModelCallLLM` passes it on as `ChoiceDelta.extra`, so LiveKit keeps it on the assistant message and sends it back as the message's `extra_content` on later requests, as with LiveKit's own OpenAI-compatible models. Before, it was dropped, and Gemini lost the reasoning of its earlier spoken turns. It comes after the other fields, so `TextDelta("Hi")` works as before (#65).
 
 ## 0.19.0
 
