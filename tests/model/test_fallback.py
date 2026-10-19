@@ -6,6 +6,7 @@ The cases check behaviour only, with fake calls instead of LiveKit streams.
 import asyncio
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -512,14 +513,14 @@ class StartsThen:
             yield item
 
 
-def watched(*calls: object, **options: object) -> tuple[FallbackModelCall, list[object]]:
+def watched(*calls: Any, **options: Any) -> tuple[FallbackModelCall, list[object]]:
     """Return a chain with both callbacks and the list they fill."""
     seen: list[object] = []
     chain = FallbackModelCall(
         list(calls),
         on_fail_over=seen.append,
         on_retry=seen.append,
-        **options,  # type: ignore[arg-type]
+        **options,
     )
     return chain, seen
 
