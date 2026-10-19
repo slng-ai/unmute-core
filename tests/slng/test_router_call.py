@@ -747,3 +747,21 @@ async def test_variables_from_the_calls_body_also_make_the_router_fill() -> None
     [event async for event in call.stream(ModelRequest(messages=SPACED))]
 
     assert router.body["messages"][0]["content"] == "Say {{name}} and {{a__b}} as text."
+
+
+async def test_the_request_carries_the_sdk_headers_of_a_plain_streamed_create() -> None:
+    router = FakeRouter(headers={"x-request-id": "req-1"})
+    client = router.client()
+    call = RouterModelCall(CALL, model="gpt-test", client=client)
+
+    events = [event async for event in call.stream(REQUEST)]
+    plain = await client.chat.completions.create(model="gpt-test", messages=[], stream=True)
+    [chunk async for chunk in plain]
+
+    routed, direct = (
+        {name: value for name, value in sent.headers.items() if name.startswith("x-stainless-")}
+        for sent in router.requests
+    )
+    assert "x-stainless-raw-response" not in routed
+    assert routed == direct
+    assert any(getattr(event, "request_id", None) == "req-1" for event in events)

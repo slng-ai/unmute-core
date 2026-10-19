@@ -19,6 +19,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - A `Retry-After` of 0, or an HTTP date in the past, is no wait hint any more. `retry_delay` returns None for it, as for a missing header. Before, it returned 0.0, which always fits `max_wait_s`, so `FallbackModelCall` took one extra retry with a 0 s pause that did not use up any of `same_model_retries`. Now the call retries on its normal pauses, and the retry counts as one of them. With none left, it moves to the next call. A positive `Retry-After` works as before (#68).
 - `RouterModelCall` rewrites a prompt's placeholders (`{{ a.b }}` to `{{a__b}}`) only when the router fills variables, that is when the request or the call's `body` carries `template_variables`. Before, it rewrote them on every request, so a prompt that shows a literal `{{ name }}` reached the model changed even when nothing was filled. With no variables, the messages now go out exactly as written (#71).
+- `RouterModelCall` sends the headers of a plain streamed `chat.completions.create`. It used openai's `with_streaming_response`, which adds `x-stainless-raw-response: stream`. It now reads the response headers, like `x-request-id` and `x-slng-*`, from the stream's own response (#72).
 
 ## 0.19.1
 
