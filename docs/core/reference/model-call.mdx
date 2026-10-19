@@ -322,7 +322,7 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
   How long a call may take to start answering, its same-model retries included. `None` waits as long as the call does. `FIRST_EVENT_TIMEOUT_S` is 45 seconds and clears slow reasoning models.
 </ParamField>
 <ParamField path="max_wait_s" type="float" default="2.0">
-  The longest `Retry-After` worth waiting for. A longer one fails over. A value below zero raises `ValueError`.
+  The longest `Retry-After` worth waiting for. A longer one fails over. A value below zero raises `ValueError`. A `Retry-After` of 0, or an HTTP date in the past, asks for no wait. It is treated as no `Retry-After`, so the call retries on its `same_model_retries` pauses, and it counts as one of them.
 </ParamField>
 <ParamField path="same_model_retries" type="Sequence[float]" default="()">
   The pause before each retry of the same call after a short failure. A short failure has no status, or is a 408, a 429 or a 5xx. A 429 with a usable `Retry-After` waits that long once instead. Empty moves to the next call at once. `SAME_MODEL_RETRIES_S` is `(0.25, 0.75)`. It is off by default because the Context Router retries by itself.
