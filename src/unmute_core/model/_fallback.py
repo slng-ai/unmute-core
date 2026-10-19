@@ -7,6 +7,7 @@ option, off by default: the SLNG Context Router already retries behind its own p
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncGenerator, AsyncIterator, Callable, Sequence, Set
 from contextlib import asynccontextmanager
 from enum import Enum, auto
@@ -16,7 +17,7 @@ from pydantic import Field, SkipValidation, validate_call
 from pydantic.dataclasses import dataclass
 
 from unmute_core._pydantic import VALUE, named_errors, original_errors
-from unmute_core.model._attempts import attempt_stream
+from unmute_core.model._attempts import attempt_stream, note_answer
 from unmute_core.model._call import (
     AnswerStarted,
     ModelCallArg,
@@ -381,6 +382,7 @@ class FallbackModelCall:
             retries = 0
             started = loop.time()
             while True:
+                attempt_started = time.perf_counter()
                 async with _closing(attempt_stream(call, request)) as events:
                     try:
                         first, usage = await self._first(events, self._left(started))
@@ -420,6 +422,7 @@ class FallbackModelCall:
                         self._active = self._answered = (
                             index  # ponytail: concurrent requests race, last wins
                         )
+                        note_answer(attempt_started)
                         yield first
                         async for event in events:
                             yield event

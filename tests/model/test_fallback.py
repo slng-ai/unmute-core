@@ -4,6 +4,7 @@ The cases check behaviour only, with fake calls instead of LiveKit streams.
 """
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from typing import Any
@@ -11,6 +12,7 @@ from typing import Any
 import pytest
 
 from unmute_core.model import (
+    AnswerClock,
     AnswerStarted,
     FailOver,
     FallbackModelCall,
@@ -22,6 +24,7 @@ from unmute_core.model import (
     Usage,
     answered_model,
     variable_key_max,
+    with_answer_clock,
     with_attempts,
 )
 from unmute_core.model._fallback import SAME_MODEL_RETRIES_S
@@ -660,3 +663,63 @@ async def test_with_attempts_runs_each_attempt_of_a_chain_inside_through_its_str
         TextDelta("ok")
     ]
     assert tried == [first, second]
+
+
+class Timed:
+    """Plays one outcome per attempt, and notes when each attempt began and ended."""
+
+    def __init__(self, *outcomes: BaseException | str) -> None:
+        self.outcomes = list(outcomes)
+        self.began: list[float] = []
+        self.ended: list[float] = []
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        outcome = self.outcomes[min(len(self.began), len(self.outcomes) - 1)]
+        self.began.append(time.perf_counter())
+        try:
+            if isinstance(outcome, BaseException):
+                raise outcome
+            if outcome:
+                yield TextDelta(outcome)
+        finally:
+            self.ended.append(time.perf_counter())
+
+
+async def _answered(call: Any) -> AnswerClock:
+    clock = AnswerClock()
+    chain = call if isinstance(call, FallbackModelCall) else FallbackModelCall([call])
+    [_ async for _ in with_answer_clock(chain.stream(REQUEST), clock)]
+    return clock
+
+
+async def test_the_answer_clock_starts_at_the_call_that_answered() -> None:
+    first, second = Timed(StatusError(503)), Timed("ok")
+    clock = await _answered(FallbackModelCall([first, second]))
+    assert clock.started is not None
+    assert first.ended[0] <= clock.started <= second.began[0]
+
+
+async def test_the_answer_clock_starts_at_the_retry_that_answered(sleeps: list[float]) -> None:
+    call = Timed(StatusError(503), "ok")
+    clock = await _answered(FallbackModelCall([call], same_model_retries=(0.1,)))
+    assert sleeps == [0.1]
+    assert clock.started is not None
+    assert call.ended[0] <= clock.started <= call.began[1]
+
+
+async def test_the_answer_clock_starts_at_the_innermost_call_that_answered() -> None:
+    first, second = Timed(StatusError(503)), Timed("ok")
+    clock = await _answered(FallbackModelCall([FallbackModelCall([first, second])]))
+    assert clock.started is not None
+    assert first.ended[0] <= clock.started <= second.began[0]
+
+
+async def test_the_answer_clock_stays_empty_when_no_call_answered() -> None:
+    clock = await _answered(FallbackModelCall([Timed(StatusError(503)), Timed("")]))
+    assert clock.started is None
+    with pytest.raises(StatusError):
+        await _answered(FallbackModelCall([Timed(StatusError(503))]))
+
+
+async def test_a_chain_outside_an_answer_clock_runs_as_before() -> None:
+    assert await collect(FallbackModelCall([Timed("ok")])) == ["ok"]
