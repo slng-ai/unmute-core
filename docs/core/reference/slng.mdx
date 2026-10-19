@@ -155,7 +155,7 @@ Arguments left out are read from the `SLNG_*` settings. See [Settings](/core/ref
   Sends `slng_pure_proxy`: no cache, no prompt edits, the default tier only.
 </ParamField>
 <ParamField path="body" type="Mapping[str, Any] | None" default="None">
-  Extra body fields for every request, like `reasoning_effort`. A request's `params` win over it. Its `template_variables` join each request's own, and the request's value wins on a shared name. Setting `slng_config`, `slng_pure_proxy` or `stream_options` here raises `ValueError`.
+  Extra body fields for every request, like `reasoning_effort`. A request's `params` win over it. Its `template_variables` join each request's own, and the request's value wins on a shared name. Setting `slng_config`, `slng_pure_proxy` or `stream_options` here raises `ValueError`. Five names are openai request options, not body fields, in `body` and in a request's `params`, as in `client.chat.completions.create(**params)`. `timeout` is the request's timeout, `max_retries` its retry count, `extra_query` its URL query parameters, and `extra_headers` its headers, which never replace the identity headers. The fields of `extra_body` join the body. A request's option wins over the call's, and `extra_query` and `extra_headers` join by name. A value the SDK cannot use raises `ValueError`.
 </ParamField>
 <ParamField path="extra_headers" type="Mapping[str, str] | None" default="None">
   Headers for every request. They never replace the identity headers.
@@ -288,7 +288,7 @@ RouterConfig(
 2. The weights of one priority in one tier sum to 100.
 3. A model appears once per tier.
 4. An unknown field is refused. The JSON may be at most 256 KB.
-5. Some request fields never reach the model: the Context Router drops them. They are fields like `api_base`, `api_key`, `metadata` or `extra_headers`, and any name that starts with `aws_`, `vertex_`, `azure_` or `watsonx_`. The library still sends them. It logs one warning per field name that says the router drops it. A tier entry's `kwargs`, `RouterModelCall(body=...)` and a request's `params` are all checked. `reasoning_effort`, `extra_body` and `extra_query` are not dropped.
+5. Some request fields never reach the model: the Context Router drops them. They are fields like `api_base`, `api_key`, `metadata` or `extra_headers`, and any name that starts with `aws_`, `vertex_`, `azure_` or `watsonx_`. The library still sends them. It logs one warning per field name that says the router drops it. A tier entry's `kwargs`, `RouterModelCall(body=...)` and a request's `params` are all checked. In `body` and `params`, `timeout`, `max_retries` and `extra_headers` are request options and are not sent as fields, so they are not checked. `reasoning_effort`, `extra_body` and `extra_query` are not dropped.
 
 ### TierEntry
 
