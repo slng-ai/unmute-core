@@ -16,6 +16,7 @@ from pydantic import Field, SkipValidation, validate_call
 from pydantic.dataclasses import dataclass
 
 from unmute_core._pydantic import VALUE, named_errors, original_errors
+from unmute_core.model._attempts import attempt_stream
 from unmute_core.model._call import (
     ModelCallArg,
     ModelEvent,
@@ -351,7 +352,7 @@ class FallbackModelCall:
             retries = 0
             started = loop.time()
             while True:
-                async with _closing(call.stream(request)) as events:
+                async with _closing(attempt_stream(call, request)) as events:
                     try:
                         first, usage = await self._first(events, self._left(started))
                     except Exception as error:

@@ -137,6 +137,16 @@ def test_an_llm_stream_still_has_the_event_channel_and_run_the_adapter_overrides
     assert inspect.iscoroutinefunction(llm.LLMStream._run)
 
 
+def test_a_stream_still_names_its_spans_by_the_class_names_a_chain_stream_sets() -> None:
+    """``_ChainStream`` takes these three from LiveKit's ``FallbackLLMStream``."""
+    from livekit.agents.llm.fallback_adapter import FallbackLLMStream
+
+    from unmute_core.livekit._model import _ChainStream
+
+    for name in ("_llm_request_span_name", "_llm_attempt_span_name", "_genai_operation_name"):
+        assert getattr(_ChainStream, name) == getattr(FallbackLLMStream, name), name
+
+
 def test_a_tts_plugin_still_keeps_its_voice_in_its_private_options() -> None:
     """``plugin_voice`` reads ``_opts.voice`` for the ``tts`` span. Skipped with no plugin."""
     openai = pytest.importorskip(
