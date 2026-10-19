@@ -89,7 +89,7 @@ A call value that is empty counts as absent, and the entry is skipped. A withhel
 
 ## Lookup
 
-`Lookup(name, run, assign, inputs=(), needs_confirmed=(), background=False)` runs a function or a tool and saves fields of its result.
+`Lookup(name, run, assign, inputs=(), needs_confirmed=(), background=False, wait=True)` runs a function or a tool and saves fields of its result.
 
 <ParamField path="name" type="str" required>
   The entry name, used in log lines and as its label in the results.
@@ -108,6 +108,9 @@ A call value that is empty counts as absent, and the entry is skipped. A withhel
 </ParamField>
 <ParamField path="background" type="bool" default="False">
   True runs the lookup beside the greeting.
+</ParamField>
+<ParamField path="wait" type="bool" default="True">
+  True holds the first model request until a background lookup ends. False never holds a request. It needs `background=True`.
 </ParamField>
 
 A result that is not a mapping counts as a failure.
@@ -140,6 +143,20 @@ A slow lookup should not delay the greeting. Mark it `background=True`.
 5. `prefetch.fills` leaves background lookups out. So `Greeting.check(prefetch)` refuses a greeting line that names one of their values.
 6. `CallHooks` starts `run_background` for you. Every model request then waits for it, up to `first_request_timeout_s`. A fixed greeting plays at once.
 7. The prompt shows the value once it is saved. `UnmuteAgent` and `UnmuteFlows` fill the prompt again before each request.
+
+### A lookup nobody waits for
+
+```python
+Lookup("call_started", local_tool(notify_crm), {}, background=True, wait=False)
+```
+
+Some lookups only tell another system something, like a "call started" ping. Nothing needs their result. Add `wait=False`, and no model request waits for the lookup.
+
+1. `wait=False` needs `background=True`. Without it, `Lookup` raises `ValueError`, because the greeting waits for a lookup that runs before it.
+2. `CallHooks` starts it beside the greeting, with the other background lookups. A slow `wait=False` lookup does not delay a lookup that waits.
+3. The call's end waits for it, up to `end_timeout_s` (5 seconds), so a quick call does not lose it. The end, or a failure, does not stop it, as it stops a lookup that waits.
+4. It saves its values and records its result as other lookups do. A step that reads the result before it ends gets "not available yet".
+5. `Prefetch.run_background(state, results=..., wait=False)` runs only these lookups, and `wait=True` only the others. The default, `None`, runs both.
 
 ### What each lookup returned
 

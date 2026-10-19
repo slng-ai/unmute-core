@@ -36,6 +36,12 @@ _OUTCOME_OF_EVENT = MappingProxyType(
 )
 
 
+def _log_failure(task: asyncio.Future[None]) -> None:
+    """Log a run nobody waits for that failed, so its error is never lost."""
+    if not task.cancelled() and (error := task.exception()) is not None:
+        logger.error("a tool on an event that nobody waits for failed", exc_info=error)
+
+
 class EventToolRunner:
     """Run one call's tools on events, in the background, and keep what they leave behind.
 
@@ -74,7 +80,9 @@ class EventToolRunner:
         self._notes: list[str] = []
         self._heard_caller = False
         self.pending: set[asyncio.Future[None]] = set()
-        """The runs still going. A model request and the call's end wait for them."""
+        """The runs still going that a model request waits for. The call's end waits too."""
+        self.unwaited: set[asyncio.Future[None]] = set()
+        """The runs still going that no model request waits for. Only the call's end does."""
 
     @property
     def notes(self) -> tuple[str, ...]:
@@ -111,12 +119,29 @@ class EventToolRunner:
         if outcome is not None and isinstance(data, Mapping) and data.get("source") == "model":
             self.spawn(self.follow(f"{outcome}:{data['name']}"))
 
-    def spawn(self, work: Awaitable[None]) -> asyncio.Future[None]:
-        """Run tools in the background and track them in ``pending``."""
+    def spawn(self, work: Awaitable[None], *, wait: bool = True) -> asyncio.Future[None]:
+        """Run tools in the background and track them.
+
+        Args:
+            work: What to run.
+            wait: True tracks it in ``pending``, which a model request waits for. False
+                tracks it in ``unwaited``, which only the call's end waits for.
+        """
         task = asyncio.ensure_future(work)
-        self.pending.add(task)
-        task.add_done_callback(self.pending.discard)
+        tracked = self.pending if wait else self.unwaited
+        tracked.add(task)
+        task.add_done_callback(tracked.discard)
+        if not wait:
+            task.add_done_callback(_log_failure)
         return task
+
+    async def drain(self) -> None:
+        """Wait until no run is going, the ones nobody waited for among them.
+
+        A run may start another, so it looks again after each wait.
+        """
+        while running := [*self.pending, *self.unwaited]:
+            await asyncio.wait(running)
 
     async def fire(self, event: str) -> None:
         """Run an event's tools once a call, in order."""
@@ -125,12 +150,35 @@ class EventToolRunner:
         self._fired.add(event)
         await self.follow(event)
 
-    async def follow(self, event: str) -> None:
-        """Run the tools of one event, in order, and the tools that follow each."""
-        for spec in self._on_event.get(event, ()):
-            await self._run_tool(spec, event)
+    async def follow(self, event: str, *, held: bool = True) -> None:
+        """Run the tools of one event and the tools that follow each.
 
-    async def _run_tool(self, spec: EventTool, event: str) -> None:
+        A tool with ``wait=False`` starts at once in its own run that no model request
+        waits for. The other tools run in order, in this run when ``held`` is True. When it
+        is False, this run is one nobody waits for, so they start in a run a model request
+        waits for.
+
+        Args:
+            event: The event.
+            held: True when the caller is a run that a model request waits for.
+        """
+        specs = self._on_event.get(event, ())
+        for spec in specs:
+            if not spec.wait:
+                self.spawn(self._run_tool(spec, event, held=False), wait=False)
+        if waiting := [spec for spec in specs if spec.wait]:
+            if held:
+                for spec in waiting:
+                    await self._run_tool(spec, event, held=True)
+            else:
+                self.spawn(self._run_waiting(waiting, event))
+
+    async def _run_waiting(self, specs: Sequence[EventTool], event: str) -> None:
+        """Run the tools that a model request waits for, in order."""
+        for spec in specs:
+            await self._run_tool(spec, event, held=True)
+
+    async def _run_tool(self, spec: EventTool, event: str, *, held: bool) -> None:
         """Run one tool on an event, save and note its result, and run the tools after it."""
         tool = spec.tool
         kind, _, source = event.partition(":")
@@ -143,7 +191,8 @@ class EventToolRunner:
             self._note(tool, kind, source, result, succeeded=succeeded)
         if isinstance(result, dict) and result.get("refused"):
             return
-        await self.follow(f"{'tool_succeeded' if succeeded else 'tool_failed'}:{tool.name}")
+        outcome = "tool_succeeded" if succeeded else "tool_failed"
+        await self.follow(f"{outcome}:{tool.name}", held=held)
 
     async def _call(self, spec: EventTool, event: str, kind: str) -> object:
         """Call the tool with the event and the transcript. A failure becomes an ``error`` result."""
