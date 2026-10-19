@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Fixed
+
+- A `Retry-After` of 0, or an HTTP date in the past, is no wait hint any more. `retry_delay` returns None for it, as for a missing header. Before, it returned 0.0, which always fits `max_wait_s`, so `FallbackModelCall` took one extra retry with a 0 s pause that did not use up any of `same_model_retries`. Now the call retries on its normal pauses, and the retry counts as one of them. With none left, it moves to the next call. A positive `Retry-After` works as before (#TBD).
+
 ## 0.19.1
 
 This release keeps the provider data a model sends with its text, like a Gemini thought signature on a spoken reply. Nothing breaks: `require("0.19.0")` accepts it.
