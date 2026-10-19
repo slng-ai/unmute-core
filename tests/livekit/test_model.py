@@ -396,6 +396,27 @@ async def test_llm_metrics_carry_the_cached_tokens_and_the_answers_id() -> None:
     assert (reported.prompt_cached_tokens, reported.request_id) == (8, "chatcmpl-1")
 
 
+class CountedUsageCall(ScriptedCall):
+    """A scripted model call whose provider counts its thinking apart, in its own total."""
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        async for event in super().stream(request):
+            yield event
+        yield Usage(11, 4, reasoning_tokens=3, total_tokens=20)
+
+
+async def test_llm_metrics_carry_the_reasoning_tokens_and_the_providers_total() -> None:
+    collected: list[metrics.AgentMetrics] = []
+    agent = UnmuteAgent(AgentSpec("Orders.", model=CountedUsageCall("Hello.")))
+    async with AgentSession() as session:
+        session.on("metrics_collected", lambda event: collected.append(event.metrics))
+        await session.start(agent)
+        await session.run(user_input="Hi")
+
+    [reported] = [item for item in collected if isinstance(item, metrics.LLMMetrics)]
+    assert (reported.reasoning_tokens, reported.total_tokens) == (3, 20)
+
+
 async def test_each_model_call_request_of_a_turn_reports_once_steps_included() -> None:
     collected: list[metrics.AgentMetrics] = []
     task_plan = plan(job(mode="status"), tools=registry(lookup_order=Canned(FOUND)))
