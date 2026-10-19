@@ -1,6 +1,6 @@
 [project]
 name = "unmute-core"
-version = "0.19.1"
+version = "0.19.2"
 description = "Typed call state, tasks, tools, handoffs and tracing for voice agents on LiveKit and Pipecat"
 readme = "README.md"
 license = "MIT"
