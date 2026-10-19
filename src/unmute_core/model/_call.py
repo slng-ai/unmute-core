@@ -148,8 +148,29 @@ class Usage:
     total_tokens: SkipValidation[int | None] = None
 
 
-ModelEvent = TextDelta | ToolCall | Usage
-"""What a model call streams. A consumer skips a ``Usage`` it has no use for."""
+@original_errors
+@dataclass(frozen=True, slots=True, config=VALUE)
+class AnswerStarted:
+    """The provider began its answer: its first chunk arrived.
+
+    It comes once, before the answer's text, tool calls and usage, and says nothing about
+    them. A reply that is only a tool call shows its ``ToolCall`` when the whole call has
+    streamed, so this is the first sign that the provider is answering.
+    ``FallbackModelCall(start_ends_budget=True)`` ends its first-event budget here. A
+    consumer that has no use for it skips it.
+
+    Attributes:
+        response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
+        request_id: The provider's ``x-request-id`` for the HTTP request, or None.
+    """
+
+    response_id: str | None = None
+    request_id: str | None = None
+
+
+ModelEvent = TextDelta | ToolCall | Usage | AnswerStarted
+"""What a model call streams. A consumer skips an ``AnswerStarted`` or a ``Usage`` it has no
+use for."""
 
 
 @original_errors
@@ -184,10 +205,10 @@ async def collect(events: AsyncIterable[ModelEvent]) -> ModelAnswer:
             calls.append(event)
         elif isinstance(event, Usage):
             usage = event
-        else:  # own text: a ModelCall streamed something that is not a model event
+        elif not isinstance(event, AnswerStarted):  # own text: not a model event
             raise TypeError(
-                f"a model call streamed {type(event).__name__}; stream TextDelta, ToolCall "
-                "or Usage events"
+                f"a model call streamed {type(event).__name__}; stream TextDelta, ToolCall, "
+                "Usage or AnswerStarted events"
             )
     return ModelAnswer("".join(text), tuple(calls), usage)
 

@@ -7,6 +7,7 @@ import pytest
 
 from tests.slng.router_fake import FakeRouter, chunk
 from unmute_core.model import (
+    AnswerStarted,
     ModelRequest,
     OpenAIModelCall,
     TextDelta,
@@ -65,6 +66,7 @@ async def test_it_streams_text_a_tool_call_with_its_extra_content_and_usage_last
     events = [event async for event in call.stream(REQUEST)]
 
     assert events == [
+        AnswerStarted(response_id="c1"),
         TextDelta("ok", response_id="c1"),
         ToolCall("t1", "book", '{"a":1}', signature, response_id="c1"),
         Usage(3, 4, total_tokens=7, response_id="c1"),

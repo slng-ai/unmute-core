@@ -17,6 +17,7 @@ from pydantic.dataclasses import dataclass
 
 from unmute_core._pydantic import VALUE, named_errors, original_errors
 from unmute_core.model._call import (
+    AnswerStarted,
     ModelCallArg,
     ModelEvent,
     ModelRequest,
@@ -134,6 +135,7 @@ class FallbackModelCall:
         on_retry: SkipValidation[Callable[[Retry], None]] | None = None,
         sticky: bool = False,
         empty_fails_over: bool = True,
+        start_ends_budget: bool = False,
     ) -> None:
         """Keep the calls in the order they are tried.
 
@@ -162,6 +164,10 @@ class FallbackModelCall:
             empty_fails_over: An answer with nothing in it moves to the next call, as a
                 failure does. False ends the request there with the empty answer, for an app
                 that handles an empty reply itself, like asking the same model again.
+            start_ends_budget: End ``first_event_timeout_s`` at a call's ``AnswerStarted``,
+                the provider's first chunk, instead of at its first text or tool call. A
+                reply that is only a long tool call then counts as started at once.
+                ``AnswerStarted`` is not passed on either way.
 
         Raises:
             ValueError: If ``calls`` is empty, or a wait is below zero.
@@ -180,6 +186,7 @@ class FallbackModelCall:
         self._on_retry = on_retry
         self._sticky = sticky
         self._empty_fails_over = empty_fails_over
+        self._start_ends_budget = start_ends_budget
         self._active = 0
         self._answered = 0
 
@@ -269,13 +276,16 @@ class FallbackModelCall:
     ) -> tuple[ModelEvent | None, Usage | None]:
         """Wait for the first answer event within the budget, and a ``Usage`` that came first.
 
-        A ``Usage`` is no answer. None when the stream holds nothing else.
+        A ``Usage`` or an ``AnswerStarted`` is no answer. None when the stream holds nothing
+        else. With ``start_ends_budget``, the budget covers the wait for ``AnswerStarted``
+        only.
         """
-        usage: Usage | None = None
         async with asyncio.timeout(budget):
-            while isinstance(event := await anext(events, None), Usage):
-                usage = event
-            return event, usage
+            first, usage, started = await _answer(events, None, at_start=self._start_ends_budget)
+        if started:
+            # The provider began within the budget. Its answer may take longer.
+            first, usage, _ = await _answer(events, usage, at_start=False)
+        return first, usage
 
     def _decide(
         self,
@@ -395,6 +405,25 @@ class FallbackModelCall:
                         if usage is not None:
                             yield usage
                     return
+
+
+async def _answer(
+    events: AsyncIterator[ModelEvent], usage: Usage | None, *, at_start: bool
+) -> tuple[ModelEvent | None, Usage | None, bool]:
+    """Read a call's stream to its first answer event, keeping a ``Usage`` that came first.
+
+    Returns:
+        The first answer event, None when the stream holds no other, the last ``Usage``
+        before it, and True when ``at_start`` stopped the read at ``AnswerStarted``.
+    """
+    while True:
+        event = await anext(events, None)
+        if isinstance(event, Usage):
+            usage = event
+        elif not isinstance(event, AnswerStarted):
+            return event, usage, False
+        elif at_start:
+            return None, usage, True
 
 
 @asynccontextmanager
