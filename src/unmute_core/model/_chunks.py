@@ -4,14 +4,16 @@ from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import replace
 from typing import Any
 
-from unmute_core.model._call import ModelEvent, TextDelta, ToolCall, Usage
+from unmute_core.model._call import AnswerStarted, ModelEvent, TextDelta, ToolCall, Usage
 from unmute_core.model._signatures import EXTRA_CONTENT
 
 
 async def chunk_events(
     chunks: AsyncIterable[Any], *, request_id: str | None = None
 ) -> AsyncIterator[ModelEvent]:
-    """Yield the text, then each whole tool call, then the ``Usage`` of a chunk stream.
+    """Yield ``AnswerStarted``, the text, then each whole tool call, then the ``Usage``.
+
+    ``AnswerStarted`` comes at the first chunk, whatever it holds.
 
     Tool call pieces are joined by their ``index``. A provider that sends no ``index``, as
     some OpenAI-compatible endpoints do, is joined by the call's ``id``, so several whole
@@ -31,8 +33,12 @@ async def chunk_events(
     key: int | str | None = None
     usage: Usage | None = None
     response_id: str | None = None
+    started = False
     async for chunk in chunks:
         response_id = chunk.id or response_id
+        if not started:
+            started = True
+            yield AnswerStarted(response_id=response_id, request_id=request_id)
         if chunk.usage is not None:
             details = getattr(chunk.usage, "prompt_tokens_details", None)
             output_details = getattr(chunk.usage, "completion_tokens_details", None)

@@ -9,7 +9,15 @@ import pytest
 from openai import AsyncOpenAI
 
 from tests.slng.router_fake import FakeRouter, chunk
-from unmute_core.model import ModelRequest, TextDelta, ToolCall, Usage, error_code, http_status
+from unmute_core.model import (
+    AnswerStarted,
+    ModelRequest,
+    TextDelta,
+    ToolCall,
+    Usage,
+    error_code,
+    http_status,
+)
 from unmute_core.slng import (
     OpenAIEndpoint,
     RouterConfig,
@@ -132,6 +140,7 @@ async def test_text_and_tool_calls_stream_back() -> None:
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
     assert events == [
+        AnswerStarted(response_id="c1"),
         TextDelta("One ", response_id="c1"),
         TextDelta("moment.", response_id="c1"),
         ToolCall(id="t1", name="book", arguments='{"day": 1}', response_id="c1"),
@@ -251,6 +260,7 @@ async def test_a_tool_calls_provider_data_streams_back_as_its_extra() -> None:
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
     assert events == [
+        AnswerStarted(response_id="c1"),
         ToolCall(id="t1", name="book", arguments="{}", extra=SIGNED, response_id="c1"),
         ToolCall(id="t2", name="find", arguments="{}", response_id="c1"),
     ]
@@ -450,6 +460,7 @@ async def test_usage_comes_back_last() -> None:
     router = FakeRouter([chunk({"content": "Hi."}), usage_chunk])
     events = [event async for event in router_call(router).stream(REQUEST)]
     assert events == [
+        AnswerStarted(response_id="c1"),
         TextDelta("Hi.", response_id="c1"),
         Usage(120, 7, total_tokens=127, response_id="c1"),
     ]
@@ -488,7 +499,8 @@ async def test_every_event_carries_the_answers_ids_and_usage_the_cached_tokens()
         headers={"x-request-id": "req-42"},
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
-    assert events[0] == TextDelta("Hi.", response_id="chatcmpl-9", request_id="req-42")
+    assert events[0] == AnswerStarted(response_id="chatcmpl-9", request_id="req-42")
+    assert events[1] == TextDelta("Hi.", response_id="chatcmpl-9", request_id="req-42")
     assert events[-1] == Usage(
         120,
         7,

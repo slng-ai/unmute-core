@@ -64,7 +64,7 @@ flowchart LR
 1. The adapter builds a `ModelRequest`. On LiveKit it is `ModelCallLLM`. On Pipecat it is `ModelCallLLMService`.
 2. The adapter calls `stream(request)` on the `ModelCall`.
 3. The call sends the request to a model.
-4. The call yields `TextDelta` and `ToolCall` events. It yields a `Usage` event last when it knows the token counts.
+4. The call yields `AnswerStarted` when the provider's first chunk arrives. Then it yields `TextDelta` and `ToolCall` events, and a `Usage` event last when it knows the token counts.
 5. The adapter turns the events into LiveKit chunks or Pipecat frames.
 
 ## ModelCall
@@ -118,14 +118,16 @@ A call streams three kinds of event.
 
 | Event | Fields | What it is |
 |---|---|---|
+| `AnswerStarted` | `response_id`, `request_id` | The provider began its answer: its first chunk arrived. Once, before anything else. |
 | `TextDelta` | `text`, `response_id`, `request_id` | The next piece of the answer. |
 | `ToolCall` | `id`, `name`, `arguments`, `extra`, `response_id`, `request_id` | One whole tool call. `arguments` is the JSON text the model wrote. |
 | `Usage` | `input_tokens`, `output_tokens`, `cached_input_tokens`, `response_id`, `request_id`, `reasoning_tokens`, `total_tokens` | The token counts, once, at the end. `cached_input_tokens` is the part of the prompt the provider served from its cache. `reasoning_tokens` is the part of the output spent on hidden reasoning. `total_tokens` is the provider's own total, which can be more than input plus output. `response_id` is the answer's id, like `chatcmpl-...`, and `request_id` the provider's `x-request-id`. Each is `None` when the provider did not send it. |
 
 1. `extra` on a `ToolCall` holds provider data sent with the call, like a Gemini thought signature. It is empty when there is none. See [Thought signatures](/core/reference/slng#gemini-thought-signatures).
 2. `TextDelta` and `ToolCall` carry the same `response_id` and `request_id` as `Usage`, as far as the provider has sent them. So a reply cut off before its `Usage`, like one a caller talks over, still names its answer and its HTTP request. `RouterModelCall` and `OpenAIModelCall` fill them. A call of your own may leave them `None`.
-3. Both adapters put `Usage` on the `llm` span. Code that reads events skips a `Usage` it has no use for.
-4. Every event is a frozen Pydantic dataclass. A value of the wrong type, like `ToolCall(id=1, ...)`, raises a `ValidationError`. Token counts in `Usage` pass through unchecked, as a provider sends them.
+3. Both adapters put `Usage` on the `llm` span. Code that reads events skips a `Usage` or an `AnswerStarted` it has no use for.
+4. A reply that is only a tool call shows its `ToolCall` when the whole call has streamed. `AnswerStarted` tells you earlier that the provider is answering. `FallbackModelCall(start_ends_budget=True)` uses it.
+5. Every event is a frozen Pydantic dataclass. A value of the wrong type, like `ToolCall(id=1, ...)`, raises a `ValidationError`. Token counts in `Usage` pass through unchecked, as a provider sends them.
 
 ### ToolCall
 
@@ -340,6 +342,9 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
 <ParamField path="usage_counts_as_answer" type="bool" default="False">
   `True` takes a call that sent its `Usage` and nothing else as one that answered with an empty reply, so the request ends there. Only a call that sent no event at all moves on through `empty_fails_over`. A provider that reports usage has finished its answer, while a stream with no event at all is often a broken response.
 </ParamField>
+<ParamField path="start_ends_budget" type="bool" default="False">
+  `True` ends `first_event_timeout_s` at a call's `AnswerStarted`, the provider's first chunk. A reply that is only a long tool call then counts as started at once, and is not cut off for a timeout. `False` ends it at the first text or tool call. The chain passes no `AnswerStarted` on either way.
+</ParamField>
 <ParamField path="on_fail_over" type="Callable[[FailOver], None] | None" default="None">
   Called at each move to the next call. A callback that raises is logged and the chain goes on.
 </ParamField>
@@ -434,7 +439,7 @@ Any class with `stream` is a `ModelCall`. The guide shows a small one in [Write 
 1. `model`, `provider` and `aclose` are optional. Spans show `unknown` without a name. See [Naming a call](#naming-a-call).
 2. A call that does not send the prompt to a router must call `fill_messages`. `variables` holds the values.
 3. Raise the error of a failed request. `FallbackModelCall` reads its status and code from it.
-4. Yield `Usage` last when you know the token counts. It is optional.
+4. Yield `Usage` last when you know the token counts. It is optional. So is `AnswerStarted`, first, when you can tell that the provider began answering.
 
 ## Naming a call
 

@@ -6,8 +6,13 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ## Unreleased
 
+### Changes that can break you
+
+- `ModelEvent` has a fourth event, `AnswerStarted`. `RouterModelCall` and `OpenAIModelCall` yield it once, when the provider's first chunk arrives, before any text, tool call or usage. Both adapters, `collect` and `FallbackModelCall` skip it. Code of your own that reads a model call's events and handles every type, like a `match` with an `assert_never`, must skip it too.
+
 ### Added
 
+- `FallbackModelCall(start_ends_budget=True)` ends `first_event_timeout_s` at a call's `AnswerStarted`, instead of at its first text or tool call. A reply that is only a tool call shows its `ToolCall` when the whole call has streamed, so a long tool call could take longer than a short budget and move to the next model, although the provider began at once. The default, `False`, works as before.
 - `ModelCallLLM(trace_attempts=True)` traces each call a `FallbackModelCall` tries, as LiveKit's `FallbackAdapter` does: an `llm_fallback_adapter` span for the request, and under it one `llm_request` span pair per call tried, with the call's model name. A failed attempt is marked as an error. Before, a chain behind `ModelCallLLM` showed one span pair for the whole request, so the failed attempts and the model that answered had no span of their own. The default, `False`, works as before.
 - `unmute_core.model.with_attempts(events, stream)` runs `stream` around each attempt of any `FallbackModelCall` inside `events`, for code that cannot reach the chain, like one an app builds per request inside its own model call. The LiveKit adapter uses it for `trace_attempts`.
 - `Usage` carries `reasoning_tokens` and `total_tokens`: the output tokens a provider spent on hidden reasoning, and the provider's own total, which can be more than input plus output when it counts thinking separately. Both are `None` when the provider did not say, and they come after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.reasoning_tokens` is set and `LLMMetrics.total_tokens` is the provider's total, not input plus output. On Pipecat, the usage chunk carries them, so `LLMTokenUsage.reasoning_tokens` and `total_tokens` are set. Before, both were dropped.

@@ -10,12 +10,14 @@ from types import SimpleNamespace
 import pytest
 
 from unmute_core.model import (
+    AnswerStarted,
     FailOver,
     FallbackModelCall,
     ModelEvent,
     ModelRequest,
     Retry,
     TextDelta,
+    ToolCall,
     Usage,
     answered_model,
     variable_key_max,
@@ -449,6 +451,49 @@ async def test_a_usage_can_count_as_an_empty_answer(answer: list, moves_on: bool
     )
     expected = (["x"], 1, 1) if moves_on else ([], 0, 0)
     assert (await collect(chain), second.calls, len(moves)) == expected
+
+
+class SlowToolCall:
+    """Starts its answer at once, then streams one tool call for ``seconds``."""
+
+    def __init__(self, seconds: float) -> None:
+        self.seconds = seconds
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        yield AnswerStarted(response_id="r1")
+        await asyncio.sleep(self.seconds)
+        yield ToolCall("t1", "book", "{}")
+
+
+@pytest.mark.parametrize(
+    ("start_ends_budget", "first", "moves_on"),
+    [(True, ToolCall("t1", "book", "{}"), False), (False, TextDelta("next"), True)],
+    ids=["ends at the start", "ends at the answer"],
+)
+async def test_the_start_of_an_answer_can_end_the_first_event_budget(
+    start_ends_budget: bool, first: ModelEvent, moves_on: bool
+) -> None:
+    moves: list[FailOver] = []
+    chain = FallbackModelCall(
+        [SlowToolCall(0.2), FakeCall(["next"])],
+        first_event_timeout_s=0.05,
+        start_ends_budget=start_ends_budget,
+        on_fail_over=moves.append,
+    )
+    events = [event async for event in chain.stream(REQUEST)]
+    assert (events, len(moves)) == ([first], int(moves_on))
+
+
+async def test_a_call_that_starts_then_fails_still_fails_over() -> None:
+    class StartsThenFails:
+        async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+            yield AnswerStarted()
+            raise RuntimeError("dropped")
+
+    chain = FallbackModelCall(
+        [StartsThenFails(), FakeCall(["next"])], first_event_timeout_s=1.0, start_ends_budget=True
+    )
+    assert await collect(chain) == ["next"]
 
 
 async def test_with_attempts_runs_each_attempt_of_a_chain_inside_through_its_stream() -> None:
