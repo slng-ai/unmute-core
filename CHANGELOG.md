@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
-- `Usage.cache_write_tokens` is the number of input tokens a provider wrote to its prompt cache, or `None` when it did not say. It comes after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` read it from `usage.prompt_tokens_details.cache_write_tokens`, as LiveKit's own OpenAI-compatible models do. On LiveKit, `LLMMetrics.cache_creation_tokens` is set, and `LiveKitModel` reads it from a plugin's `CompletionUsage.cache_creation_tokens`. On Pipecat, the usage chunk carries it in `prompt_tokens_details.cache_write_tokens`, which Pipecat's OpenAI service turns into `LLMTokenUsage.cache_creation_input_tokens`. Before, it was dropped (#TBD).
+- `Usage.cache_write_tokens` is the number of input tokens a provider wrote to its prompt cache, or `None` when it did not say. It comes after the other fields, so `Usage(120, 7)` works as before. `RouterModelCall` and `OpenAIModelCall` read it from `usage.prompt_tokens_details.cache_write_tokens`, as LiveKit's own OpenAI-compatible models do. On LiveKit, `LLMMetrics.cache_creation_tokens` is set, and `LiveKitModel` reads it from a plugin's `CompletionUsage.cache_creation_tokens`. On Pipecat, the usage chunk carries it in `prompt_tokens_details.cache_write_tokens`, which Pipecat's OpenAI service turns into `LLMTokenUsage.cache_creation_input_tokens`. Before, it was dropped (#69).
 
 ### Changed
 
