@@ -143,6 +143,8 @@ class Usage:
         total_tokens: The provider's own total, or None when it did not say. It can be
             more than input plus output, for example when a provider counts thinking
             separately.
+        cache_write_tokens: How many input tokens the provider wrote to its prompt
+            cache, or None when it did not say.
     """
 
     input_tokens: SkipValidation[int]
@@ -152,6 +154,7 @@ class Usage:
     request_id: str | None = None
     reasoning_tokens: SkipValidation[int | None] = None
     total_tokens: SkipValidation[int | None] = None
+    cache_write_tokens: SkipValidation[int | None] = None
 
 
 @original_errors
