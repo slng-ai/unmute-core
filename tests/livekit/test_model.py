@@ -442,6 +442,27 @@ async def test_llm_metrics_carry_the_cached_tokens_and_the_answers_id() -> None:
     assert (reported.prompt_cached_tokens, reported.request_id) == (8, "chatcmpl-1")
 
 
+class CacheWriteUsageCall(ScriptedCall):
+    """A scripted model call whose usage says how many input tokens went to the cache."""
+
+    async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+        async for event in super().stream(request):
+            yield event
+        yield Usage(11, 4, cached_input_tokens=3, cache_write_tokens=5)
+
+
+async def test_llm_metrics_carry_the_tokens_written_to_the_cache() -> None:
+    collected: list[metrics.AgentMetrics] = []
+    agent = UnmuteAgent(AgentSpec("Orders.", model=CacheWriteUsageCall("Hello.")))
+    async with AgentSession() as session:
+        session.on("metrics_collected", lambda event: collected.append(event.metrics))
+        await session.start(agent)
+        await session.run(user_input="Hi")
+
+    [reported] = [item for item in collected if isinstance(item, metrics.LLMMetrics)]
+    assert (reported.prompt_cached_tokens, reported.cache_creation_tokens) == (3, 5)
+
+
 class CountedUsageCall(ScriptedCall):
     """A scripted model call whose provider counts its thinking apart, in its own total."""
 

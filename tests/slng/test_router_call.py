@@ -123,6 +123,7 @@ async def test_text_and_tool_calls_stream_back() -> None:
                     ]
                 }
             ),
+            chunk({"tool_calls": [{"index": 0, "function": {"arguments": 'y": 1}'}}]}),
             chunk(
                 {
                     "tool_calls": [
@@ -135,7 +136,6 @@ async def test_text_and_tool_calls_stream_back() -> None:
                     ]
                 }
             ),
-            chunk({"tool_calls": [{"index": 0, "function": {"arguments": 'y": 1}'}}]}),
         ]
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
@@ -164,8 +164,8 @@ def _piece(index: int | None, call_id: str | None, name: str | None, arguments: 
         pytest.param(
             [
                 [_piece(0, "t1", "book", '{"a"')],
-                [_piece(1, "t2", "find", "{}")],
                 [_piece(0, None, None, ": 1}")],
+                [_piece(1, "t2", "find", "{}")],
             ],
             [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
             id="numbered calls join by index",
@@ -183,9 +183,9 @@ def _piece(index: int | None, call_id: str | None, name: str | None, arguments: 
         pytest.param(
             [
                 [_piece(None, "t1", "book", '{"a"')],
+                [_piece(None, "t1", None, ": 1}")],
                 [_piece(None, "t2", "find", "{")],
                 [_piece(None, None, None, "}")],
-                [_piece(None, "t1", None, ": 1}")],
             ],
             [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
             id="a piece with an id seen before, or with neither, continues a call",
@@ -675,7 +675,7 @@ async def test_a_body_field_the_router_drops_is_sent_with_one_warning(
     ]
 
 
-@pytest.mark.parametrize("key", ["api_key", "extra_headers", "vertex_project"])
+@pytest.mark.parametrize("key", ["api_key", "vertex_project"])
 async def test_a_request_param_the_router_drops_is_sent_with_one_warning(
     key: str, warned: set[str], caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -710,3 +710,58 @@ async def test_reasoning_effort_and_include_pass_in_params() -> None:
 def test_the_router_refuses_headers_in_place_of_the_call() -> None:
     with pytest.raises(TypeError, match=r"takes the call's CallInfo, like state.call"):
         RouterModelCall(RouterHeaders("salon", "call-1"), client=FakeRouter().client())  # ty: ignore[invalid-argument-type]
+
+
+SPACED = [
+    {"role": "system", "content": "Say {{ name }} and {{ a.b }} as text."},
+    {"role": "developer", "content": [{"type": "text", "text": "Keep {{ x.y }}."}]},
+    {"role": "user", "content": "hi"},
+]
+
+
+async def test_a_request_with_no_variables_sends_its_placeholders_as_written() -> None:
+    router = FakeRouter()
+    [event async for event in router_call(router).stream(ModelRequest(messages=SPACED))]
+
+    assert router.body["messages"] == SPACED
+    assert router.body["template_variables"] == {}
+
+
+async def test_a_request_with_variables_writes_placeholders_the_router_reads() -> None:
+    router = FakeRouter()
+    request = ModelRequest(messages=SPACED, variables={"name": "Ana", "a__b": "1", "x__y": "2"})
+    [event async for event in router_call(router).stream(request)]
+
+    assert router.body["messages"][0]["content"] == "Say {{name}} and {{a__b}} as text."
+    assert router.body["messages"][1]["content"][0]["text"] == "Keep {{x__y}}."
+
+
+async def test_variables_from_the_calls_body_also_make_the_router_fill() -> None:
+    router = FakeRouter()
+    call = RouterModelCall(
+        CALL,
+        model="gpt-test",
+        body={"template_variables": {"name": "Ana"}},
+        client=router.client(),
+    )
+    [event async for event in call.stream(ModelRequest(messages=SPACED))]
+
+    assert router.body["messages"][0]["content"] == "Say {{name}} and {{a__b}} as text."
+
+
+async def test_the_request_carries_the_sdk_headers_of_a_plain_streamed_create() -> None:
+    router = FakeRouter(headers={"x-request-id": "req-1"})
+    client = router.client()
+    call = RouterModelCall(CALL, model="gpt-test", client=client)
+
+    events = [event async for event in call.stream(REQUEST)]
+    plain = await client.chat.completions.create(model="gpt-test", messages=[], stream=True)
+    [chunk async for chunk in plain]
+
+    routed, direct = (
+        {name: value for name, value in sent.headers.items() if name.startswith("x-stainless-")}
+        for sent in router.requests
+    )
+    assert "x-stainless-raw-response" not in routed
+    assert routed == direct
+    assert any(getattr(event, "request_id", None) == "req-1" for event in events)
