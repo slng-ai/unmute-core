@@ -4,16 +4,18 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.18.2
+
+This release reports same-model retries, keeps the cached tokens and the answer's ids in `Usage`, and sends a tool's whole parameters on Pipecat. No API was removed. `unmute_core.require("0.18.0")` accepts 0.18.2, so code built for 0.18.0 needs no change.
 
 ### Added
 
-- `FallbackModelCall(on_retry=...)` is called before each pause that sends the same call again, with a `Retry`: the call, which retry it is, the pause, whether it is a `Retry-After` wait, and the error. Before, only a move to the next call was reported, through `on_fail_over`, and a same-model retry was only logged.
-- `Usage` carries `cached_input_tokens`, `response_id` and `request_id`: the prompt tokens the provider served from its cache, the answer's id from its chunks, and the provider's `x-request-id`. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.prompt_cached_tokens` and `request_id` now carry them. On Pipecat, the usage chunk carries the cached tokens, so `LLMTokenUsage.cache_read_input_tokens` is set. The `llm` span shows them as `gen_ai.usage.cache_read.input_tokens` on both adapters, and `Telemetry.end_model_request` takes `cached_input_tokens`. Before, all three were dropped.
+- `FallbackModelCall(on_retry=...)` is called before each pause that sends the same call again, with a `Retry`: the call, which retry it is, the pause, whether it is a `Retry-After` wait, and the error. Before, only a move to the next call was reported, through `on_fail_over`, and a same-model retry was only logged (#49).
+- `Usage` carries `cached_input_tokens`, `response_id` and `request_id`: the prompt tokens the provider served from its cache, the answer's id from its chunks, and the provider's `x-request-id`. `RouterModelCall` and `OpenAIModelCall` fill them. On LiveKit, `LLMMetrics.prompt_cached_tokens` and `request_id` now carry them. On Pipecat, the usage chunk carries the cached tokens, so `LLMTokenUsage.cache_read_input_tokens` is set. The `llm` span shows them as `gen_ai.usage.cache_read.input_tokens` on both adapters, and `Telemetry.end_model_request` takes `cached_input_tokens`. Before, all three were dropped (#50).
 
 ### Fixed
 
-- On Pipecat, a tool's parameters now reach the model as they do on LiveKit. Before, Pipecat's `FunctionSchema` rebuilt them from `properties` and `required`, so a root keyword like `"additionalProperties": false` was lost and the root keys changed order. Now the tools of `tools_schema()` and of a task step send the whole parameters object, refs inlined as before. Flows needs `ParametersFlowManager` for this, and the library builds it for a call. A realtime service still sends only `properties` and `required`, as its Pipecat adapter builds them.
+- On Pipecat, a tool's parameters now reach the model as they do on LiveKit. Before, Pipecat's `FunctionSchema` rebuilt them from `properties` and `required`, so a root keyword like `"additionalProperties": false` was lost and the root keys changed order. Now the tools of `tools_schema()` and of a task step send the whole parameters object, refs inlined as before. Flows needs `ParametersFlowManager` for this, and the library builds it for a call. A realtime service still sends only `properties` and `required`, as its Pipecat adapter builds them (#48).
 
 ## 0.18.1
 

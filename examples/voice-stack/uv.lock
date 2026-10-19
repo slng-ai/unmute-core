@@ -3623,7 +3623,7 @@ wheels = [
 
 [[package]]
 name = "unmute-core"
-version = "0.18.1"
+version = "0.18.2"
 source = { editable = "../../" }
 dependencies = [
     { name = "babel" },
