@@ -181,7 +181,7 @@ The call's own object. Build one per call. See [Open a call](/core/build/call-li
   The longest the `before_call` hooks may take together.
 </ParamField>
 <ParamField path="first_request_timeout_s" type="float" default="10.0">
-  The longest a model request waits for tools on events and background lookups.
+  The longest a model request waits for tools on events and background lookups. A tool or lookup with `wait=False` is not waited for.
 </ParamField>
 <ParamField path="failure_line" type="str | None" default="FAILURE_LINE">
   Said before hanging up on a failure. None says nothing.
@@ -265,8 +265,8 @@ Work at call start is a [prefetch](/core/build/prefetch). A tool on a `call_star
 
 1. `CallHooks(state, prefetch=...)` takes the prefetch. A prefetch needs a state.
 2. `open()` runs the `before_call` hooks first, then `prefetch.run`. The prefetch holds the greeting until it ends or its budget (2 seconds) runs out.
-3. Then `open()` starts `prefetch.run_background`. It runs each `background=True` lookup beside the greeting.
-4. Every model request waits for the background lookups, up to `first_request_timeout_s` (10 seconds). So a fixed greeting plays at once.
+3. Then `open()` starts `prefetch.run_background`. It runs each `background=True` lookup beside the greeting. A lookup with `wait=False` runs on its own, so it never holds the others.
+4. Every model request waits for the background lookups, up to `first_request_timeout_s` (10 seconds). So a fixed greeting plays at once. A lookup with `wait=False` is not waited for. The call's end waits for it, up to `end_timeout_s`.
 5. `call.results` holds each lookup's result as JSON, by entry name. `UnmuteAgent(call=call)` and `UnmuteFlows(call=call)` give it to their tasks, so a step with a `tool` input reads it. In your own host, pass it to `CallTasks(call_start=call.results)`. See [Tasks](/core/build/tasks).
 6. `EventTool(..., on=["call_start"])` raises `ValueError`. It points you to `Lookup(..., background=True)`.
 
@@ -393,6 +393,9 @@ Add it to the call's hooks with `hooks.add(EventTool(...))`, or pass it to `Hook
 <ParamField path="note" type="bool" default="False">
   True also shows the result to the model as a note.
 </ParamField>
+<ParamField path="wait" type="bool" default="True">
+  True holds the next model request until the run ends, up to `first_request_timeout_s`. False never holds a request.
+</ParamField>
 
 ### Saving the result
 
@@ -448,6 +451,20 @@ Results of tools that ran on their own in this call. Use them, but never read th
 ### The wait before the first reply
 
 Each model request waits for the tools on events and for the background lookups, up to `first_request_timeout_s`. So a fixed greeting plays at once. The first model request, and a greeting the model words, wait for them.
+
+A tool with `wait=False` is not waited for, and neither is a background lookup with `wait=False`:
+
+```python
+EventTool(notify_crm, on=["tool_succeeded:book_slot"], wait=False)
+```
+
+1. The run starts on its event, as any run does. No model request waits for it, so a slow tool does not delay a reply.
+2. It starts at once, beside the other tools of its event. It does not hold the tools after it in the list.
+3. It still fires the event that follows it, `tool_succeeded:<tool>` or `tool_failed:<tool>`. The tools that follow it keep their own `wait`. A follower with `wait=True` is waited for from the moment it starts.
+4. The call's end waits for it, up to `end_timeout_s` (5 seconds), like other pending work. A `call_end` tool with `wait=False` is waited for too, before the `call.ended` observers run.
+5. With `note=True`, a run nobody waited for leaves its note when it ends. The note can only reach a request that starts after that. A request that started earlier never sees it.
+6. A run nobody waited for that fails is logged. The tools that follow its failure still start.
+7. `CallHooks` checks loops and the depth of a chain with `wait=False` tools as it does for the others.
 
 A plain native LLM on LiveKit with no `traced_llm` gets no wait and no notes. Wrap the LLM with `traced_llm`, or use `ModelCallLLM(call=call)`. On a Pipecat pipeline with no `UnmuteFlows`, pass `llm=` to `open_call`. See [Add one piece to your agent](/core/frameworks/standalone).
 

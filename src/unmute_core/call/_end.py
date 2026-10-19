@@ -101,14 +101,17 @@ class EndRun:
         return ended
 
     async def _run_end_tools(self) -> None:
-        """Settle the held saves, wait for background runs, run the call-end tools."""
+        """Settle the held saves, wait for background runs, run the call-end tools.
+
+        Runs that no model request waits for are waited for here too.
+        """
         try:
             async with asyncio.timeout(self._timeout_s):
                 if self._state is not None:
                     await _logged(self._state.settle_held(), "settling the held saves")
-                if pending := list(self._runner.pending):
-                    await asyncio.wait(pending)
+                await self._runner.drain()
                 await _logged(self._runner.fire("call_end"), "the call-end tools")
+                await self._runner.drain()
         except TimeoutError:
             logger.warning(
                 "the call-end tools took over %.0f s and were cut short", self._timeout_s
