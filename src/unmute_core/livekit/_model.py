@@ -239,6 +239,7 @@ class LiveKitModel(NativeModelCall):
                         response_id=chunk.id or None,
                         reasoning_tokens=chunk.usage.reasoning_tokens or None,
                         total_tokens=chunk.usage.total_tokens,
+                        cache_write_tokens=chunk.usage.cache_creation_tokens or None,
                     )
                 if chunk.delta is None:
                     continue
@@ -1007,6 +1008,7 @@ class _ReplyRecorder:
                 total_tokens=usage.total_tokens if usage else 0,
                 tokens_per_second=usage.completion_tokens / duration if usage and duration else 0.0,
                 prompt_cached_tokens=usage.prompt_cached_tokens if usage else 0,
+                cache_creation_tokens=usage.cache_creation_tokens if usage else 0,
                 reasoning_tokens=usage.reasoning_tokens if usage else 0,
                 metadata=Metadata(model_name=answered or self.model, model_provider=self.provider),
             ),
@@ -1159,6 +1161,7 @@ def _event_chunk(event: ModelEvent) -> llm.ChatChunk | str | None:
             completion_tokens=event.output_tokens,
             prompt_tokens=event.input_tokens,
             prompt_cached_tokens=event.cached_input_tokens or 0,
+            cache_creation_tokens=event.cache_write_tokens or 0,
             reasoning_tokens=event.reasoning_tokens or 0,
             total_tokens=(
                 event.total_tokens

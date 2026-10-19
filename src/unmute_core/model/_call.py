@@ -143,6 +143,8 @@ class Usage:
         total_tokens: The provider's own total, or None when it did not say. It can be
             more than input plus output, for example when a provider counts thinking
             separately.
+        cache_write_tokens: How many input tokens the provider wrote to its prompt
+            cache, or None when it did not say.
     """
 
     input_tokens: SkipValidation[int]
@@ -152,6 +154,7 @@ class Usage:
     request_id: str | None = None
     reasoning_tokens: SkipValidation[int | None] = None
     total_tokens: SkipValidation[int | None] = None
+    cache_write_tokens: SkipValidation[int | None] = None
 
 
 @original_errors
@@ -162,8 +165,9 @@ class AnswerStarted:
     It comes once, before the answer's text, tool calls and usage, and says nothing about
     them. A reply that is only a tool call shows its ``ToolCall`` when the whole call has
     streamed, so this is the first sign that the provider is answering.
-    ``FallbackModelCall(start_ends_budget=True)`` ends its first-event budget here. A
-    consumer that has no use for it skips it.
+    ``FallbackModelCall(start_ends_budget=True)`` ends its first-event budget here, and
+    ``start_is_answer=True`` also takes it as the answer. A consumer that has no use for it
+    skips it.
 
     Attributes:
         response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.

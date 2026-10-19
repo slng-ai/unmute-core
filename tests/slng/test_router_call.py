@@ -123,6 +123,7 @@ async def test_text_and_tool_calls_stream_back() -> None:
                     ]
                 }
             ),
+            chunk({"tool_calls": [{"index": 0, "function": {"arguments": 'y": 1}'}}]}),
             chunk(
                 {
                     "tool_calls": [
@@ -135,7 +136,6 @@ async def test_text_and_tool_calls_stream_back() -> None:
                     ]
                 }
             ),
-            chunk({"tool_calls": [{"index": 0, "function": {"arguments": 'y": 1}'}}]}),
         ]
     )
     events = [event async for event in router_call(router).stream(REQUEST)]
@@ -164,8 +164,8 @@ def _piece(index: int | None, call_id: str | None, name: str | None, arguments: 
         pytest.param(
             [
                 [_piece(0, "t1", "book", '{"a"')],
-                [_piece(1, "t2", "find", "{}")],
                 [_piece(0, None, None, ": 1}")],
+                [_piece(1, "t2", "find", "{}")],
             ],
             [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
             id="numbered calls join by index",
@@ -183,9 +183,9 @@ def _piece(index: int | None, call_id: str | None, name: str | None, arguments: 
         pytest.param(
             [
                 [_piece(None, "t1", "book", '{"a"')],
+                [_piece(None, "t1", None, ": 1}")],
                 [_piece(None, "t2", "find", "{")],
                 [_piece(None, None, None, "}")],
-                [_piece(None, "t1", None, ": 1}")],
             ],
             [("t1", "book", '{"a": 1}'), ("t2", "find", "{}")],
             id="a piece with an id seen before, or with neither, continues a call",
