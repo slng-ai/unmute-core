@@ -84,12 +84,16 @@ def _choice_of(choices: tuple[str, ...]) -> Callable[[object], object]:
     """Return a check that maps text to the choice it names, whitespace around both ignored.
 
     An exact choice stays itself. Otherwise the trimmed text picks the first choice that
-    trims to it, so a declared ``" small"`` is saved as declared.
+    trims to it, so a declared ``" small"`` is saved as declared. A JSON number picks the
+    choice its digits spell, as ``str`` stores a number as its digits: ``1`` names ``"1"``.
     """
     trimmed = {choice.strip(): choice for choice in reversed(choices)}
 
     def choice_of(value: object) -> object:
         """Return the declared choice ``value`` names, or ``value`` for the type to refuse."""
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            whole = isinstance(value, float) and value.is_integer()
+            value = str(int(value)) if whole else str(value)
         if isinstance(value, str) and value not in choices:
             return trimmed.get(value.strip(), value)
         return value
