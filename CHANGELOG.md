@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `StateRefused.name` and `StateRefused.reason`: the value a refusal is about, and what was wrong after its name. For `bookings.0.day: expected a day`, `name` is `bookings` and `reason` is `0.day: expected a day`. Code that words a refusal its own way, or points at the value, no longer cuts the name off `message`. `message` is unchanged.
+
 ## 0.19.4
 
 This release adds two opt-in options to the model calls and an error for a request refused before sending. A fallback chain now skips retries that cannot help. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Changed" before you upgrade: a chain with `same_model_retries` no longer retries a request refused before sending.
