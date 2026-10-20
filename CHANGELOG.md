@@ -4,16 +4,24 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.19.5
+
+This release makes `Phone` strict about the text around a number, and gives `StateRefused` the value it is about. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Fixed" before you upgrade: a phone number with words or symbols before it, like `tel:+34612345678`, is now refused.
+
+### Highlights
+
+- **A phone number is only the number.** Words or symbols before it are refused, so a word that changes what the number means is never dropped.
+- **Better phone reasons.** A national number with an extension or letters is refused for that, not for a missing country code.
+- **Refusals name their value.** `StateRefused.name` and `.reason`.
 
 ### Added
 
-- `StateRefused.name` and `StateRefused.reason`: the value a refusal is about, and what was wrong after its name. For `bookings.0.day: expected a day`, `name` is `bookings` and `reason` is `0.day: expected a day`. Code that words a refusal its own way, or points at the value, no longer cuts the name off `message`. `message` is unchanged.
+- `StateRefused.name` and `StateRefused.reason`: the value a refusal is about, and what was wrong after its name. For `bookings.0.day: expected a day`, `name` is `bookings` and `reason` is `0.day: expected a day`. Code that words a refusal its own way, or points at the value, no longer cuts the name off `message`. `message` is unchanged (#92).
 
 ### Fixed
 
-- `Phone` refuses a number with words or symbols before it, like `mobile: +34 612 345 678`, `Phone: +34 612 345 678` or `tel:+34612345678`: "It has words or symbols before the number: send only the number, from its plus or its first digit". Before, libphonenumber skipped the text and the number was saved, so a word like "not" or "fax" in front of a number was lost. A plus or digits of another script, like fullwidth ones, are still read.
-- `Phone` refuses a number said without its country code and with an extension, like `612 345 678 ext 5`, for its extension: "It has an extension, which the number cannot hold". One with letters, like `612 ABC 678`, is refused for its letters. Before, both read "No country has that code", so the model asked the caller for a country code they did not need to give.
+- `Phone` refuses a number with words or symbols before it, like `mobile: +34 612 345 678`, `Phone: +34 612 345 678` or `tel:+34612345678`: "It has words or symbols before the number: send only the number, from its plus or its first digit". Before, libphonenumber skipped the text and the number was saved, so a word like "not" or "fax" in front of a number was lost. A plus or digits of another script, like fullwidth ones, are still read (#93).
+- `Phone` refuses a number said without its country code and with an extension, like `612 345 678 ext 5`, for its extension: "It has an extension, which the number cannot hold". One with letters, like `612 ABC 678`, is refused for its letters. Before, both read "No country has that code", so the model asked the caller for a country code they did not need to give (#91).
 
 ## 0.19.4
 
