@@ -8,11 +8,11 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
-- `RequestRefusedError`, a `ValueError`, says a model call refused a request before it sent it. `RouterModelCall` raises it for a bad request option, a field the call owns, a bad prompt site or template variables over the router's limits. `OpenAIModelCall` raises it for a bad request option or a field it owns. Nothing is sent. Code that catches `ValueError` still catches it (#PR).
+- `RequestRefusedError`, a `ValueError`, says a model call refused a request before it sent it. `RouterModelCall` raises it for a bad request option, a field the call owns, a bad prompt site or template variables over the router's limits. `OpenAIModelCall` raises it for a bad request option or a field it owns. Nothing is sent. Code that catches `ValueError` still catches it (#87).
 
 ### Changed
 
-- `FallbackModelCall` moves to the next call at once after a `RequestRefusedError`, with no same-model retry. Before, a refusal had no HTTP status, so it counted as a short-lived failure: with `same_model_retries` set, the chain sent it again after each pause, and it failed the same way each time. Any other error with no status is still short-lived (#PR).
+- `FallbackModelCall` moves to the next call at once after a `RequestRefusedError`, with no same-model retry. Before, a refusal had no HTTP status, so it counted as a short-lived failure: with `same_model_retries` set, the chain sent it again after each pause, and it failed the same way each time. Any other error with no status is still short-lived (#87).
 
 ## 0.19.3
 
