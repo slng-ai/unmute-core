@@ -149,6 +149,56 @@ def test_a_value_past_the_stored_limit_is_refused(state: CallState) -> None:
         state.save({"appointments": [APPOINTMENT] * 1000})
 
 
+@pytest.mark.parametrize(
+    ("text", "saved"),
+    [("x" * 64_000, True), ("x" * 64_001, False), ('"' * 40_000, True)],
+    ids=["at-the-limit", "one-past", "quotes-counted-once"],
+)
+def test_the_stored_limit_counts_the_value_and_nothing_around_it(text: str, saved: bool) -> None:
+    state = CallState(create_model("Notes", note=(str | None, None)))
+    if saved:
+        state.save({"note": text})
+        assert state.plain("note") == text
+    else:
+        with pytest.raises(StateRefused, match=r"^note: too long to keep: 64001 characters"):
+            state.save({"note": text})
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"count": "not-a-number"},
+        {"appointments": [{**APPOINTMENT, "scheduled_date": "tomorrow"}]},
+        {"nope": 1},
+        {"call": {}},
+        {"appointments": [APPOINTMENT] * 1000},
+    ],
+)
+def test_check_refuses_what_a_save_refuses_with_its_words(state: CallState, values: dict) -> None:
+    with pytest.raises(StateRefused) as saved:
+        state.save(values)
+    with pytest.raises(StateRefused) as checked:
+        state.check(values)
+    assert checked.value.message == saved.value.message
+
+
+def test_check_returns_the_values_as_json_and_saves_nothing(state: CallState) -> None:
+    events = []
+    state.listen(events.append)
+    before = state.snapshot()
+    assert state.check({"count": "3", "last_appointment": APPOINTMENT}) == {
+        "count": 3,
+        "last_appointment": {
+            "scheduled_date": "2026-03-19",
+            "scheduled_time": "09:30:00",
+            "appointment_type": "haircut",
+        },
+    }
+    assert state.check({}) == {}
+    assert state.snapshot() == before
+    assert events == []
+
+
 def test_snapshot_gives_every_value_as_the_prompt_reads_it(state: CallState) -> None:
     state.save({"count": 3, "caller_phone": "+34600111222"})
     assert state.snapshot() == {

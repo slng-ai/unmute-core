@@ -84,10 +84,20 @@ flowchart LR
 ```
 
 1. `state.save(values)` checks the whole batch against the model first.
-2. If one value is unknown, does not fit its type, or is longer than 64,000 characters, `save` raises `StateRefused`. Nothing from the batch is saved.
+2. If one value is unknown, does not fit its type, or is longer than 64,000 characters, `save` raises `StateRefused`. Nothing from the batch is saved. Text counts its own characters. Anything else counts its compact JSON.
 3. `StateRefused.message` is worded for the model, like `caller_phone: expected a phone number with its country code`. A task step shows it to the model, so the model can ask the caller again.
 4. Otherwise every value is saved. Phone numbers, dates and the like are saved in their clean form.
 5. Read `state.values` if you like, but never write to it. `save` is the one way in.
+
+### Checking before you save
+
+`state.check(values)` applies the same rules as `save` and saves nothing. It returns each value as the state would hold it, as JSON data, or raises the `StateRefused` the save would raise, with the same message.
+
+```python
+state.check({"caller_phone": "+34 612 345 678"})  # {"caller_phone": "+34612345678"}
+```
+
+Use it to test what a tool would save before it acts, or to save only the values of a batch that fit: check each value on its own, then save the ones that passed.
 
 A value is saved by a task step, by [prefetch](/core/build/prefetch), by the model through the [`save_values` tool](#saving-values-no-task-saves), or by your own code calling `state.save`.
 
