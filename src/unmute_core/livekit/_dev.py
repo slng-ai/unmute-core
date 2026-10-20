@@ -432,6 +432,7 @@ class DevObserver:
         """End a response: cut off when LiveKit said so, else ended."""
         if response is None:
             return
+        self._timings.settled(response)
         self._rec.settle_exchange(
             response, cut=response in self._interrupted, spoke=response in self._spoken
         )
@@ -473,6 +474,7 @@ class DevObserver:
             if self._session is not None and (speech := self._session.current_speech):
                 self._speeches.setdefault(speech.id, response)
             self._spoken.add(response)
+            self._timings.speaking(response, event.created_at)
             self._rec.update("exchange", response, playback="speaking")
             if self._audio is None:
                 self._timings.first_speech(event.created_at, "livekit-agent-state")

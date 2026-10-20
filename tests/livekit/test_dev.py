@@ -111,11 +111,12 @@ class Voice:
         """Send one event, as the session would."""
         self.session.emit(name, event)
 
-    def state(self, new: AgentState) -> None:
-        """Move the agent to a new state."""
-        self.emit(
-            "agent_state_changed", AgentStateChangedEvent(old_state=self.agent, new_state=new)
-        )
+    def state(self, new: AgentState, at: float | None = None) -> None:
+        """Move the agent to a new state, now or at a given time."""
+        event = AgentStateChangedEvent(old_state=self.agent, new_state=new)
+        if at is not None:
+            event.created_at = at
+        self.emit("agent_state_changed", event)
         self.agent = new
 
     def caller(self, *transcripts: str, metrics: dict[str, float] | None = None) -> None:
@@ -291,6 +292,18 @@ async def test_a_tool_reply_spoken_with_say_still_gets_its_reply_latency() -> No
     latency = call.records.measured()["reply_latency"]
     assert latency["value"] == pytest.approx(1.2)
     assert latency["source"] == "livekit-chat-message.started_speaking_at"
+
+
+async def test_a_step_receipt_that_never_joins_the_chat_still_gets_its_reply_latency() -> None:
+    call = Voice()
+    call.caller("Yes, book it.", metrics={"end_of_turn_delay": 0.4, "stopped_speaking_at": 99.0})
+    call.state("thinking")
+    call.metric(_llm_metrics())
+    call.state("speaking", at=100.3)
+    call.state("listening")
+    latency = call.records.measured()["reply_latency"]
+    assert latency["value"] == pytest.approx(1.3)
+    assert latency["source"] == "livekit-agent-state"
 
 
 async def test_the_caller_speaking_over_the_agent_cuts_its_reply_off() -> None:
