@@ -298,8 +298,8 @@ class FallbackModelCall:
     ) -> tuple[ModelEvent | None, Usage | None]:
         """Wait for the first answer event within the budget, and a ``Usage`` that came first.
 
-        A ``Usage`` or an ``AnswerStarted`` is no answer. None when the stream holds nothing
-        else. With ``start_ends_budget``, the budget covers the wait for ``AnswerStarted``
+        A ``Usage`` or an ``AnswerStarted`` is no answer. A ``ToolCallStarted`` is, as text is.
+        None when the stream holds nothing else. With ``start_ends_budget``, the budget covers the wait for ``AnswerStarted``
         only. With ``start_is_answer``, the ``AnswerStarted`` is the answer and is returned.
         """
         at_start = self._start_ends_budget or self._start_is_answer
@@ -441,6 +441,8 @@ async def _answer(
     events: AsyncIterator[ModelEvent], usage: Usage | None, *, at_start: bool
 ) -> tuple[ModelEvent | None, Usage | None]:
     """Read a call's stream to its first answer event, keeping a ``Usage`` that came first.
+
+    An answer event is text, a ``ToolCall`` or a ``ToolCallStarted``.
 
     Returns:
         The first answer event, or the ``AnswerStarted`` when ``at_start`` stopped the read

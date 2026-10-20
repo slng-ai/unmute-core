@@ -46,6 +46,7 @@ from unmute_core.model import (
     ReasoningFilter,
     TextDelta,
     ToolCall,
+    ToolCallStarted,
     Usage,
     close_model,
     model_name,
@@ -326,7 +327,7 @@ async def _chunks(
     index = 0
     speech = ReasoningFilter(markers)
     async for event in events:
-        if isinstance(event, AnswerStarted):
+        if isinstance(event, AnswerStarted | ToolCallStarted):
             continue
         if isinstance(event, TextDelta):
             if text := speech.feed(event.text):

@@ -23,6 +23,7 @@ from unmute_core.model import (
     Retry,
     TextDelta,
     ToolCall,
+    ToolCallStarted,
     Usage,
     answered_model,
     variable_key_max,
@@ -763,3 +764,16 @@ async def test_the_answer_clock_stays_empty_when_no_call_answered() -> None:
 
 async def test_a_chain_outside_an_answer_clock_runs_as_before() -> None:
     assert await collect(FallbackModelCall([Timed("ok")])) == ["ok"]
+
+
+async def test_a_tool_call_start_is_the_answer_so_a_later_error_is_raised() -> None:
+    class Started:
+        async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+            yield ToolCallStarted("t1", "book")
+            raise StatusError(503)
+
+    second = FakeCall(["x"])
+    chain = FallbackModelCall([Started(), second])
+    with pytest.raises(StatusError):
+        [event async for event in chain.stream(REQUEST)]
+    assert second.calls == 0

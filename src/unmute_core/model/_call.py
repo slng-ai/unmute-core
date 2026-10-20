@@ -178,9 +178,34 @@ class AnswerStarted:
     request_id: str | None = None
 
 
-ModelEvent = TextDelta | ToolCall | Usage | AnswerStarted
-"""What a model call streams. A consumer skips an ``AnswerStarted`` or a ``Usage`` it has no
-use for."""
+@original_errors
+@dataclass(frozen=True, slots=True, config=VALUE)
+class ToolCallStarted:
+    """The model began a tool call: the call's first piece arrived.
+
+    It comes only from a call asked for it, like ``RouterModelCall(tool_call_starts=True)``
+    or ``OpenAIModelCall(tool_call_starts=True)``. It comes once per call, before the call's
+    ``ToolCall``, which follows when the whole call has streamed. So it is the first sign
+    that a reply holds a tool call, for timing the start of a reply that is only a tool
+    call. ``FallbackModelCall`` takes it as the start of the answer, as it takes text. A
+    consumer that has no use for it skips it.
+
+    Attributes:
+        id: The call id, as far as the first piece gives it, or ``""``.
+        name: The tool's name, as far as the first piece gives it, or ``""``.
+        response_id: The id the provider gave the answer, like ``chatcmpl-...``, or None.
+        request_id: The provider's ``x-request-id`` for the HTTP request, or None.
+    """
+
+    id: str
+    name: str
+    response_id: str | None = None
+    request_id: str | None = None
+
+
+ModelEvent = TextDelta | ToolCall | Usage | AnswerStarted | ToolCallStarted
+"""What a model call streams. A consumer skips an ``AnswerStarted``, a ``ToolCallStarted`` or
+a ``Usage`` it has no use for."""
 
 
 @original_errors
@@ -215,10 +240,10 @@ async def collect(events: AsyncIterable[ModelEvent]) -> ModelAnswer:
             calls.append(event)
         elif isinstance(event, Usage):
             usage = event
-        elif not isinstance(event, AnswerStarted):  # own text: not a model event
+        elif not isinstance(event, AnswerStarted | ToolCallStarted):  # own text: not an event
             raise TypeError(
                 f"a model call streamed {type(event).__name__}; stream TextDelta, ToolCall, "
-                "Usage or AnswerStarted events"
+                "Usage, AnswerStarted or ToolCallStarted events"
             )
     return ModelAnswer("".join(text), tuple(calls), usage)
 
