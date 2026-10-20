@@ -4,7 +4,15 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.19.4
+
+This release adds two opt-in options to the model calls and an error for a request refused before sending. A fallback chain now skips retries that cannot help. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Changed" before you upgrade: a chain with `same_model_retries` no longer retries a request refused before sending.
+
+### Highlights
+
+- **Refusals fail over at once.** A request a call refuses before sending moves to the next call with no retry.
+- **The start of a tool call.** `tool_call_starts=True` streams a `ToolCallStarted` at a tool call's first piece.
+- **No environment reads.** `RouterModelCall(read_env=False)` takes every setting from its arguments.
 
 ### Added
 
