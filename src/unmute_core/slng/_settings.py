@@ -15,7 +15,7 @@ from pydantic import (
     field_validator,
 )
 from pydantic_core import PydanticCustomError
-from pydantic_settings import SettingsConfigDict
+from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from unmute_core.settings import UNSET_ANY, EnvSettings, SettingsError
 
@@ -104,3 +104,19 @@ class SlngSettings(EnvSettings):
             return self.router_url
         assert self.world_part is not None  # ponytail: the validator needs one of the two
         return router_url(self.world_part)
+
+
+class PassedSlngSettings(SlngSettings):
+    """``SlngSettings`` from the values passed to it only. No ``SLNG_*`` variable is read."""
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        """Read only the constructor's values."""
+        return (init_settings,)

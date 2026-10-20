@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `RouterModelCall(read_env=False)` reads no `SLNG_*` variable. Every setting comes from the arguments, and one left out takes its default. Before, a setting left out came from the environment, so a stray `SLNG_LLM_CONFIG_ID` changed the config of a call that passed none, and a bad `SLNG_WORLD_PART` failed a call that passed its own `base_url`. It needs `api_key`, and `base_url` or `world_part`, and raises `SlngConfigError` without them (#PR).
+
 ## 0.19.3
 
 This release adds `CallState.check`, so a tool or a step can test a save before it makes it, and fixes how a call's state checks values. It fixes a memory leak for agents defined as data, value names Pydantic already uses, the size limit on a value, numbers sent for digit choices, phone numbers with an extension or letters, and empty optional fields inside a shape. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Fixed" before you upgrade: a phone number with an extension or letters is now refused, and some values that were refused now save.
