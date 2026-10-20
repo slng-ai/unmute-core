@@ -8,6 +8,7 @@ who needs to confirm a number with the caller copies it into a value of their ow
 
 import logging
 import uuid
+import weakref
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
@@ -202,13 +203,17 @@ class CallInfo(BaseModel):
         return {**data, "remote_number": data.get(remote) if remote else None}
 
 
-_MODELS: dict[type[BaseModel], type[BaseModel]] = {}
-"""Each State model to its call model. Built once per class, never per call."""
-_BUILT: set[type[BaseModel]] = set()
+_CALL_MODEL = "__unmute_call_model__"
+"""Where a State model keeps its call model, so the two are freed together."""
+_BUILT: weakref.WeakSet[type[BaseModel]] = weakref.WeakSet()
+"""The call models already built, held weakly: a State built per call goes with its call."""
 
 
 def call_model[M: BaseModel](model: type[M]) -> type[M]:
     """Return the State model with the reserved ``call`` value added, built once per class.
+
+    The call model lives as long as its State model, and no longer. A State that a
+    ``StateSchema`` builds for each call is freed when the call lets it go.
 
     Args:
         model: The author's State model, or one this function already returned.
@@ -218,8 +223,8 @@ def call_model[M: BaseModel](model: type[M]) -> type[M]:
     """
     if model in _BUILT:
         return model
-    if (built := _MODELS.get(model)) is not None:
-        return built  # ty: ignore[invalid-return-type]
+    if (built := vars(model).get(_CALL_MODEL)) is not None:
+        return built
     if any(name == CALL or info.alias == CALL for name, info in model.model_fields.items()):
         raise reserved_name_error(model.__name__)
     built = create_model(
@@ -235,8 +240,8 @@ def call_model[M: BaseModel](model: type[M]) -> type[M]:
             ),
         ),
     )
-    # ponytail: kept for the process, as a class is; a State built per call would grow it
-    _MODELS[model] = built
+    # on the model itself, never in a module dict: a State built per call is freed with it
+    type.__setattr__(model, _CALL_MODEL, built)
     _BUILT.add(built)
     return built
 

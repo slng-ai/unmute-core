@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Fixed
+
+- A `CallState` no longer keeps its State model alive for the rest of the process. `CallState` adds the library's `call` value to a State model once per class, and kept every model it did that for in a module dict. An agent defined as data that builds a `StateSchema` for each call, as a server that receives the agent with the call does, grew by one model class per call and never freed them. The model with `call` added now lives on its State model and is freed with it. A State class declared once in code works as before.
+
 ## 0.19.2
 
 This release makes a fallback chain, its metrics and the SLNG router call behave more like LiveKit's own models, and lets a tool on an event run with nothing waiting for it. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Changed" and "Fixed" before you upgrade, since some streams and requests now look different.
