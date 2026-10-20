@@ -101,8 +101,25 @@ def test_a_number_with_letters_is_refused_not_spelled_out(said):
         PHONE.validate_python(said)
 
 
-def test_a_tel_uri_is_still_read():
-    assert PHONE.validate_python("tel:+34612345678") == "+34612345678"
+@pytest.mark.parametrize(
+    "said",
+    [
+        "Phone: +34 612 345 678",
+        "mobile +34612345678",
+        "tel:+34612345678",
+        "(mobile) +34 612 345 678",
+        "#+34612345678",
+        "my number is 612345678",
+    ],
+)
+def test_words_or_symbols_before_a_number_are_refused(said):
+    with use_phone_region(lambda: "ES"), pytest.raises(ValidationError, match="before the number"):
+        PHONE.validate_python(said)
+
+
+def test_a_plus_or_digits_of_another_script_are_still_read():
+    assert PHONE.validate_python("\uff0b34 612 345 678") == "+34612345678"
+    assert PHONE.validate_python("+" + _fullwidth("34612345678")) == "+34612345678"
 
 
 def test_the_country_of_a_full_number():
