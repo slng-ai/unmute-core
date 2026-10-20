@@ -10,14 +10,17 @@ request goes to it, and every variable is keyed by that form.
 from collections.abc import Callable, Iterator
 from typing import Any
 
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.state import CallState
 from unmute_core.state._paths import PLACEHOLDER, ValuePathError, parse_path
 
 FILLED_ROLES = frozenset({"system", "developer"})
 
 
-class MissingVariablesError(ValueError):
+class MissingVariablesError(RequestRefusedError):
     """A prompt names placeholders that have no value.
+
+    It is a ``RequestRefusedError``: the prompt cannot be filled, so nothing is sent.
 
     Attributes:
         names: The missing names, sorted.

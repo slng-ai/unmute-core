@@ -7,7 +7,7 @@ import pytest
 
 from tests.openai_http import http
 from tests.slng.router_fake import FakeRouter
-from unmute_core.model import ModelCall, ModelRequest, OpenAIModelCall
+from unmute_core.model import ModelCall, ModelRequest, OpenAIModelCall, RequestRefusedError
 from unmute_core.slng import RouterModelCall
 from unmute_core.state import CallInfo
 
@@ -152,7 +152,7 @@ async def test_a_reserved_field_is_refused_wherever_it_is_set(build: Build, wher
 
     with pytest.raises(ValueError, match="stream_options"):
         build(router, params)
-    with pytest.raises(ValueError, match="stream_options"):
+    with pytest.raises(RequestRefusedError, match="stream_options"):
         await send(build(router, {}), params)
     assert not router.requests
 
@@ -173,5 +173,5 @@ async def test_a_reserved_field_is_refused_wherever_it_is_set(build: Build, wher
 async def test_an_option_the_sdk_cannot_use_is_refused_by_name(
     build: Build, params: dict[str, Any], message: str
 ) -> None:
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(RequestRefusedError, match=message):
         await send(build(FakeRouter(), {}), params)

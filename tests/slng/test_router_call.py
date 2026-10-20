@@ -12,6 +12,7 @@ from tests.slng.router_fake import FakeRouter, chunk
 from unmute_core.model import (
     AnswerStarted,
     ModelRequest,
+    RequestRefusedError,
     TextDelta,
     ToolCall,
     Usage,
@@ -345,7 +346,15 @@ async def test_an_error_status_carries_its_status_and_retry_after() -> None:
 async def test_variables_over_the_router_limit_fail_before_sending() -> None:
     router = FakeRouter()
     request = ModelRequest(messages=REQUEST.messages, variables={"a.b": "x"})
-    with pytest.raises(ValueError, match=r"'a\.b'"):
+    with pytest.raises(RequestRefusedError, match=r"'a\.b'"):
+        [event async for event in router_call(router).stream(request)]
+    assert router.requests == []
+
+
+async def test_a_bad_prompt_site_is_refused_before_sending() -> None:
+    router = FakeRouter()
+    request = ModelRequest(messages=REQUEST.messages, site="Not A Site")
+    with pytest.raises(RequestRefusedError, match="prompt site 'Not A Site'"):
         [event async for event in router_call(router).stream(request)]
     assert router.requests == []
 
@@ -355,7 +364,7 @@ async def test_a_body_variable_that_is_not_text_fails_before_sending() -> None:
     call = RouterModelCall(
         CALL, base_url="unused", body={"template_variables": {"a": 5}}, client=router.client()
     )
-    with pytest.raises(ValueError):
+    with pytest.raises(RequestRefusedError):
         [event async for event in call.stream(REQUEST)]
     assert router.requests == []
 
@@ -570,7 +579,7 @@ async def test_the_fields_the_call_owns_are_refused_elsewhere() -> None:
         RouterModelCall(CALL, body={"slng_config": {}}, client=FakeRouter().client())
     router = FakeRouter()
     request = ModelRequest(messages=REQUEST.messages, params={"stream_options": {}})
-    with pytest.raises(ValueError, match="must not set stream_options"):
+    with pytest.raises(RequestRefusedError, match="must not set stream_options"):
         [event async for event in router_call(router).stream(request)]
     assert router.requests == []
 

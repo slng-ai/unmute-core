@@ -417,6 +417,7 @@ The client never retries. The router fails over by itself. `RouterModelCall.aclo
 | 403 `project_mode_forbidden` | The call stops. The key's project is not on the Execution Layer, so it may not send a config. `RouterModelCall.stop_codes` holds this code, and `FallbackModelCall` reads it. |
 | 429 | `FallbackModelCall` waits out a short `Retry-After`, then fails over. With `same_model_retries`, a 429 with no usable `Retry-After` retries the same call first. |
 | 5xx, a timeout, a lost connection | `FallbackModelCall` tries the next call. |
+| Refused before sending | A bad request option, a field the call owns, a bad prompt site or template variables over the router's limits. `stream` raises `RequestRefusedError`, a `ValueError`, and sends nothing. `FallbackModelCall` tries the next call at once, with no retry. |
 
 ## Where to go next
 

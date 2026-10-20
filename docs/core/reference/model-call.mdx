@@ -81,6 +81,8 @@ Streams the model's text and tool calls for one request.
 
 It returns an `AsyncIterator[ModelEvent]`.
 
+A call that refuses a request before it sends it raises `RequestRefusedError`, a `ValueError`. `RouterModelCall` and `OpenAIModelCall` do this for a request option or a field they cannot send. A call of your own can raise it too, so `FallbackModelCall` moves to the next call at once.
+
 ## ModelRequest
 
 A frozen Pydantic dataclass. It holds one request, with the prompt still unfilled. A value of the wrong type, like `site=1`, raises a `ValidationError`. An unknown argument raises `TypeError`. To change a request, build a new one with `dataclasses.replace`, which checks it again.
@@ -180,7 +182,7 @@ variables = template_variables(messages, state, site="")
 
 1. `site` says which prompt reads the values. A value that waits for the caller to confirm it reads as empty, except at its own task.
 2. `template_variables` renders every placeholder the system and developer messages use. A dotted name `a.b` becomes the key `a__b`.
-3. A placeholder the state does not have raises `MissingVariablesError`. Its message reads `Missing required template variables:` followed by the names.
+3. A placeholder the state does not have raises `MissingVariablesError`. Its message reads `Missing required template variables:` followed by the names. It is a `RequestRefusedError`, so `FallbackModelCall` moves to the next call at once.
 
 User and assistant messages are never filled.
 
@@ -329,7 +331,7 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
   The longest `Retry-After` worth waiting for. A longer one fails over. A value below zero raises `ValueError`. A `Retry-After` of 0, or an HTTP date in the past, asks for no wait. It is treated as no `Retry-After`, so the call retries on its `same_model_retries` pauses, and it counts as one of them.
 </ParamField>
 <ParamField path="same_model_retries" type="Sequence[float]" default="()">
-  The pause before each retry of the same call after a short failure. A short failure has no status, or is a 408, a 429 or a 5xx. A 429 with a usable `Retry-After` waits that long once instead. Empty moves to the next call at once. `SAME_MODEL_RETRIES_S` is `(0.25, 0.75)`. It is off by default because the Context Router retries by itself.
+  The pause before each retry of the same call after a short failure. A short failure has no status, or is a 408, a 429 or a 5xx. A `RequestRefusedError` is not one. A 429 with a usable `Retry-After` waits that long once instead. Empty moves to the next call at once. `SAME_MODEL_RETRIES_S` is `(0.25, 0.75)`. It is off by default because the Context Router retries by itself.
 </ParamField>
 <ParamField path="stop_statuses" type="Set[int]" default="STOP_STATUSES">
   Statuses that end the chain at once. The default is 400, 401, 402, 413 and 422.
@@ -363,12 +365,13 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
 
 1. It never retries or fails over once the caller has part of the answer. A `ToolCallStarted` counts as part of it, as text does. With `start_is_answer=True`, the start of an answer counts as part of it.
 2. No other model fixes a stop status or a stop code, so the chain ends there.
-3. `error_code(error)` reads the code of an error. `http_status(error)` reads its status.
-4. `retries_itself` is `True`. On LiveKit, `ModelCallLLM` then marks the call's errors as final, so LiveKit does not walk the chain again. A plain `RouterModelCall` does not set it, so LiveKit still retries a router it cannot reach. Another call can set the attribute, and `retries_itself(model)` reads it.
-5. It remembers which call answered last, so build one for each call of the agent.
-6. `.model` and `.provider` name the call the next request starts with. That is the first call, or with `sticky=True` the one that answered last. `.answered` names the call that answered last, the first before any answer. `answered_model(model)` reads it, and falls back to the model's own name. Spans carry both: `gen_ai.request.model` is the call the request started with, and `gen_ai.response.model` is the call that answered.
-7. `aclose()` closes every call that has an `aclose`. `close_model(model)` calls `aclose` on any model that has one and does nothing for the rest.
-8. The agent closes the models it was given when the call ends. Build a `RouterModelCall` or an `OpenAIModelCall` for each call. Never share one across calls in a process, or the first call to end closes it under the others.
+3. A `RequestRefusedError` moves to the next call at once, with no retry. The call never sent the request, so sending it again cannot help. The next call has its own settings and may take it. On the last call, the chain raises it.
+4. `error_code(error)` reads the code of an error. `http_status(error)` reads its status.
+5. `retries_itself` is `True`. On LiveKit, `ModelCallLLM` then marks the call's errors as final, so LiveKit does not walk the chain again. A plain `RouterModelCall` does not set it, so LiveKit still retries a router it cannot reach. Another call can set the attribute, and `retries_itself(model)` reads it.
+6. It remembers which call answered last, so build one for each call of the agent.
+7. `.model` and `.provider` name the call the next request starts with. That is the first call, or with `sticky=True` the one that answered last. `.answered` names the call that answered last, the first before any answer. `answered_model(model)` reads it, and falls back to the model's own name. Spans carry both: `gen_ai.request.model` is the call the request started with, and `gen_ai.response.model` is the call that answered.
+8. `aclose()` closes every call that has an `aclose`. `close_model(model)` calls `aclose` on any model that has one and does nothing for the rest.
+9. The agent closes the models it was given when the call ends. Build a `RouterModelCall` or an `OpenAIModelCall` for each call. Never share one across calls in a process, or the first call to end closes it under the others.
 
 ### FailOver
 
