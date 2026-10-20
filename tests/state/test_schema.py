@@ -235,10 +235,14 @@ def test_schemas_built_per_call_do_not_pile_up_in_a_cache() -> None:
         schema = StateSchema(variables, shapes)
         optional = schema.model.model_fields["customer"].annotation
         kept.append(weakref.ref(get_args(get_args(optional)[0])[0]))
+        kept.append(weakref.ref(schema.model))
         result_model(task, schema.model)
-        del schema
+        state = CallState(schema.model)
+        state.save({"customer": {"status": "new"}})
+        assert CallState(schema.model).model is state.model
+        del schema, state
     gc.collect()
-    assert sum(ref() is not None for ref in kept) < 200
+    assert sum(ref() is not None for ref in kept) < 400
 
 
 NAMES_PYDANTIC_CANNOT_TAKE = ["_1st_choice", "_x", "model_dump", "model_config"]
