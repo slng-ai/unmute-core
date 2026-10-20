@@ -15,8 +15,13 @@ from pydantic import (
 )
 
 from unmute_core._pydantic import retitled
-from unmute_core.model._call import ModelEvent, ModelRequest, NativeModelCall
+from unmute_core.model._call import (
+    ModelEvent,
+    ModelRequest,
+    NativeModelCall,
+)
 from unmute_core.model._chunks import chunk_events
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.model._prompt import folded_system
 from unmute_core.model._signatures import is_gemini, signed_tool_calls, takes_one_system_message
 
@@ -288,12 +293,18 @@ class OpenAIModelCall(NativeModelCall):
 
         Raises:
             openai.APIStatusError: When the endpoint answers with an error status.
-            ValueError: If the request's ``params`` set a field in ``RESERVED_PARAMS``, or one
-                of its request options is not valid.
+            RequestRefusedError: If the request's ``params`` set a field in
+                ``RESERVED_PARAMS``, or one of its request options is not valid. Nothing is
+                sent.
         """
-        fields, requested = split_options(request.params)
+        try:
+            fields, requested = split_options(request.params)
+        except ValueError as error:
+            raise RequestRefusedError(str(error)) from error
         if reserved := sorted(set(fields) & RESERVED_PARAMS):  # per request, at send
-            raise ValueError(f"a request's params must not set {reserved[0]}: OpenAIModelCall does")
+            raise RequestRefusedError(
+                f"a request's params must not set {reserved[0]}: OpenAIModelCall does"
+            )
         from openai import omit
 
         own_fields, own = split_options(self.params)

@@ -37,6 +37,7 @@ from unmute_core.model._call import (
     tool_choice,
     variable_key_max,
 )
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.model._failover import (
     STOP_CODES,
     STOP_STATUSES,
@@ -103,6 +104,7 @@ __all__ = [
     "Next",
     "OpenAIModelCall",
     "ReasoningFilter",
+    "RequestRefusedError",
     "Retry",
     "TextDelta",
     "ToolCall",
