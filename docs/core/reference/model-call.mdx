@@ -302,7 +302,7 @@ gemini = OpenAIModelCall(
 
 1. The library fills the prompt, as with any native call. The model sees the same final prompt as on the router.
 2. The request carries no SLNG header and no SLNG body field.
-3. The events are the same as the router's: `TextDelta`, `ToolCall` and `Usage`.
+3. The events are the same as the router's: `AnswerStarted`, `TextDelta`, `ToolCall` and `Usage`, and `ToolCallStarted` with `tool_call_starts=True`.
 4. The client never retries. Put the call in a `FallbackModelCall` to fail over.
 5. `provider` is `openai`, or the host name of `base_url`.
 6. A missing `openai` package raises an `ImportError` that names the fix.
