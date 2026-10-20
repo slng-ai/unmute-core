@@ -10,6 +10,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - `RequestRefusedError`, a `ValueError`, says a model call refused a request before it sent it. `RouterModelCall` raises it for a bad request option, a field the call owns, a bad prompt site or template variables over the router's limits. `OpenAIModelCall` raises it for a bad request option or a field it owns. Nothing is sent. `MissingVariablesError` is now one too, since a prompt that cannot be filled is never sent. Code that catches `ValueError` still catches both (#87).
 - `ToolCallStarted`, a model event for the start of a tool call. `RouterModelCall(tool_call_starts=True)` and `OpenAIModelCall(tool_call_starts=True)` stream one at the first piece of each tool call, before its `ToolCall`, which still comes when the whole call has streamed. `chunk_events` takes the same option. So a reply that is only a tool call can be timed from when the model began it. It is off by default. `FallbackModelCall` takes it as the start of the answer, as it takes text. Both adapters and `collect` skip it (#88).
+- `RouterModelCall(read_env=False)` reads no `SLNG_*` variable. Every setting comes from the arguments, and one left out takes its default. Before, a setting left out came from the environment, so a stray `SLNG_LLM_CONFIG_ID` changed the config of a call that passed none, and a bad `SLNG_WORLD_PART` failed a call that passed its own `base_url`. It needs `api_key`, and `base_url` or `world_part`, and raises `SlngConfigError` without them (#89).
 
 ### Changed
 

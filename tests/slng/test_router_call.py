@@ -413,6 +413,39 @@ def test_a_missing_key_and_url_are_named_together(monkeypatch: pytest.MonkeyPatc
     )
 
 
+def test_read_env_false_reads_no_variable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SLNG_WORLD_PART", "Not a world part!")
+    monkeypatch.setenv("SLNG_LLM_CONFIG_ID", "from-env")
+    monkeypatch.setenv("SLNG_MODEL", "env-model")
+    call = RouterModelCall(CALL, base_url="https://arg.test/v1", api_key="arg", read_env=False)
+    assert (call.client.api_key, str(call.client.base_url), call.model) == (
+        "arg",
+        "https://arg.test/v1/",
+        "slng/auto",
+    )
+    assert call.headers.llm_config_id is None
+
+
+@pytest.mark.parametrize(
+    ("api_key", "base_url"),
+    [(None, "https://arg.test/v1"), ("arg", None)],
+    ids=["no key", "no url or world part"],
+)
+def test_read_env_false_needs_the_key_and_a_url(
+    monkeypatch: pytest.MonkeyPatch, api_key: str | None, base_url: str | None
+) -> None:
+    monkeypatch.setenv("SLNG_API_KEY", "from-env")
+    monkeypatch.setenv("SLNG_ROUTER_URL", "https://env.test/v1")
+    with pytest.raises(SlngConfigError, match="read_env=False needs api_key, and base_url or"):
+        RouterModelCall(CALL, api_key=api_key, base_url=base_url, read_env=False)
+
+
+def test_read_env_false_still_checks_a_world_part(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SLNG_WORLD_PART", raising=False)
+    with pytest.raises(SlngConfigError, match="is no world part"):
+        RouterModelCall(CALL, world_part="Not one!", api_key="arg", read_env=False)
+
+
 def test_a_ready_client_reads_no_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SLNG_API_KEY", raising=False)
     client = AsyncOpenAI(api_key="test", base_url="https://router.test/v1")

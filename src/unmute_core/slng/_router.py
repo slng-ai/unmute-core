@@ -36,7 +36,13 @@ from unmute_core.slng._headers import (
     router_body,
     shortened,
 )
-from unmute_core.slng._settings import DEFAULT_MODEL, SlngSettings, router_url
+from unmute_core.slng._settings import (
+    DEFAULT_MODEL,
+    PassedSlngSettings,
+    SlngConfigError,
+    SlngSettings,
+    router_url,
+)
 from unmute_core.state._call_info import CallInfo
 
 try:
@@ -116,6 +122,7 @@ class RouterModelCall:
         client: AsyncOpenAI | None = None,
         keepalive_s: float | None = DEFAULT_KEEPALIVE_S,
         tool_call_starts: bool = False,
+        read_env: bool = True,
     ) -> None:
         """Set up the router client. Arguments left out come from ``SlngSettings``.
 
@@ -123,7 +130,8 @@ class RouterModelCall:
             call: What the call carries, like ``state.call``. Every request sends its
                 ``agent_id`` and ``session_id``.
             llm_config_id: The stored router config to use, when the key does not fix
-                one. Defaults to ``SLNG_LLM_CONFIG_ID``, unless ``client`` is given.
+                one. Defaults to ``SLNG_LLM_CONFIG_ID``, unless ``client`` is given or
+                ``read_env`` is False.
             model: The model name. Defaults to ``SLNG_MODEL``, else ``slng/auto``.
             base_url: The router's OpenAI-compatible URL, ending in ``/v1``. Defaults to
                 ``SLNG_ROUTER_URL``.
@@ -153,11 +161,14 @@ class RouterModelCall:
                 for the client this call builds.
             tool_call_starts: Stream a ``ToolCallStarted`` at the first piece of each tool
                 call, before its ``ToolCall``. Off by default.
+            read_env: False reads no ``SLNG_*`` variable: every setting comes from the
+                arguments, and one left out takes its default. Then ``api_key`` is needed,
+                and ``base_url`` or ``world_part``.
 
         Raises:
             TypeError: If ``call`` is no ``CallInfo``.
             SlngConfigError: If the key, or both the URL and the world part, are neither
-                passed nor set.
+                passed nor set. With ``read_env=False``, if they are not passed.
             ValueError: If ``model`` names no model of ``config``, or ``body`` sets a field
                 in ``RESERVED_BODY`` other than ``template_variables``, or one of its request
                 options is not valid, or ``keepalive_s``
@@ -203,7 +214,11 @@ class RouterModelCall:
                 "model": model,
             }
             passed: dict[str, Any] = {name: value for name, value in given.items() if value}
-            settings = SlngSettings(**passed)
+            if not read_env and not (api_key and passed.get("router_url")):
+                raise SlngConfigError(
+                    "RouterModelCall with read_env=False needs api_key, and base_url or world_part"
+                )
+            settings = (SlngSettings if read_env else PassedSlngSettings)(**passed)
             self.model = settings.model
             self._owns_client = True
             self.client = AsyncOpenAI(

@@ -134,7 +134,7 @@ Arguments left out are read from the `SLNG_*` settings. See [Settings](/core/ref
   What the call carries: pass `state.call`. Every request sends its `agent_id` and `session_id`. Anything else raises `TypeError`.
 </ParamField>
 <ParamField path="llm_config_id" type="str | None" default="None">
-  The stored router config to use, when the key does not fix one. Falls back to `SLNG_LLM_CONFIG_ID`.
+  The stored router config to use, when the key does not fix one. Falls back to `SLNG_LLM_CONFIG_ID`, unless `read_env=False` or `client` is given.
 </ParamField>
 <ParamField path="model" type="str | None" default="None">
   The model name. Falls back to the settings, then to `slng/auto`. A name that is not in the `config` raises `ValueError` when the config sets tiers.
@@ -171,6 +171,9 @@ Arguments left out are read from the `SLNG_*` settings. See [Settings](/core/ref
 </ParamField>
 <ParamField path="client" type="AsyncOpenAI | None" default="None">
   A ready client, for tests. The environment is then not read.
+</ParamField>
+<ParamField path="read_env" type="bool" default="True">
+  `False` reads no `SLNG_*` variable. Every setting comes from the arguments, and one left out takes its default: `model` is `slng/auto` and there is no `llm_config_id`. Pass `api_key`, and `base_url` or `world_part`, or it raises `SlngConfigError`. Use it when the app passes every setting itself, so a stray `SLNG_*` variable cannot change a call. The `openai` client the call builds still reads its own variables, like `OPENAI_ORG_ID`.
 </ParamField>
 
 A missing key, or neither a URL nor a world part, raises `SlngConfigError`.
