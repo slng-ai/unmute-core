@@ -32,6 +32,8 @@ from pydantic_core import PydanticCustomError
 _PHONE_SEPARATORS = re.compile(r"[\s().\-/]")
 _DIGITS_ONLY = re.compile(r"\d{6,15}", re.ASCII)
 _LETTER_AFTER_DIGIT = re.compile(r"[+\d].*[^\W\d_]")
+_NUMBER_START = re.compile(r"[+\uff0b\d]")
+"""What a tidied number starts with: a plus, ASCII or fullwidth, or a digit of any script."""
 _EXTENSION_MARK = re.compile(r"(?:;ext=|extension|ext|x|#)\d+$", re.ASCII | re.IGNORECASE)
 """An extension at the end of a tidied number that libphonenumber could not read."""
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
@@ -58,6 +60,10 @@ _TOO_SHORT = "It is too short for its country: ask the caller for the rest"
 _NO_COUNTRY = "No country has that code: ask for the whole number again, with the country code"
 _NO_SUCH_NUMBER = "No such number exists: ask for the whole number again"
 _EXTENSION = "It has an extension, which the number cannot hold: send the number without it"
+_BEFORE = (
+    "It has words or symbols before the number: send only the number, from its plus or its "
+    "first digit"
+)
 _LETTERS = "It has letters: ask the caller for the number in digits"
 _PARSE_REASONS = MappingProxyType(
     {
@@ -192,12 +198,16 @@ def _e164(value: str) -> str:
     refused only for what it cannot tidy away, with libphonenumber's own reason, so it asks
     the caller the right next question: a missing country code, a number too long (a digit
     misheard or said twice), too short (the caller is not done), or one that cannot exist.
-    A number with an extension, or with letters among its digits, is refused too: the
-    stored number would not be the one the caller said.
+    A number with an extension, with letters among its digits, or with words or symbols
+    before it (``Phone: +34...``, ``tel:+34...``) is refused too: the stored number must be
+    exactly what the caller said, and text around it can change what it means. A digit or
+    plus of another script, like a fullwidth one, is the same digit, and is read.
     """
     compact = _PHONE_SEPARATORS.sub("", value)
     if compact.startswith("00"):
         compact = "+" + compact[2:]
+    if compact and not _NUMBER_START.match(compact):
+        raise _refused(_BEFORE)
     if _DIGITS_ONLY.fullmatch(compact):
         if repaired := repaired_phone(compact):
             return repaired

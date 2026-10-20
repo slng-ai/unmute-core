@@ -1,0 +1,75 @@
+{
+  "name": "save_values_phone_with_words_before",
+  "about": "The model saves a callback number with a label in front of it. The save is refused because of the words before the number, and nothing is saved. It sends the number on its own, and that saves.",
+  "instructions": "You help callers with their orders.",
+  "save_values": true,
+  "shaped_state": true,
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "turns": [
+    {
+      "caller": "My mobile is +34 612 345 678.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "save_values",
+              "arguments": {
+                "callback": "mobile: +34 612 345 678"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result_holds": "It has words or symbols before the number: send only the number, from its plus or its first digit",
+          "text": "Let me note that. +34 612 345 678, is that right?"
+        }
+      ],
+      "spoken": [
+        "Let me note that. +34 612 345 678, is that right?"
+      ]
+    },
+    {
+      "caller": "Yes, that is fine.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "save_values",
+              "arguments": {
+                "callback": "+34 612 345 678"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result": "{\"ok\": true, \"saved\": {\"callback\": \"+34612345678\"}}",
+          "text": "Saved."
+        }
+      ],
+      "spoken": [
+        "Saved."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": [],
+      "customer": null,
+      "amount": null,
+      "callback": "+34612345678"
+    },
+    "tool_calls": [],
+    "events": [],
+    "agent": "main"
+  }
+}
