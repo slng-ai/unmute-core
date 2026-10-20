@@ -1,0 +1,75 @@
+{
+  "name": "save_values_phone_extension",
+  "about": "The model saves a callback number with an extension. The save is refused with a reason it can act on, and nothing is saved. It sends the number without the extension, and that saves.",
+  "instructions": "You help callers with their orders.",
+  "save_values": true,
+  "shaped_state": true,
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "turns": [
+    {
+      "caller": "Call me back on +34 612 345 678, extension 5.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "save_values",
+              "arguments": {
+                "callback": "+34 612 345 678 ext 5"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result_holds": "It has an extension, which the number cannot hold: send the number without it",
+          "text": "I can only save the number itself. Is +34 612 345 678 fine?"
+        }
+      ],
+      "spoken": [
+        "I can only save the number itself. Is +34 612 345 678 fine?"
+      ]
+    },
+    {
+      "caller": "Yes, that is fine.",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "save_values",
+              "arguments": {
+                "callback": "+34 612 345 678"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result": "{\"ok\": true, \"saved\": {\"callback\": \"+34612345678\"}}",
+          "text": "Saved."
+        }
+      ],
+      "spoken": [
+        "Saved."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": [],
+      "customer": null,
+      "amount": null,
+      "callback": "+34612345678"
+    },
+    "tool_calls": [],
+    "events": [],
+    "agent": "main"
+  }
+}

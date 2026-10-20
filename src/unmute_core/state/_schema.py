@@ -84,12 +84,16 @@ def _choice_of(choices: tuple[str, ...]) -> Callable[[object], object]:
     """Return a check that maps text to the choice it names, whitespace around both ignored.
 
     An exact choice stays itself. Otherwise the trimmed text picks the first choice that
-    trims to it, so a declared ``" small"`` is saved as declared.
+    trims to it, so a declared ``" small"`` is saved as declared. A JSON number picks the
+    choice its digits spell, as ``str`` stores a number as its digits: ``1`` names ``"1"``.
     """
     trimmed = {choice.strip(): choice for choice in reversed(choices)}
 
     def choice_of(value: object) -> object:
         """Return the declared choice ``value`` names, or ``value`` for the type to refuse."""
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            whole = isinstance(value, float) and value.is_integer()
+            value = str(int(value)) if whole else str(value)
         if isinstance(value, str) and value not in choices:
             return trimmed.get(value.strip(), value)
         return value
@@ -352,15 +356,21 @@ class StateSchema:
         """Return one field's annotation and default.
 
         A list starts empty. Inside a shape, any other field is required unless optional.
-        At the top of the State every value is optional, and empty text is no value.
+        At the top of the State every value is optional. Empty text is no value, at the top
+        and in an optional field of a shape alike.
         ``alias`` is the real name of a value whose field name is not its own.
         """
         described = description.strip() or None
         annotation = self.annotation(expr)
         if expr.base == "list":
             return annotation, Field(default_factory=list, description=described, alias=alias)
+        if inner and not expr.optional:
+            return annotation, Field(..., description=described)
         if inner:
-            return annotation, Field(None if expr.optional else ..., description=described)
+            return (
+                Annotated[annotation, BeforeValidator(_blank_is_none)],
+                Field(None, description=described),
+            )
         optional = annotation if expr.optional else annotation | None
         return (
             Annotated[optional, BeforeValidator(_blank_is_none)],
