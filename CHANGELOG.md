@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
-- `RouterModelCall(read_env=False)` reads no `SLNG_*` variable. Every setting comes from the arguments, and one left out takes its default. Before, a setting left out came from the environment, so a stray `SLNG_LLM_CONFIG_ID` changed the config of a call that passed none, and a bad `SLNG_WORLD_PART` failed a call that passed its own `base_url`. It needs `api_key`, and `base_url` or `world_part`, and raises `SlngConfigError` without them (#PR).
+- `RouterModelCall(read_env=False)` reads no `SLNG_*` variable. Every setting comes from the arguments, and one left out takes its default. Before, a setting left out came from the environment, so a stray `SLNG_LLM_CONFIG_ID` changed the config of a call that passed none, and a bad `SLNG_WORLD_PART` failed a call that passed its own `base_url`. It needs `api_key`, and `base_url` or `world_part`, and raises `SlngConfigError` without them (#89).
 
 ## 0.19.3
 
