@@ -170,7 +170,7 @@ Arguments left out are read from the `SLNG_*` settings. See [Settings](/core/ref
   A ready client, for tests. The environment is then not read.
 </ParamField>
 <ParamField path="read_env" type="bool" default="True">
-  `False` reads no `SLNG_*` variable. Every setting comes from the arguments, and one left out takes its default: `model` is `slng/auto` and there is no `llm_config_id`. Pass `api_key`, and `base_url` or `world_part`, or it raises `SlngConfigError`. Use it when the app passes every setting itself, so a stray variable in the process cannot change a call.
+  `False` reads no `SLNG_*` variable. Every setting comes from the arguments, and one left out takes its default: `model` is `slng/auto` and there is no `llm_config_id`. Pass `api_key`, and `base_url` or `world_part`, or it raises `SlngConfigError`. Use it when the app passes every setting itself, so a stray `SLNG_*` variable cannot change a call. The `openai` client the call builds still reads its own variables, like `OPENAI_ORG_ID`.
 </ParamField>
 
 A missing key, or neither a URL nor a world part, raises `SlngConfigError`.
