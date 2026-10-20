@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
-- `RequestRefusedError`, a `ValueError`, says a model call refused a request before it sent it. `RouterModelCall` raises it for a bad request option, a field the call owns, a bad prompt site or template variables over the router's limits. `OpenAIModelCall` raises it for a bad request option or a field it owns. Nothing is sent. Code that catches `ValueError` still catches it (#87).
+- `RequestRefusedError`, a `ValueError`, says a model call refused a request before it sent it. `RouterModelCall` raises it for a bad request option, a field the call owns, a bad prompt site or template variables over the router's limits. `OpenAIModelCall` raises it for a bad request option or a field it owns. Nothing is sent. `MissingVariablesError` is now one too, since a prompt that cannot be filled is never sent. Code that catches `ValueError` still catches both (#87).
 
 ### Changed
 

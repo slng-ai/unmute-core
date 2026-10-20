@@ -24,7 +24,6 @@ from unmute_core.model._call import (
     ModelRequest,
     NamedModelCall,
     NativeModelCall,
-    RequestRefusedError,
     TextDelta,
     ToolCall,
     ToolChoice,
@@ -38,6 +37,7 @@ from unmute_core.model._call import (
     tool_choice,
     variable_key_max,
 )
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.model._failover import (
     STOP_CODES,
     STOP_STATUSES,

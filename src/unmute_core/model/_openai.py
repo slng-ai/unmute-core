@@ -19,9 +19,9 @@ from unmute_core.model._call import (
     ModelEvent,
     ModelRequest,
     NativeModelCall,
-    RequestRefusedError,
 )
 from unmute_core.model._chunks import chunk_events
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.model._prompt import folded_system
 from unmute_core.model._signatures import is_gemini, signed_tool_calls, takes_one_system_message
 

@@ -16,6 +16,7 @@ from unmute_core.model import (
     AnswerStarted,
     FailOver,
     FallbackModelCall,
+    MissingVariablesError,
     ModelEvent,
     ModelRequest,
     RequestRefusedError,
@@ -168,10 +169,17 @@ async def test_a_rate_limit_without_retry_after_retries_the_same_call_when_asked
     assert dead.calls == 3
 
 
-async def test_a_refused_request_fails_over_at_once_with_no_retry(sleeps: list[float]) -> None:
+@pytest.mark.parametrize(
+    "error",
+    [RequestRefusedError("bad option"), MissingVariablesError(["name"])],
+    ids=["refused", "missing placeholder"],
+)
+async def test_a_refused_request_fails_over_at_once_with_no_retry(
+    sleeps: list[float], error: RequestRefusedError
+) -> None:
     moves: list[FailOver] = []
     retries: list[Retry] = []
-    refused = FakeCall(RequestRefusedError("bad option"))
+    refused = FakeCall(error)
     chain = FallbackModelCall(
         [refused, FakeCall(["x"])],
         same_model_retries=SAME_MODEL_RETRIES_S,
@@ -180,7 +188,7 @@ async def test_a_refused_request_fails_over_at_once_with_no_retry(sleeps: list[f
     )
     assert await collect(chain) == ["x"]
     assert (refused.calls, sleeps, retries) == (1, [], [])
-    assert [(move.status, type(move.error)) for move in moves] == [(None, RequestRefusedError)]
+    assert [(move.status, move.error) for move in moves] == [(None, error)]
 
 
 async def test_a_refused_request_on_the_last_call_is_raised(sleeps: list[float]) -> None:

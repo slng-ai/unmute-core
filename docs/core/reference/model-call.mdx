@@ -181,7 +181,7 @@ variables = template_variables(messages, state, site="")
 
 1. `site` says which prompt reads the values. A value that waits for the caller to confirm it reads as empty, except at its own task.
 2. `template_variables` renders every placeholder the system and developer messages use. A dotted name `a.b` becomes the key `a__b`.
-3. A placeholder the state does not have raises `MissingVariablesError`. Its message reads `Missing required template variables:` followed by the names.
+3. A placeholder the state does not have raises `MissingVariablesError`. Its message reads `Missing required template variables:` followed by the names. It is a `RequestRefusedError`, so `FallbackModelCall` moves to the next call at once.
 
 User and assistant messages are never filled.
 

@@ -23,12 +23,12 @@ from unmute_core.model._call import (
     ModelCallArg,
     ModelEvent,
     ModelRequest,
-    RequestRefusedError,
     Usage,
     close_model,
     model_name,
     variable_key_max,
 )
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.model._failover import (
     STOP_STATUSES,
     Next,
