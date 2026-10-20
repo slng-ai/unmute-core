@@ -84,6 +84,10 @@ def test_a_number_that_cannot_exist_is_still_refused():
         "+34612345678;ext=5",
         "+34612345678#5",
         "+34612345678,5",
+        "612 345 678 ext 5",
+        "612 345 678 x5",
+        "612-345-678 extension 12",
+        "612345678#5",
     ],
 )
 def test_a_number_with_an_extension_is_refused_not_cut(said):
@@ -91,7 +95,7 @@ def test_a_number_with_an_extension_is_refused_not_cut(said):
         PHONE.validate_python(said)
 
 
-@pytest.mark.parametrize("said", ["+1-800-FLOWERS", "+34 612 ABC 678"])
+@pytest.mark.parametrize("said", ["+1-800-FLOWERS", "+34 612 ABC 678", "612 ABC 678"])
 def test_a_number_with_letters_is_refused_not_spelled_out(said):
     with pytest.raises(ValidationError, match="It has letters"):
         PHONE.validate_python(said)
