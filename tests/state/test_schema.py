@@ -258,7 +258,7 @@ def test_schemas_built_per_call_do_not_pile_up_in_a_cache() -> None:
     assert sum(ref() is not None for ref in kept) < 400
 
 
-NAMES_PYDANTIC_CANNOT_TAKE = ["_1st_choice", "_x", "model_dump", "model_config"]
+NAMES_PYDANTIC_CANNOT_TAKE = ["_1st_choice", "_x", "model_dump", "model_config", "register", "mro"]
 
 
 def _awkward_schema() -> StateSchema:
@@ -278,6 +278,15 @@ def test_names_pydantic_cannot_take_save_render_and_snapshot_under_their_real_na
         assert state.render(name) == f"{name} value"
     assert state.snapshot() == {name: f"{name} value" for name in NAMES_PYDANTIC_CANNOT_TAKE}
     assert state.values.model_dump(by_alias=True)["_x"] == "_x value"
+
+
+def test_names_pydantic_cannot_take_read_empty_until_saved():
+    state = CallState(_awkward_schema().model)
+    state.save({"_x": "set"})
+    assert state.dump() == {
+        name: "set" if name == "_x" else None for name in NAMES_PYDANTIC_CANNOT_TAKE
+    }
+    assert state.snapshot()["register"] == "none recorded yet."
 
 
 def test_a_finish_for_names_pydantic_cannot_take_shows_and_saves_the_real_names():
