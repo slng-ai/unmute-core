@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
-- `ToolCallStarted`, a model event for the start of a tool call. `RouterModelCall(tool_call_starts=True)` and `OpenAIModelCall(tool_call_starts=True)` stream one at the first piece of each tool call, before its `ToolCall`, which still comes when the whole call has streamed. `chunk_events` takes the same option. So a reply that is only a tool call can be timed from when the model began it. It is off by default. `FallbackModelCall` takes it as the start of the answer, as it takes text. Both adapters and `collect` skip it (#PR).
+- `ToolCallStarted`, a model event for the start of a tool call. `RouterModelCall(tool_call_starts=True)` and `OpenAIModelCall(tool_call_starts=True)` stream one at the first piece of each tool call, before its `ToolCall`, which still comes when the whole call has streamed. `chunk_events` takes the same option. So a reply that is only a tool call can be timed from when the model began it. It is off by default. `FallbackModelCall` takes it as the start of the answer, as it takes text. Both adapters and `collect` skip it (#88).
 
 ## 0.19.3
 
