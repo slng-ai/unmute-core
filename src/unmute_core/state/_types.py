@@ -31,6 +31,7 @@ from pydantic_core import PydanticCustomError
 
 _PHONE_SEPARATORS = re.compile(r"[\s().\-/]")
 _DIGITS_ONLY = re.compile(r"\d{6,15}", re.ASCII)
+_LETTER_AFTER_DIGIT = re.compile(r"[+\d].*[^\W\d_]")
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 _CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d", re.ASCII)
@@ -54,6 +55,8 @@ _TOO_LONG = (
 _TOO_SHORT = "It is too short for its country: ask the caller for the rest"
 _NO_COUNTRY = "No country has that code: ask for the whole number again, with the country code"
 _NO_SUCH_NUMBER = "No such number exists: ask for the whole number again"
+_EXTENSION = "It has an extension, which the number cannot hold: send the number without it"
+_LETTERS = "It has letters: ask the caller for the number in digits"
 _PARSE_REASONS = MappingProxyType(
     {
         phonenumbers.NumberParseException.INVALID_COUNTRY_CODE: _NO_COUNTRY,
@@ -172,6 +175,8 @@ def _e164(value: str) -> str:
     refused only for what it cannot tidy away, with libphonenumber's own reason, so it asks
     the caller the right next question: a missing country code, a number too long (a digit
     misheard or said twice), too short (the caller is not done), or one that cannot exist.
+    A number with an extension, or with letters among its digits, is refused too: the
+    stored number would not be the one the caller said.
     """
     compact = _PHONE_SEPARATORS.sub("", value)
     if compact.startswith("00"):
@@ -186,6 +191,10 @@ def _e164(value: str) -> str:
         short = compact[1:].isdigit()
         reason = _PARSE_REASONS.get(error.error_type, _TOO_SHORT if short else _NO_SUCH_NUMBER)
         raise _refused(reason) from None
+    if number.extension:
+        raise _refused(_EXTENSION)
+    if _LETTER_AFTER_DIGIT.search(compact):
+        raise _refused(_LETTERS)
     if not phonenumbers.is_valid_number(number):
         possible = phonenumbers.is_possible_number_with_reason(number)
         raise _refused(_LENGTH_REASONS.get(possible, _NO_SUCH_NUMBER))
