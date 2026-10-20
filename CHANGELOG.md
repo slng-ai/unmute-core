@@ -14,7 +14,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Fixed
 
-- A `StateSchema` variable named after a method of a Pydantic model's class, like `register` or `mro`, broke the whole call state: until the call saved it, the field held that method instead of an empty value, so every later dump, snapshot and save raised `PydanticSerializationError`, for every value. Any name `BaseModel` already uses as an attribute is now stored under a field name of its own and keeps its real name everywhere, as `_x` and `model_dump` already were. Such a name, like `copy` or `json`, now also builds without Pydantic's "shadows an attribute" warning.
+- A `StateSchema` variable named after a method of a Pydantic model's class, like `register` or `mro`, broke the whole call state: until the call saved it, the field held that method instead of an empty value, so every later dump, snapshot and save raised `PydanticSerializationError`, for every value. Any name `BaseModel` already uses as an attribute is now stored under a field name of its own and keeps its real name everywhere, as `_x` and `model_dump` already were. Such a name, like `copy` or `json`, now also builds without Pydantic's "shadows an attribute" warning (#82).
 
 ## 0.19.2
 
