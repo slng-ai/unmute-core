@@ -6,6 +6,7 @@ the Unmute author's State and on the same state built with create_model (see con
 
 import asyncio
 import logging
+import re
 from typing import Any
 
 import pytest
@@ -180,6 +181,29 @@ def test_check_refuses_what_a_save_refuses_with_its_words(state: CallState, valu
     with pytest.raises(StateRefused) as checked:
         state.check(values)
     assert checked.value.message == saved.value.message
+
+
+@pytest.mark.parametrize(
+    ("values", "name", "reason"),
+    [
+        ({"count": "x"}, "count", r"^Input should be a valid integer"),
+        (
+            {"appointments": [{**APPOINTMENT, "scheduled_date": "tomorrow"}]},
+            "appointments",
+            r"^0\.scheduled_date: .*valid date",
+        ),
+        ({"nope": 1}, "nope", r"^not a value of this state"),
+        ({"call": {}}, "call", r"^the library sets it"),
+        ({"appointments": [APPOINTMENT] * 1000}, "appointments", r"^too long to keep"),
+    ],
+)
+def test_a_refusal_names_its_value_and_the_reason_after_it(
+    state: CallState, values: dict, name: str, reason: str
+) -> None:
+    with pytest.raises(StateRefused) as refused:
+        state.check(values)
+    assert refused.value.name == name
+    assert re.match(reason, refused.value.reason)
 
 
 def test_check_returns_the_values_as_json_and_saves_nothing(state: CallState) -> None:

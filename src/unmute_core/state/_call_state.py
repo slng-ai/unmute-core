@@ -64,22 +64,39 @@ class StateRefused(Exception):  # noqa: N818 - Unmute's emitted code already use
 
     Attributes:
         message: What was wrong, worded for the model, like ``count: Input should be ...``.
+        name: The value it is about, like ``count``, or None when it names none.
+        reason: What was wrong after the value's name: ``Input should be ...`` for
+            ``count``, ``0.day: ...`` for ``bookings.0.day``. The whole message when it names
+            no value.
     """
 
-    def __init__(self, message: str) -> None:
-        """Keep the message the model will be shown.
+    def __init__(self, message: str, *, name: str | None = None, reason: str | None = None) -> None:
+        """Keep the message the model will be shown, and the value it is about.
 
         Args:
             message: What was wrong with the value.
+            name: The value it is about.
+            reason: The message after the value's name. The whole message when None.
         """
         super().__init__(message)
         self.message = message
+        self.name = name
+        self.reason = message if reason is None else reason
+
+    @classmethod
+    def of(cls, name: str, reason: str) -> "StateRefused":
+        """Refuse one value: the message reads ``name: reason``."""
+        return cls(f"{name}: {reason}", name=name, reason=reason)
 
     @classmethod
     def from_error(cls, error: ValidationError) -> "StateRefused":
         """Word the first problem Pydantic found as ``path: message``."""
         first = error.errors()[0]
-        return cls(f"{'.'.join(str(part) for part in first['loc'])}: {first['msg']}")
+        path = [str(part) for part in first["loc"]]
+        rest = path[1:]
+        reason = f"{'.'.join(rest)}: {first['msg']}" if rest else first["msg"]
+        name = path[0] if path else None
+        return cls(f"{'.'.join(path)}: {first['msg']}", name=name, reason=reason)
 
 
 class _StateRules(BaseModel):
@@ -424,13 +441,14 @@ class CallState[M: BaseModel]:
                 batch holds ``call`` without the library's origin.
         """
         if CALL in values and (origin is None or origin.kind != "call"):
-            raise StateRefused(
-                "call: the library sets it from the call itself. Copy a call value into one "
-                "of your own to change it"
+            raise StateRefused.of(
+                CALL,
+                "the library sets it from the call itself. Copy a call value into one of your "
+                "own to change it",
             )
         if unknown := [name for name in values if name not in self._slots]:
-            raise StateRefused(
-                f"{unknown[0]}: not a value of this state. It holds {', '.join(self._fields)}"
+            raise StateRefused.of(
+                unknown[0], f"not a value of this state. It holds {', '.join(self._fields)}"
             )
         try:
             checked = self._model.model_validate({CALL: self.call, **values})
@@ -442,9 +460,9 @@ class CallState[M: BaseModel]:
         for name in values:
             # measures the value's own text and raises StateRefused, the error the model is shown
             if (size := _stored_size(dumped[name])) > STORED_MAX:
-                raise StateRefused(
-                    f"{name}: too long to keep: {size} characters, and a value holds at most "
-                    f"{STORED_MAX}"
+                raise StateRefused.of(
+                    name,
+                    f"too long to keep: {size} characters, and a value holds at most {STORED_MAX}",
                 )
         typed = {name: getattr(checked, self._slots[name]) for name in values}
         return typed, {name: dumped[name] for name in values}

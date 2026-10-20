@@ -6,6 +6,10 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ## Unreleased
 
+### Added
+
+- `StateRefused.name` and `StateRefused.reason`: the value a refusal is about, and what was wrong after its name. For `bookings.0.day: expected a day`, `name` is `bookings` and `reason` is `0.day: expected a day`. Code that words a refusal its own way, or points at the value, no longer cuts the name off `message`. `message` is unchanged.
+
 ### Fixed
 
 - `Phone` refuses a number with words or symbols before it, like `mobile: +34 612 345 678`, `Phone: +34 612 345 678` or `tel:+34612345678`: "It has words or symbols before the number: send only the number, from its plus or its first digit". Before, libphonenumber skipped the text and the number was saved, so a word like "not" or "fax" in front of a number was lost. A plus or digits of another script, like fullwidth ones, are still read.
