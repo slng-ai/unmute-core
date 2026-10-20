@@ -4,7 +4,15 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
-## Unreleased
+## 0.19.3
+
+This release adds `CallState.check`, so a tool or a step can test a save before it makes it, and fixes how a call's state checks values. It fixes a memory leak for agents defined as data, value names Pydantic already uses, the size limit on a value, numbers sent for digit choices, phone numbers with an extension or letters, and empty optional fields inside a shape. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Fixed" before you upgrade: a phone number with an extension or letters is now refused, and some values that were refused now save.
+
+### Highlights
+
+- **Check before you save.** `CallState.check(values)` runs a save's rules and saves nothing.
+- **No leak for agents defined as data.** A `StateSchema` built per call is freed with the call.
+- **Phone numbers the caller said.** An extension or letters are refused with a reason, never dropped or dialled.
 
 ### Added
 
