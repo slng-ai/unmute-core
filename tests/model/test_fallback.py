@@ -16,11 +16,14 @@ from unmute_core.model import (
     AnswerStarted,
     FailOver,
     FallbackModelCall,
+    MissingVariablesError,
     ModelEvent,
     ModelRequest,
+    RequestRefusedError,
     Retry,
     TextDelta,
     ToolCall,
+    ToolCallStarted,
     Usage,
     answered_model,
     variable_key_max,
@@ -165,6 +168,44 @@ async def test_a_rate_limit_without_retry_after_retries_the_same_call_when_asked
     chain = FallbackModelCall([dead, FakeCall(["x"])], same_model_retries=(0, 0))
     assert await collect(chain) == ["x"]
     assert dead.calls == 3
+
+
+@pytest.mark.parametrize(
+    "error",
+    [RequestRefusedError("bad option"), MissingVariablesError(["name"])],
+    ids=["refused", "missing placeholder"],
+)
+async def test_a_refused_request_fails_over_at_once_with_no_retry(
+    sleeps: list[float], error: RequestRefusedError
+) -> None:
+    moves: list[FailOver] = []
+    retries: list[Retry] = []
+    refused = FakeCall(error)
+    chain = FallbackModelCall(
+        [refused, FakeCall(["x"])],
+        same_model_retries=SAME_MODEL_RETRIES_S,
+        on_fail_over=moves.append,
+        on_retry=retries.append,
+    )
+    assert await collect(chain) == ["x"]
+    assert (refused.calls, sleeps, retries) == (1, [], [])
+    assert [(move.status, move.error) for move in moves] == [(None, error)]
+
+
+async def test_a_refused_request_on_the_last_call_is_raised(sleeps: list[float]) -> None:
+    chain = FallbackModelCall(
+        [FakeCall(RequestRefusedError("bad option"))], same_model_retries=SAME_MODEL_RETRIES_S
+    )
+    with pytest.raises(RequestRefusedError, match="bad option"):
+        await collect(chain)
+    assert sleeps == []
+
+
+async def test_any_other_error_with_no_status_is_still_short_lived(sleeps: list[float]) -> None:
+    first = FakeCall(ValueError("provider broke"), ["again"])
+    chain = FallbackModelCall([first, FakeCall(["x"])], same_model_retries=SAME_MODEL_RETRIES_S)
+    assert await collect(chain) == ["again"]
+    assert (first.calls, sleeps) == (2, [0.25])
 
 
 async def test_a_slow_first_event_fails_over() -> None:
@@ -723,3 +764,16 @@ async def test_the_answer_clock_stays_empty_when_no_call_answered() -> None:
 
 async def test_a_chain_outside_an_answer_clock_runs_as_before() -> None:
     assert await collect(FallbackModelCall([Timed("ok")])) == ["ok"]
+
+
+async def test_a_tool_call_start_is_the_answer_so_a_later_error_is_raised() -> None:
+    class Started:
+        async def stream(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
+            yield ToolCallStarted("t1", "book")
+            raise StatusError(503)
+
+    second = FakeCall(["x"])
+    chain = FallbackModelCall([Started(), second])
+    with pytest.raises(StatusError):
+        [event async for event in chain.stream(REQUEST)]
+    assert second.calls == 0

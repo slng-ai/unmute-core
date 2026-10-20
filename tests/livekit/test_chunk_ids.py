@@ -18,6 +18,7 @@ from unmute_core.model import (
     ModelRequest,
     TextDelta,
     ToolCall,
+    ToolCallStarted,
     Usage,
 )
 
@@ -95,6 +96,7 @@ async def test_text_tool_calls_and_usage_all_carry_the_completion_id(trace_attem
     model, reported = _llm(
         trace_attempts,
         TextDelta("One moment.", response_id=ID),
+        ToolCallStarted("call_1", "lookup_order", response_id=ID),
         ToolCall("call_1", "lookup_order", "{}", response_id=ID),
         Usage(11, 4, response_id=ID),
     )

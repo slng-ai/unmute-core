@@ -6,7 +6,7 @@ from typing import Any, cast
 from openai._models import construct_type
 from openai.types.chat import ChatCompletionChunk
 
-from unmute_core.model import AnswerStarted, ModelEvent, ToolCall, Usage
+from unmute_core.model import AnswerStarted, ModelEvent, ToolCall, ToolCallStarted, Usage
 from unmute_core.model._chunks import chunk_events
 
 
@@ -117,7 +117,9 @@ def calls_chunk(*pieces: dict[str, Any], finish_reason: str | None = None) -> Ch
 USAGE = usage_chunk({"prompt_tokens": 3, "completion_tokens": 4, "total_tokens": 7})
 
 
-async def reads_at_each_event(*chunks: ChatCompletionChunk) -> list[tuple[ModelEvent, int]]:
+async def reads_at_each_event(
+    *chunks: ChatCompletionChunk, tool_call_starts: bool = False
+) -> list[tuple[ModelEvent, int]]:
     """Run the chunks through ``chunk_events``, noting how many chunks were read at each event."""
     read = 0
 
@@ -127,7 +129,9 @@ async def reads_at_each_event(*chunks: ChatCompletionChunk) -> list[tuple[ModelE
             read += 1
             yield item
 
-    return [(event, read) async for event in chunk_events(counted())]
+    return [
+        (event, read) async for event in chunk_events(counted(), tool_call_starts=tool_call_starts)
+    ]
 
 
 def tool_calls(events: list[ModelEvent]) -> list[ToolCall]:
@@ -217,4 +221,34 @@ async def test_a_piece_for_a_call_that_was_already_sent_is_dropped() -> None:
     assert [(call.id, call.arguments) for call in tool_calls(events)] == [
         ("t1", '{"a": 1}'),
         ("t2", "{}"),
+    ]
+
+
+TWO_CALLS = (
+    calls_chunk(piece(0, "t1", "book", '{"a"')),
+    calls_chunk(piece(0, None, None, ": 1}")),
+    calls_chunk(piece(1, "t2", "find", "{}"), finish_reason="tool_calls"),
+    USAGE,
+)
+
+
+async def test_no_tool_call_start_is_yielded_unless_asked() -> None:
+    seen = await reads_at_each_event(*TWO_CALLS)
+    assert not [event for event, _ in seen if isinstance(event, ToolCallStarted)]
+
+
+async def test_each_tool_call_start_comes_at_its_first_piece() -> None:
+    seen = await reads_at_each_event(*TWO_CALLS, tool_call_starts=True)
+    assert [(type(event).__name__, read) for event, read in seen] == [
+        ("AnswerStarted", 1),
+        ("ToolCallStarted", 1),
+        ("ToolCall", 3),
+        ("ToolCallStarted", 3),
+        ("ToolCall", 3),
+        ("Usage", 4),
+    ]
+    starts = [event for event, _ in seen if isinstance(event, ToolCallStarted)]
+    assert starts == [
+        ToolCallStarted(id="t1", name="book", response_id="c1"),
+        ToolCallStarted(id="t2", name="find", response_id="c1"),
     ]

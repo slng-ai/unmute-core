@@ -12,6 +12,7 @@ from typing import Any, cast
 from unmute_core.model import (
     ModelEvent,
     ModelRequest,
+    RequestRefusedError,
     is_gemini,
     router_messages,
     signed_tool_calls,
@@ -120,6 +121,7 @@ class RouterModelCall:
         timeout: Timeout | float = TIMEOUT,
         client: AsyncOpenAI | None = None,
         keepalive_s: float | None = DEFAULT_KEEPALIVE_S,
+        tool_call_starts: bool = False,
         read_env: bool = True,
     ) -> None:
         """Set up the router client. Arguments left out come from ``SlngSettings``.
@@ -157,6 +159,8 @@ class RouterModelCall:
                 between two turns of a call. openai's own client closes it after 5 s, and the
                 next turn then pays a new TCP and TLS handshake before its first token. Only
                 for the client this call builds.
+            tool_call_starts: Stream a ``ToolCallStarted`` at the first piece of each tool
+                call, before its ``ToolCall``. Off by default.
             read_env: False reads no ``SLNG_*`` variable: every setting comes from the
                 arguments, and one left out takes its default. Then ``api_key`` is needed,
                 and ``base_url`` or ``world_part``.
@@ -243,6 +247,7 @@ class RouterModelCall:
             is_gemini(name) for name in (config.models if config is not None else ())
         )
         self.last_response: dict[str, str] = {}
+        self._tool_call_starts = tool_call_starts
 
     async def aclose(self) -> None:
         """Close the client when this call built it, not when ``client`` was passed in."""
@@ -268,9 +273,40 @@ class RouterModelCall:
         Raises:
             openai.APIStatusError: When the router answers with an error status.
                 ``unmute_core.model.http_status`` reads it.
-            ValueError: If the request's ``params`` set a field in ``RESERVED_BODY``, or one of
-                its request options is not valid. A field the router drops is sent with one
-                warning.
+            RequestRefusedError: If the request's ``params`` set a field in ``RESERVED_BODY``,
+                one of its request options is not valid, its site is no prompt site, or its
+                template variables break the router's limits. Nothing is sent. A field the
+                router drops is sent with one warning.
+        """
+        try:
+            outgoing = self._outgoing(request)
+        except ValueError as error:
+            raise RequestRefusedError(str(error)) from error
+        headers, body, options, rewrite = outgoing
+        try:
+            async for event in self._stream(request, headers, body, options, rewrite=rewrite):
+                yield event
+        except Exception:
+            request_id = next(
+                (v for k, v in headers.items() if k.lower() == REQUEST_ID_HEADER.lower()), None
+            )
+            logger.warning("router request %s failed", request_id)
+            raise
+
+    def _outgoing(
+        self, request: ModelRequest
+    ) -> tuple[dict[str, str], dict[str, Any], dict[str, Any], bool]:
+        """Build what one request sends, checked against the router's rules.
+
+        Args:
+            request: The request to send.
+
+        Returns:
+            The headers, the body fields, the openai request options, and whether the
+            router fills variables.
+
+        Raises:
+            ValueError: If the request breaks a rule ``stream`` names.
         """
         fields, requested = split_options(request.params)
         # a router rule at the plug point: the request must not set the fields the router owns
@@ -291,21 +327,8 @@ class RouterModelCall:
         if self.pure_proxy:
             owned["slng_pure_proxy"] = True
         variables = shortened(own_fields.get("template_variables", {}) | dict(request.variables))
-        try:
-            async for event in self._stream(
-                request,
-                headers,
-                own_fields | fields | owned | router_body(variables),
-                options,
-                rewrite=bool(variables),
-            ):
-                yield event
-        except Exception:
-            request_id = next(
-                (v for k, v in headers.items() if k.lower() == REQUEST_ID_HEADER.lower()), None
-            )
-            logger.warning("router request %s failed", request_id)
-            raise
+        body = own_fields | fields | owned | router_body(variables)
+        return headers, body, options, bool(variables)
 
     async def _stream(
         self,
@@ -360,6 +383,8 @@ class RouterModelCall:
             if scope:
                 logger.info("slng router: %s", answer_line(scope, self.last_response))
             async for event in chunk_events(
-                stream, request_id=response.headers.get("x-request-id")
+                stream,
+                request_id=response.headers.get("x-request-id"),
+                tool_call_starts=self._tool_call_starts,
             ):
                 yield event

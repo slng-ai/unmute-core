@@ -15,8 +15,13 @@ from pydantic import (
 )
 
 from unmute_core._pydantic import retitled
-from unmute_core.model._call import ModelEvent, ModelRequest, NativeModelCall
+from unmute_core.model._call import (
+    ModelEvent,
+    ModelRequest,
+    NativeModelCall,
+)
 from unmute_core.model._chunks import chunk_events
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.model._prompt import folded_system
 from unmute_core.model._signatures import is_gemini, signed_tool_calls, takes_one_system_message
 
@@ -207,6 +212,7 @@ class OpenAIModelCall(NativeModelCall):
         params: Mapping[str, Any] | None = None,
         timeout: "Timeout | float | None" = None,
         keepalive_s: float | None = DEFAULT_KEEPALIVE_S,
+        tool_call_starts: bool = False,
     ) -> None:
         """Set up the client.
 
@@ -229,6 +235,8 @@ class OpenAIModelCall(NativeModelCall):
                 between two turns of a call. openai's own client closes it after 5 s, and the
                 next turn then pays a new TCP and TLS handshake before its first token. Only
                 for the client this call builds.
+            tool_call_starts: Stream a ``ToolCallStarted`` at the first piece of each tool
+                call, before its ``ToolCall``. Off by default.
 
         Raises:
             ImportError: If the ``openai`` package is missing.
@@ -277,6 +285,7 @@ class OpenAIModelCall(NativeModelCall):
             )
         self.client = client
         self._one_system_message = takes_one_system_message(model)
+        self._tool_call_starts = tool_call_starts
 
     async def _send(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         """Send one filled request and stream the events of the answer.
@@ -288,12 +297,18 @@ class OpenAIModelCall(NativeModelCall):
 
         Raises:
             openai.APIStatusError: When the endpoint answers with an error status.
-            ValueError: If the request's ``params`` set a field in ``RESERVED_PARAMS``, or one
-                of its request options is not valid.
+            RequestRefusedError: If the request's ``params`` set a field in
+                ``RESERVED_PARAMS``, or one of its request options is not valid. Nothing is
+                sent.
         """
-        fields, requested = split_options(request.params)
+        try:
+            fields, requested = split_options(request.params)
+        except ValueError as error:
+            raise RequestRefusedError(str(error)) from error
         if reserved := sorted(set(fields) & RESERVED_PARAMS):  # per request, at send
-            raise ValueError(f"a request's params must not set {reserved[0]}: OpenAIModelCall does")
+            raise RequestRefusedError(
+                f"a request's params must not set {reserved[0]}: OpenAIModelCall does"
+            )
         from openai import omit
 
         own_fields, own = split_options(self.params)
@@ -319,7 +334,9 @@ class OpenAIModelCall(NativeModelCall):
         )
         response = getattr(stream, "response", None)
         request_id = response.headers.get("x-request-id") if response is not None else None
-        async for event in chunk_events(stream, request_id=request_id):
+        async for event in chunk_events(
+            stream, request_id=request_id, tool_call_starts=self._tool_call_starts
+        ):
             yield event
 
     async def aclose(self) -> None:

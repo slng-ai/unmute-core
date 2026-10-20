@@ -5,7 +5,14 @@ from collections.abc import AsyncIterable, AsyncIterator
 from dataclasses import replace
 from typing import Any
 
-from unmute_core.model._call import AnswerStarted, ModelEvent, TextDelta, ToolCall, Usage
+from unmute_core.model._call import (
+    AnswerStarted,
+    ModelEvent,
+    TextDelta,
+    ToolCall,
+    ToolCallStarted,
+    Usage,
+)
 from unmute_core.model._signatures import EXTRA_CONTENT
 
 logger = logging.getLogger(__name__)
@@ -14,25 +21,30 @@ logger = logging.getLogger(__name__)
 class _ToolCalls:
     """The tool calls of one reply, joined from their pieces in the order they began."""
 
-    def __init__(self, request_id: str | None) -> None:
+    def __init__(self, request_id: str | None, *, starts: bool = False) -> None:
         """Start with no calls.
 
         Args:
             request_id: The provider's ``x-request-id`` for the request, put on each call.
+            starts: Also return a ``ToolCallStarted`` at the first piece of each call.
         """
         self._request_id = request_id
+        self._starts = starts
         self._calls: dict[int | str | None, dict[str, str]] = {}
         self._extras: dict[int | str | None, dict[str, Any]] = {}
         self._key: int | str | None = None
         self._sent: set[int | str | None] = set()
 
-    def add(self, part: Any, response_id: str | None) -> list[ToolCall]:
+    def add(self, part: Any, response_id: str | None) -> list[ToolCall | ToolCallStarted]:
         """Join one piece into its call, and return the calls that piece shows to be whole.
 
         Pieces are joined by ``index``. A provider that sends no ``index`` is joined by the
         call's ``id``. A piece with neither continues the last call. A piece that starts a
         new call ends every call before it. A piece for a call that already went out is
         dropped with a warning, as the call cannot be taken back.
+
+        With ``starts``, a piece that begins a call is followed by its ``ToolCallStarted``,
+        after the calls it shows to be whole.
 
         Args:
             part: One ``ChoiceDeltaToolCall`` of a chunk.
@@ -46,7 +58,8 @@ class _ToolCalls:
         if key in self._sent:
             logger.warning("tool call piece %r came after its call was sent, dropped", key)
             return []
-        whole = [] if key in self._calls else self.drain(response_id)
+        began = key not in self._calls
+        whole: list[ToolCall | ToolCallStarted] = [*self.drain(response_id)] if began else []
         call = self._calls.setdefault(key, {"id": "", "name": "", "arguments": ""})
         call["id"] = part.id or call["id"]
         if part.function:
@@ -54,6 +67,15 @@ class _ToolCalls:
             call["arguments"] += part.function.arguments or ""
         if isinstance(extra := (part.model_extra or {}).get(EXTRA_CONTENT), dict):
             self._extras[key] = self._extras.get(key, {}) | extra
+        if began and self._starts:
+            whole.append(
+                ToolCallStarted(
+                    id=call["id"],
+                    name=call["name"],
+                    response_id=response_id,
+                    request_id=self._request_id,
+                )
+            )
         return whole
 
     def drain(self, response_id: str | None) -> list[ToolCall]:
@@ -78,7 +100,7 @@ class _ToolCalls:
 
 
 async def chunk_events(
-    chunks: AsyncIterable[Any], *, request_id: str | None = None
+    chunks: AsyncIterable[Any], *, request_id: str | None = None, tool_call_starts: bool = False
 ) -> AsyncIterator[ModelEvent]:
     """Yield ``AnswerStarted``, the text, each tool call once it is whole, then the ``Usage``.
 
@@ -99,11 +121,15 @@ async def chunk_events(
     they have named it, and ``request_id``, so a reply cut off before its ``Usage`` still
     names both.
 
+    With ``tool_call_starts``, each call's first piece also yields a ``ToolCallStarted``,
+    after the calls that piece shows to be whole.
+
     Args:
         chunks: ``ChatCompletionChunk`` objects, as the ``openai`` SDK streams them.
         request_id: The provider's ``x-request-id`` for the request, when known.
+        tool_call_starts: Yield a ``ToolCallStarted`` at the first piece of each tool call.
     """
-    calls = _ToolCalls(request_id)
+    calls = _ToolCalls(request_id, starts=tool_call_starts)
     usage: Usage | None = None
     response_id: str | None = None
     started = False
@@ -138,8 +164,8 @@ async def chunk_events(
                 )
                 held = {}
             for part in choice.delta.tool_calls or []:
-                for call in calls.add(part, response_id):
-                    yield call
+                for event in calls.add(part, response_id):
+                    yield event
             if choice.finish_reason:
                 for call in calls.drain(response_id):
                     yield call

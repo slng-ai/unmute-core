@@ -13,7 +13,14 @@ from tests.pipecat.harness import Harness
 from tests.tasks.job import filled
 from unmute_core.call import CallHooks
 from unmute_core.hooks import Hooks, PromptSuffix
-from unmute_core.model import ModelEvent, ModelRequest, TextDelta, ToolCall, Usage
+from unmute_core.model import (
+    ModelEvent,
+    ModelRequest,
+    TextDelta,
+    ToolCall,
+    ToolCallStarted,
+    Usage,
+)
 from unmute_core.pipecat import ModelCallLLMService
 
 
@@ -37,7 +44,14 @@ def service(model: Scripted, prompt: str = "Hello.", **kwargs: Any) -> ModelCall
 
 
 async def test_text_and_tool_calls_come_back_as_openai_chunks() -> None:
-    model = Scripted([TextDelta("Hi "), ToolCall("c1", "find", "{}"), ToolCall("c2", "x", "{}")])
+    model = Scripted(
+        [
+            TextDelta("Hi "),
+            ToolCallStarted("c1", "find"),
+            ToolCall("c1", "find", "{}"),
+            ToolCall("c2", "x", "{}"),
+        ]
+    )
     stream = await service(model).get_chat_completions(LLMContext())
     chunks = [chunk async for chunk in stream]
     deltas = [chunk.choices[0].delta for chunk in chunks]

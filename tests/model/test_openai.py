@@ -13,6 +13,7 @@ from unmute_core.model import (
     OpenAIModelCall,
     TextDelta,
     ToolCall,
+    ToolCallStarted,
     Usage,
     close_model,
 )
@@ -235,3 +236,11 @@ def test_a_keepalive_that_is_not_seconds_above_zero_is_refused(keepalive_s: Any)
 def test_a_ready_client_refuses_keepalive_s() -> None:
     with pytest.raises(ValueError, match="keepalive_s only applies to a client OpenAIModelCall"):
         OpenAIModelCall("m", client=FakeRouter().client(), keepalive_s=30)
+
+
+async def test_tool_call_starts_stream_when_asked() -> None:
+    tool = {"tool_calls": [{"index": 0, "id": "t1", "function": {"name": "a", "arguments": "{}"}}]}
+    router = FakeRouter([chunk(tool)])
+    call = OpenAIModelCall("gpt-test", client=router.client(), tool_call_starts=True)
+    events = [event async for event in call.stream(REQUEST)]
+    assert events[1] == ToolCallStarted(id="t1", name="a", response_id="c1")

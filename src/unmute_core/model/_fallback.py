@@ -28,6 +28,7 @@ from unmute_core.model._call import (
     model_name,
     variable_key_max,
 )
+from unmute_core.model._errors import RequestRefusedError
 from unmute_core.model._failover import (
     STOP_STATUSES,
     Next,
@@ -150,7 +151,8 @@ class FallbackModelCall:
                 the call does. ``FIRST_EVENT_TIMEOUT_S`` clears slow reasoning models.
             max_wait_s: The longest ``Retry-After`` worth waiting for. A longer one fails over.
             same_model_retries: The pause before each retry of the same call after a
-                short-lived failure (no status, 408, 429 or a 5xx). A 429 whose
+                short-lived failure (no status, 408, 429 or a 5xx). A
+                ``RequestRefusedError`` is not one: it moves to the next call at once. A 429 whose
                 ``Retry-After`` fits ``max_wait_s`` waits that long once instead.
                 ``SAME_MODEL_RETRIES_S`` is the suggested setting. Empty moves to the next
                 call at once.
@@ -296,8 +298,8 @@ class FallbackModelCall:
     ) -> tuple[ModelEvent | None, Usage | None]:
         """Wait for the first answer event within the budget, and a ``Usage`` that came first.
 
-        A ``Usage`` or an ``AnswerStarted`` is no answer. None when the stream holds nothing
-        else. With ``start_ends_budget``, the budget covers the wait for ``AnswerStarted``
+        A ``Usage`` or an ``AnswerStarted`` is no answer. A ``ToolCallStarted`` is, as text is.
+        None when the stream holds nothing else. With ``start_ends_budget``, the budget covers the wait for ``AnswerStarted``
         only. With ``start_is_answer``, the ``AnswerStarted`` is the answer and is returned.
         """
         at_start = self._start_ends_budget or self._start_is_answer
@@ -328,8 +330,12 @@ class FallbackModelCall:
             retries: How many short retries this call had.
 
         Returns:
-            The decision and the seconds to sleep first, 0 when it does not sleep.
+            The decision and the seconds to sleep first, 0 when it does not sleep. A
+            ``RequestRefusedError`` moves to the next call at once: the call never sent the
+            request, so sending it again cannot help.
         """
+        if isinstance(error, RequestRefusedError):
+            return (_Decision.RAISE if last else _Decision.FAIL_OVER), 0.0
         status = http_status(error)
         step = next_step(
             status,
@@ -435,6 +441,8 @@ async def _answer(
     events: AsyncIterator[ModelEvent], usage: Usage | None, *, at_start: bool
 ) -> tuple[ModelEvent | None, Usage | None]:
     """Read a call's stream to its first answer event, keeping a ``Usage`` that came first.
+
+    An answer event is text, a ``ToolCall`` or a ``ToolCallStarted``.
 
     Returns:
         The first answer event, or the ``AnswerStarted`` when ``at_start`` stopped the read
