@@ -8,7 +8,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Fixed
 
-- A `CallState` no longer keeps its State model alive for the rest of the process. `CallState` adds the library's `call` value to a State model once per class, and kept every model it did that for in a module dict. An agent defined as data that builds a `StateSchema` for each call, as a server that receives the agent with the call does, grew by one model class per call and never freed them. The model with `call` added now lives on its State model and is freed with it. A State class declared once in code works as before.
+- A `CallState` no longer keeps its State model alive for the rest of the process. `CallState` adds the library's `call` value to a State model once per class, and kept every model it did that for in a module dict. An agent defined as data that builds a `StateSchema` for each call, as a server that receives the agent with the call does, grew by one model class per call and never freed them. The model with `call` added now lives on its State model and is freed with it. A State class declared once in code works as before (#80).
 
 ## 0.19.2
 
