@@ -18,6 +18,7 @@ from unmute_core.model import (
     ModelAnswer,
     TextDelta,
     ToolCall,
+    ToolCallStarted,
     Usage,
     collect,
 )
@@ -98,6 +99,7 @@ def test_a_tool_call_reads_as_an_openai_entry_without_provider_data():
 async def test_collect_joins_the_text_and_keeps_calls_and_usage():
     async def events():
         yield TextDelta("Hel")
+        yield ToolCallStarted("c1", "find")
         yield ToolCall("c1", "find", "{}")
         yield TextDelta("lo")
         yield Usage(3, 4)
@@ -111,7 +113,8 @@ async def test_collect_names_an_event_that_is_not_a_model_event():
         yield "plain text"
 
     with pytest.raises(
-        TypeError, match="streamed str; stream TextDelta, ToolCall, Usage or AnswerStarted"
+        TypeError,
+        match="streamed str; stream TextDelta, ToolCall, Usage, AnswerStarted or ToolCallStarted",
     ):
         await collect(events())
 

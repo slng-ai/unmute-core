@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `ToolCallStarted`, a model event for the start of a tool call. `RouterModelCall(tool_call_starts=True)` and `OpenAIModelCall(tool_call_starts=True)` stream one at the first piece of each tool call, before its `ToolCall`, which still comes when the whole call has streamed. `chunk_events` takes the same option. So a reply that is only a tool call can be timed from when the model began it. It is off by default. `FallbackModelCall` takes it as the start of the answer, as it takes text. Both adapters and `collect` skip it (#PR).
+
 ## 0.19.3
 
 This release adds `CallState.check`, so a tool or a step can test a save before it makes it, and fixes how a call's state checks values. It fixes a memory leak for agents defined as data, value names Pydantic already uses, the size limit on a value, numbers sent for digit choices, phone numbers with an extension or letters, and empty optional fields inside a shape. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Fixed" before you upgrade: a phone number with an extension or letters is now refused, and some values that were refused now save.

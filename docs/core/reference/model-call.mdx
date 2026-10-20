@@ -114,18 +114,19 @@ The call's `before_model` hooks may change a request. `wrap_model` hooks run aro
 
 ## Events
 
-A call streams three kinds of event.
+A call streams these events.
 
 | Event | Fields | What it is |
 |---|---|---|
 | `AnswerStarted` | `response_id`, `request_id` | The provider began its answer: its first chunk arrived. Once, before anything else. |
 | `TextDelta` | `text`, `response_id`, `request_id`, `extra` | The next piece of the answer. `extra` is the provider data sent with the text, like a Gemini thought signature. |
 | `ToolCall` | `id`, `name`, `arguments`, `extra`, `response_id`, `request_id` | One whole tool call. `arguments` is the JSON text the model wrote. |
+| `ToolCallStarted` | `id`, `name`, `response_id`, `request_id` | The model began a tool call: its first piece arrived. Once per call, before its `ToolCall`. Only from a call built with `tool_call_starts=True`. `id` and `name` are as far as the first piece gives them, else `""`. |
 | `Usage` | `input_tokens`, `output_tokens`, `cached_input_tokens`, `response_id`, `request_id`, `reasoning_tokens`, `total_tokens`, `cache_write_tokens` | The token counts, once, at the end. `cached_input_tokens` is the part of the prompt the provider served from its cache. `cache_write_tokens` is the part it wrote to its cache. `reasoning_tokens` is the part of the output spent on hidden reasoning. `total_tokens` is the provider's own total, which can be more than input plus output. `response_id` is the answer's id, like `chatcmpl-...`, and `request_id` the provider's `x-request-id`. Each is `None` when the provider did not send it. |
 
 1. `extra` on a `ToolCall` holds provider data sent with the call, like a Gemini thought signature. It is empty when there is none. See [Thought signatures](/core/reference/slng#gemini-thought-signatures).
 2. `TextDelta` and `ToolCall` carry the same `response_id` and `request_id` as `Usage`, as far as the provider has sent them. So a reply cut off before its `Usage`, like one a caller talks over, still names its answer and its HTTP request. `RouterModelCall` and `OpenAIModelCall` fill them. A call of your own may leave them `None`.
-3. Both adapters put `Usage` on the `llm` span. Code that reads events skips a `Usage` or an `AnswerStarted` it has no use for.
+3. Both adapters put `Usage` on the `llm` span. Code that reads events skips a `Usage`, an `AnswerStarted` or a `ToolCallStarted` it has no use for.
 4. `RouterModelCall` and `OpenAIModelCall` yield a `ToolCall` as soon as it is whole. A call is whole when the provider starts the next call, or sends a `finish_reason`. A call still open when the stream ends, as when a provider sends no `finish_reason`, comes out at the end. The calls keep the order they began in, and the `Usage` comes last. A provider must send the pieces of one call together. A piece that comes after its call went out is dropped with a warning. `AnswerStarted` tells you earlier that the provider is answering. `FallbackModelCall(start_ends_budget=True)` and `FallbackModelCall(start_is_answer=True)` use it.
 5. Every event is a frozen Pydantic dataclass. A value of the wrong type, like `ToolCall(id=1, ...)`, raises a `ValidationError`. Token counts in `Usage` pass through unchecked, as a provider sends them.
 
@@ -295,6 +296,9 @@ gemini = OpenAIModelCall(
 <ParamField path="keepalive_s" type="float | None" default="120.0">
   How long an idle connection to the provider stays open for the next request. `None` keeps it open with no limit. Seconds above zero otherwise. openai's own client closes an idle connection after 5 seconds, and in a voice call the turns are often further apart, so each turn would pay a new TCP and TLS handshake before its first token. Pass `keepalive_s=5.0` for the old value. It only applies to the client this call builds: with `client=` it raises `ValueError`.
 </ParamField>
+<ParamField path="tool_call_starts" type="bool" default="False">
+  Stream a `ToolCallStarted` at the first piece of each tool call, before its `ToolCall`. Use it to time the start of a reply that is only a tool call. Off by default, so code that reads events sees nothing new.
+</ParamField>
 
 1. The library fills the prompt, as with any native call. The model sees the same final prompt as on the router.
 2. The request carries no SLNG header and no SLNG body field.
@@ -357,7 +361,7 @@ model = FallbackModelCall([router, backup], first_event_timeout_s=10)
 
 ### How it fails over
 
-1. It never retries or fails over once the caller has part of the answer. With `start_is_answer=True`, the start of an answer counts as part of it.
+1. It never retries or fails over once the caller has part of the answer. A `ToolCallStarted` counts as part of it, as text does. With `start_is_answer=True`, the start of an answer counts as part of it.
 2. No other model fixes a stop status or a stop code, so the chain ends there.
 3. `error_code(error)` reads the code of an error. `http_status(error)` reads its status.
 4. `retries_itself` is `True`. On LiveKit, `ModelCallLLM` then marks the call's errors as final, so LiveKit does not walk the chain again. A plain `RouterModelCall` does not set it, so LiveKit still retries a router it cannot reach. Another call can set the attribute, and `retries_itself(model)` reads it.

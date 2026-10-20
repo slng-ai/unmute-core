@@ -207,6 +207,7 @@ class OpenAIModelCall(NativeModelCall):
         params: Mapping[str, Any] | None = None,
         timeout: "Timeout | float | None" = None,
         keepalive_s: float | None = DEFAULT_KEEPALIVE_S,
+        tool_call_starts: bool = False,
     ) -> None:
         """Set up the client.
 
@@ -229,6 +230,8 @@ class OpenAIModelCall(NativeModelCall):
                 between two turns of a call. openai's own client closes it after 5 s, and the
                 next turn then pays a new TCP and TLS handshake before its first token. Only
                 for the client this call builds.
+            tool_call_starts: Stream a ``ToolCallStarted`` at the first piece of each tool
+                call, before its ``ToolCall``. Off by default.
 
         Raises:
             ImportError: If the ``openai`` package is missing.
@@ -277,6 +280,7 @@ class OpenAIModelCall(NativeModelCall):
             )
         self.client = client
         self._one_system_message = takes_one_system_message(model)
+        self._tool_call_starts = tool_call_starts
 
     async def _send(self, request: ModelRequest) -> AsyncIterator[ModelEvent]:
         """Send one filled request and stream the events of the answer.
@@ -319,7 +323,9 @@ class OpenAIModelCall(NativeModelCall):
         )
         response = getattr(stream, "response", None)
         request_id = response.headers.get("x-request-id") if response is not None else None
-        async for event in chunk_events(stream, request_id=request_id):
+        async for event in chunk_events(
+            stream, request_id=request_id, tool_call_starts=self._tool_call_starts
+        ):
             yield event
 
     async def aclose(self) -> None:

@@ -200,6 +200,13 @@ async def test_tool_call_pieces_join_by_index_else_by_id(
     assert [(e.id, e.name, e.arguments) for e in events if isinstance(e, ToolCall)] == expected
 
 
+async def test_tool_call_starts_stream_when_asked() -> None:
+    router = FakeRouter([chunk({"tool_calls": [_piece(0, "t1", "book", "{}")]})])
+    call = RouterModelCall(CALL, base_url="unused", client=router.client(), tool_call_starts=True)
+    events = [type(event).__name__ async for event in call.stream(REQUEST)]
+    assert events == ["AnswerStarted", "ToolCallStarted", "ToolCall"]
+
+
 async def test_a_call_without_index_keeps_its_provider_data() -> None:
     first = {**_piece(None, "t1", "book", "{}"), "extra_content": SIGNED}
     router = FakeRouter(
