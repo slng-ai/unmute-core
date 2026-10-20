@@ -40,6 +40,9 @@ async def test_span_tree_and_call_identity_on_every_span():
         assert attrs(span)["session.id"] == "RM_abc"
         assert attrs(span)["gen_ai.conversation.id"] == "RM_abc"
         assert attrs(span)["agent.name"] == "salon"
+        # Langfuse v4 filters and sums over observations, so a span without the trace
+        # name drops out of its own session.
+        assert attrs(span)["langfuse.trace.name"] == "salon"
         assert span.resource.attributes["service.name"] == "salon"
 
 

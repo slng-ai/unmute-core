@@ -184,7 +184,14 @@ class Telemetry:
             resource=Resource.create({SERVICE_NAME: agent, **(resource or {})}),
             span_limits=SpanLimits(max_span_attribute_length=MAX_ATTRIBUTE_LENGTH),
         )
-        identity = {"session.id": call_id, "gen_ai.conversation.id": call_id, "agent.name": agent}
+        # The trace name goes on every span, not only the root: Langfuse v4 filters and
+        # sums over observations, so one without it drops out of its own session.
+        identity = {
+            "session.id": call_id,
+            "gen_ai.conversation.id": call_id,
+            "agent.name": agent,
+            "langfuse.trace.name": agent,
+        }
         for processor in (_CallAttributes(identity), *processors):
             self.provider.add_span_processor(processor)
         for sink in sinks:
@@ -228,7 +235,6 @@ class Telemetry:
             context=Context(),
             attributes={
                 "gen_ai.operation.name": "invoke_workflow",
-                "langfuse.trace.name": self.agent,
                 **self._described,
             },
         )
