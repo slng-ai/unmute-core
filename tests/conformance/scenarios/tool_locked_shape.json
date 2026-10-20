@@ -70,7 +70,8 @@
         "name": "Ana",
         "city": "Madrid"
       },
-      "amount": null
+      "amount": null,
+      "callback": null
     },
     "tool_calls": [
       {

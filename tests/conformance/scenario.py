@@ -39,7 +39,7 @@ from unmute_core.model import (
     fill_messages,
 )
 from unmute_core.prefetch import Lookup, Prefetch
-from unmute_core.state import CallState, StateSchema
+from unmute_core.state import CallState, Phone, StateSchema
 from unmute_core.tasks import NOT_YET_TOOL_NAME, OpeningTool, TaskPlan, TasksSpec
 from unmute_core.telemetry import STT_SPAN, TOOL_SPAN, TTS_SPAN, Telemetry
 from unmute_core.telephony import (
@@ -64,6 +64,7 @@ class ShapedState(State):
 
     customer: Customer | None = None
     amount: float | None = None
+    callback: Phone | None = None
 
 
 SCENARIOS = Path(__file__).parent / "scenarios"

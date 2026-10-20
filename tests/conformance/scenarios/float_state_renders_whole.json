@@ -43,7 +43,8 @@
       "note": null,
       "tags": [],
       "customer": null,
-      "amount": 3.0
+      "amount": 3.0,
+      "callback": null
     },
     "tool_calls": [],
     "events": [],

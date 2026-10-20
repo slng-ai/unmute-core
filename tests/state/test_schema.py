@@ -88,6 +88,19 @@ def test_empty_text_is_no_value_yet_and_a_number_is_text():
         state.save({"note": True})
 
 
+@pytest.mark.parametrize(
+    ("sent", "saved"), [(1, "1"), (2.0, "2"), ("1", "1"), (" 2 ", "2"), (3, None), (True, None)]
+)
+def test_a_number_picks_the_choice_its_digits_spell(sent: object, saved: str | None) -> None:
+    state = CallState(StateSchema([{"name": "floor", "type": 'Literal["1", "2"] | None'}]).model)
+    if saved is None:
+        with pytest.raises(StateRefused, match=r"^floor: Input should be '1' or '2'"):
+            state.save({"floor": sent})
+    else:
+        state.save({"floor": sent})
+        assert state.plain("floor") == saved
+
+
 @pytest.mark.parametrize("type_", ["str", "Date", "int", "Phone", "Id", 'Literal["a", "b"]'])
 @pytest.mark.parametrize("said", ["", "  "])
 def test_empty_text_in_an_optional_shape_field_is_no_value(type_, said):

@@ -74,6 +74,33 @@ def test_a_number_that_cannot_exist_is_still_refused():
         PHONE.validate_python("+34 61")
 
 
+@pytest.mark.parametrize(
+    "said",
+    [
+        "+34 612 345 678 ext 5",
+        "+34 612 345 678 ext. 5",
+        "+34 612 345 678 (extension 5)",
+        "+44 20 7946 0958 x 123",
+        "+34612345678;ext=5",
+        "+34612345678#5",
+        "+34612345678,5",
+    ],
+)
+def test_a_number_with_an_extension_is_refused_not_cut(said):
+    with pytest.raises(ValidationError, match="It has an extension"):
+        PHONE.validate_python(said)
+
+
+@pytest.mark.parametrize("said", ["+1-800-FLOWERS", "+34 612 ABC 678"])
+def test_a_number_with_letters_is_refused_not_spelled_out(said):
+    with pytest.raises(ValidationError, match="It has letters"):
+        PHONE.validate_python(said)
+
+
+def test_a_tel_uri_is_still_read():
+    assert PHONE.validate_python("tel:+34612345678") == "+34612345678"
+
+
 def test_the_country_of_a_full_number():
     assert region_of("+34600111222") == "ES"
     assert region_of("+14155552671") == "US"
