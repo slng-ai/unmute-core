@@ -10,6 +10,12 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - A `CallState` no longer keeps its State model alive for the rest of the process. `CallState` adds the library's `call` value to a State model once per class, and kept every model it did that for in a module dict. An agent defined as data that builds a `StateSchema` for each call, as a server that receives the agent with the call does, grew by one model class per call and never freed them. The model with `call` added now lives on its State model and is freed with it. A State class declared once in code works as before (#80).
 
+## Unreleased
+
+### Fixed
+
+- A `StateSchema` variable named after a method of a Pydantic model's class, like `register` or `mro`, broke the whole call state: until the call saved it, the field held that method instead of an empty value, so every later dump, snapshot and save raised `PydanticSerializationError`, for every value. Any name `BaseModel` already uses as an attribute is now stored under a field name of its own and keeps its real name everywhere, as `_x` and `model_dump` already were. Such a name, like `copy` or `json`, now also builds without Pydantic's "shadows an attribute" warning.
+
 ## 0.19.2
 
 This release makes a fallback chain, its metrics and the SLNG router call behave more like LiveKit's own models, and lets a tool on an event run with nothing waiting for it. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Changed" and "Fixed" before you upgrade, since some streams and requests now look different.
