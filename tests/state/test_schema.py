@@ -88,6 +88,34 @@ def test_empty_text_is_no_value_yet_and_a_number_is_text():
         state.save({"note": True})
 
 
+@pytest.mark.parametrize("type_", ["str", "Date", "int", "Phone", "Id", 'Literal["a", "b"]'])
+@pytest.mark.parametrize("said", ["", "  "])
+def test_empty_text_in_an_optional_shape_field_is_no_value(type_, said):
+    schema = StateSchema(
+        [{"name": "slot", "type": "Slot | None"}],
+        [
+            {
+                "name": "Slot",
+                "fields": [
+                    {"name": "day", "type": "Date"},
+                    {"name": "x", "type": f"{type_} | None"},
+                ],
+            }
+        ],
+    )
+    state = CallState(schema.model)
+    state.save({"slot": {"day": "2026-03-19", "x": said}})
+    assert state.plain("slot") == {"day": "2026-03-19", "x": None}
+
+
+def test_empty_text_in_a_required_shape_field_is_still_checked():
+    state = CallState(_schema().model)
+    with pytest.raises(StateRefused, match=r"^bookings\.0\.day: .*expected a day"):
+        state.save({"bookings": [{"day": ""}]})
+    with pytest.raises(StateRefused, match=r"^customer\.status: "):
+        state.save({"customer": {"contact": "fred@example.com", "status": ""}})
+
+
 def test_a_date_inside_a_shape_reads_back_as_its_text():
     state = CallState(_schema().model)
     state.save({"bookings": [{"day": datetime.date(2026, 3, 19), "note": "x"}]})

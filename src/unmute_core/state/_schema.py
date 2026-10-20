@@ -352,15 +352,21 @@ class StateSchema:
         """Return one field's annotation and default.
 
         A list starts empty. Inside a shape, any other field is required unless optional.
-        At the top of the State every value is optional, and empty text is no value.
+        At the top of the State every value is optional. Empty text is no value, at the top
+        and in an optional field of a shape alike.
         ``alias`` is the real name of a value whose field name is not its own.
         """
         described = description.strip() or None
         annotation = self.annotation(expr)
         if expr.base == "list":
             return annotation, Field(default_factory=list, description=described, alias=alias)
+        if inner and not expr.optional:
+            return annotation, Field(..., description=described)
         if inner:
-            return annotation, Field(None if expr.optional else ..., description=described)
+            return (
+                Annotated[annotation, BeforeValidator(_blank_is_none)],
+                Field(None, description=described),
+            )
         optional = annotation if expr.optional else annotation | None
         return (
             Annotated[optional, BeforeValidator(_blank_is_none)],

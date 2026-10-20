@@ -1,0 +1,69 @@
+{
+  "name": "tool_output_blank_optional_field",
+  "about": "A tool's output shape, typed in the State type grammar, has an optional date. The tool returns empty text for it, and the model reads no value (null), as a top-level State value reads empty text, not a date it cannot check.",
+  "instructions": "You help callers with their orders.",
+  "tasks": {
+    "mode": "record",
+    "tasks": []
+  },
+  "tool_options": {
+    "search_web": {
+      "output": {
+        "status": "str",
+        "delivered_on": "Date | None"
+      }
+    }
+  },
+  "tool_results": {
+    "search_web": [
+      {
+        "status": "in transit",
+        "delivered_on": ""
+      }
+    ]
+  },
+  "turns": [
+    {
+      "caller": "Where is my parcel?",
+      "model": [
+        {
+          "site": "",
+          "calls": [
+            {
+              "name": "search_web",
+              "arguments": {
+                "q": "parcel"
+              }
+            }
+          ]
+        },
+        {
+          "site": "",
+          "result": "{\"status\": \"in transit\", \"delivered_on\": null}",
+          "text": "It is in transit."
+        }
+      ],
+      "spoken": [
+        "It is in transit."
+      ]
+    }
+  ],
+  "expect": {
+    "state": {
+      "order_id": null,
+      "status": null,
+      "note": null,
+      "tags": []
+    },
+    "tool_calls": [
+      {
+        "name": "search_web",
+        "arguments": {
+          "q": "parcel"
+        }
+      }
+    ],
+    "events": [],
+    "agent": "main"
+  }
+}
