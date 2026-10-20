@@ -424,7 +424,7 @@ state = CallState(schema.model, confirm=schema.confirm, call_start=schema.call_s
 `StateSchema(variables, shapes)` checks the rows and builds the Pydantic class. `schema.model` is that class. `schema.confirm` and `schema.call_start` are the maps for `CallState`. The class and a hand-written one run through the same `CallState`.
 
 1. Every value starts empty. A list starts as `[]`. Anything else starts as `None`.
-2. Empty text counts as no value.
+2. Empty text counts as no value, for a value and for an optional field of a shape. A required field of a shape still checks it.
 3. A `Variable` holds `name`, `description`, `type` (text by default), `confirm` and `call_start`.
 4. A `Shape` is a named group of fields, like `Contact`. Name a shape in the type text.
 5. A field of a shape is required unless its type ends in `| None`.
