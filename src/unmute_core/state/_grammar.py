@@ -418,11 +418,13 @@ def reserved_field_name(name: str) -> str:
 def safe_field_name(name: str) -> str:
     """Return the Pydantic field name that carries a variable called ``name``.
 
-    Pydantic drops a field with a leading underscore and breaks on a ``model_*`` name that
-    ``BaseModel`` owns. Such a name is stored as ``v__<name>`` and keeps its real name as the
-    field's alias. Any other name is its own field name.
+    Pydantic drops a field with a leading underscore, breaks on a ``model_*`` name that
+    ``BaseModel`` owns, and leaves a class attribute in place of the default of a field named
+    after one of its class's own methods, like ``register`` or ``mro``. A name ``BaseModel``
+    already uses is stored as ``v__<name>`` and keeps its real name as the field's alias. Any
+    other name is its own field name.
     """
-    if name.startswith("_") or (name.startswith("model_") and hasattr(BaseModel, name)):
+    if name.startswith("_") or hasattr(BaseModel, name):
         return f"v__{name}"
     return name
 
