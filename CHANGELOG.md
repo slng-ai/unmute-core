@@ -10,6 +10,16 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - A `CallState` no longer keeps its State model alive for the rest of the process. `CallState` adds the library's `call` value to a State model once per class, and kept every model it did that for in a module dict. An agent defined as data that builds a `StateSchema` for each call, as a server that receives the agent with the call does, grew by one model class per call and never freed them. The model with `call` added now lives on its State model and is freed with it. A State class declared once in code works as before (#80).
 
+## Unreleased
+
+### Added
+
+- `CallState.check(values)` applies the rules a save applies and saves nothing. It returns each value as the state would hold it, as JSON data, or raises the `StateRefused` the save would raise, with the same message. A tool can test what it would save before it acts, and a step can save the values of a batch that fit and leave out the ones that do not.
+
+### Fixed
+
+- The 64,000-character limit on a saved value counts the value itself: text by its own characters, anything else by its compact JSON. Before, it counted the value's JSON with its name around it, so a text a few characters under the limit was refused, a text with quotes or line breaks counted each of them twice, and the size in the refusal was off by the name's length.
+
 ## 0.19.2
 
 This release makes a fallback chain, its metrics and the SLNG router call behave more like LiveKit's own models, and lets a tool on an event run with nothing waiting for it. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Changed" and "Fixed" before you upgrade, since some streams and requests now look different.

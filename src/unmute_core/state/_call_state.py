@@ -158,6 +158,11 @@ class NoValues(BaseModel):
     """The State of an agent that keeps no values of its own."""
 
 
+def _stored_size(value: object) -> int:
+    """Return how many characters a value holds: text as it is, anything else as compact JSON."""
+    return len(value) if isinstance(value, str) else len(to_json(value).decode())
+
+
 _EXACT_FLOAT = 2**53
 """Below this, a whole float and its int are the same number."""
 
@@ -342,27 +347,7 @@ class CallState[M: BaseModel]:
         """
         if not values:
             return
-        if CALL in values and (origin is None or origin.kind != "call"):
-            raise StateRefused(
-                "call: the library sets it from the call itself. Copy a call value into one "
-                "of your own to change it"
-            )
-        if unknown := [name for name in values if name not in self._slots]:
-            raise StateRefused(
-                f"{unknown[0]}: not a value of this state. It holds {', '.join(self._fields)}"
-            )
-        try:
-            checked = self._model.model_validate({CALL: self.call, **values})
-        except ValidationError as error:
-            raise StateRefused.from_error(error) from None
-        pending = {name: getattr(checked, self._slots[name]) for name in values}
-        for name in pending:
-            # measures the serialized size and raises StateRefused, the error the model is shown
-            if (size := len(checked.model_dump_json(include={self._slots[name]}))) > STORED_MAX:
-                raise StateRefused(
-                    f"{name}: too long to keep: {size} characters, and a value holds at most "
-                    f"{STORED_MAX}"
-                )
+        pending, _ = self._checked(values, origin)
         changed = {name for name, value in pending.items() if self._value(name) != value}
         while (
             derived := {
@@ -405,6 +390,64 @@ class CallState[M: BaseModel]:
         self._origins |= dict.fromkeys(changed_here, by)
         self._origins |= dict.fromkeys(invalidated, StateOrigin("reset", by.name))
         self._tell(by, changed_here, sorted(invalidated), sorted(flipped))
+
+    def check(self, values: Mapping[str, object]) -> dict[str, Any]:
+        """Check values by the rules a save applies, and save none of them.
+
+        Use it to test what a tool or a step would save before acting on it, or to find
+        which values of a batch fit, so the rest can be saved on their own.
+
+        Args:
+            values: Value name to what would be saved.
+
+        Returns:
+            Each value as the state would hold it, as JSON data, like ``plain`` reads it.
+
+        Raises:
+            StateRefused: For the first value that a save would refuse, with the same text.
+        """
+        if not values:
+            return {}
+        _, plain = self._checked(values, None)
+        return plain
+
+    def _checked(
+        self, values: Mapping[str, object], origin: StateOrigin | None
+    ) -> tuple[dict[str, object], dict[str, Any]]:
+        """Validate a batch as a save would.
+
+        Returns:
+            Each value typed, as the State model holds it, and each as JSON data.
+
+        Raises:
+            StateRefused: If a value is unknown, does not fit its type, or is too long, or the
+                batch holds ``call`` without the library's origin.
+        """
+        if CALL in values and (origin is None or origin.kind != "call"):
+            raise StateRefused(
+                "call: the library sets it from the call itself. Copy a call value into one "
+                "of your own to change it"
+            )
+        if unknown := [name for name in values if name not in self._slots]:
+            raise StateRefused(
+                f"{unknown[0]}: not a value of this state. It holds {', '.join(self._fields)}"
+            )
+        try:
+            checked = self._model.model_validate({CALL: self.call, **values})
+        except ValidationError as error:
+            raise StateRefused.from_error(error) from None
+        dumped = checked.model_dump(
+            mode="json", by_alias=True, include={self._slots[name] for name in values}
+        )
+        for name in values:
+            # measures the value's own text and raises StateRefused, the error the model is shown
+            if (size := _stored_size(dumped[name])) > STORED_MAX:
+                raise StateRefused(
+                    f"{name}: too long to keep: {size} characters, and a value holds at most "
+                    f"{STORED_MAX}"
+                )
+        typed = {name: getattr(checked, self._slots[name]) for name in values}
+        return typed, {name: dumped[name] for name in values}
 
     def _settle(self, unconfirmed: set[str], current: Callable[[str], object]) -> set[str]:
         """Confirm each prefetched value only while all its sources are filled and confirmed.
