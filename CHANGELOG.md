@@ -10,6 +10,11 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 - `StateRefused.name` and `StateRefused.reason`: the value a refusal is about, and what was wrong after its name. For `bookings.0.day: expected a day`, `name` is `bookings` and `reason` is `0.day: expected a day`. Code that words a refusal its own way, or points at the value, no longer cuts the name off `message`. `message` is unchanged.
 
+### Fixed
+
+- `Phone` refuses a number with words or symbols before it, like `mobile: +34 612 345 678`, `Phone: +34 612 345 678` or `tel:+34612345678`: "It has words or symbols before the number: send only the number, from its plus or its first digit". Before, libphonenumber skipped the text and the number was saved, so a word like "not" or "fax" in front of a number was lost. A plus or digits of another script, like fullwidth ones, are still read.
+- `Phone` refuses a number said without its country code and with an extension, like `612 345 678 ext 5`, for its extension: "It has an extension, which the number cannot hold". One with letters, like `612 ABC 678`, is refused for its letters. Before, both read "No country has that code", so the model asked the caller for a country code they did not need to give.
+
 ## 0.19.4
 
 This release adds two opt-in options to the model calls and an error for a request refused before sending. A fallback chain now skips retries that cannot help. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Changed" before you upgrade: a chain with `same_model_retries` no longer retries a request refused before sending.

@@ -32,6 +32,10 @@ from pydantic_core import PydanticCustomError
 _PHONE_SEPARATORS = re.compile(r"[\s().\-/]")
 _DIGITS_ONLY = re.compile(r"\d{6,15}", re.ASCII)
 _LETTER_AFTER_DIGIT = re.compile(r"[+\d].*[^\W\d_]")
+_NUMBER_START = re.compile(r"[+\uff0b\d]")
+"""What a tidied number starts with: a plus, ASCII or fullwidth, or a digit of any script."""
+_EXTENSION_MARK = re.compile(r"(?:;ext=|extension|ext|x|#)\d+$", re.ASCII | re.IGNORECASE)
+"""An extension at the end of a tidied number that libphonenumber could not read."""
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 _CLOCK_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d", re.ASCII)
@@ -56,6 +60,10 @@ _TOO_SHORT = "It is too short for its country: ask the caller for the rest"
 _NO_COUNTRY = "No country has that code: ask for the whole number again, with the country code"
 _NO_SUCH_NUMBER = "No such number exists: ask for the whole number again"
 _EXTENSION = "It has an extension, which the number cannot hold: send the number without it"
+_BEFORE = (
+    "It has words or symbols before the number: send only the number, from its plus or its "
+    "first digit"
+)
 _LETTERS = "It has letters: ask the caller for the number in digits"
 _PARSE_REASONS = MappingProxyType(
     {
@@ -167,6 +175,21 @@ def _phone_number(value: object) -> object:
     raise _refused(_AS_NUMBER)
 
 
+def _unread_reason(compact: str, error: phonenumbers.NumberParseException) -> str:
+    """Return why a tidied number libphonenumber could not read is refused.
+
+    An extension or letters come first: without its plus, a national number with an
+    extension cannot be read at all, and "no country has that code" would send the model
+    after a country code the caller never needed to give.
+    """
+    if _EXTENSION_MARK.search(compact):
+        return _EXTENSION
+    if _LETTER_AFTER_DIGIT.search(compact):
+        return _LETTERS
+    short = compact[1:].isdigit()
+    return _PARSE_REASONS.get(error.error_type, _TOO_SHORT if short else _NO_SUCH_NUMBER)
+
+
 def _e164(value: str) -> str:
     """Tidy a phone number, check it with libphonenumber, and write it as E.164.
 
@@ -175,12 +198,16 @@ def _e164(value: str) -> str:
     refused only for what it cannot tidy away, with libphonenumber's own reason, so it asks
     the caller the right next question: a missing country code, a number too long (a digit
     misheard or said twice), too short (the caller is not done), or one that cannot exist.
-    A number with an extension, or with letters among its digits, is refused too: the
-    stored number would not be the one the caller said.
+    A number with an extension, with letters among its digits, or with words or symbols
+    before it (``Phone: +34...``, ``tel:+34...``) is refused too: the stored number must be
+    exactly what the caller said, and text around it can change what it means. A digit or
+    plus of another script, like a fullwidth one, is the same digit, and is read.
     """
     compact = _PHONE_SEPARATORS.sub("", value)
     if compact.startswith("00"):
         compact = "+" + compact[2:]
+    if compact and not _NUMBER_START.match(compact):
+        raise _refused(_BEFORE)
     if _DIGITS_ONLY.fullmatch(compact):
         if repaired := repaired_phone(compact):
             return repaired
@@ -188,9 +215,7 @@ def _e164(value: str) -> str:
     try:
         number = phonenumbers.parse(compact, None)
     except phonenumbers.NumberParseException as error:
-        short = compact[1:].isdigit()
-        reason = _PARSE_REASONS.get(error.error_type, _TOO_SHORT if short else _NO_SUCH_NUMBER)
-        raise _refused(reason) from None
+        raise _refused(_unread_reason(compact, error)) from None
     if number.extension:
         raise _refused(_EXTENSION)
     if _LETTER_AFTER_DIGIT.search(compact):
