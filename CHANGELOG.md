@@ -14,7 +14,7 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Fixed
 
-- A JSON number saved to a `Literal` value whose choices are digits, like `Literal["1", "2"]`, picks the choice its digits spell: `1` and `2.0` save `"1"` and `"2"`. Before, they were refused with `Input should be '1' or '2'`, while a `str` value already stores a number as its digits. A number no choice spells is still refused, and so is `true`.
+- A JSON number saved to a `Literal` value whose choices are digits, like `Literal["1", "2"]`, picks the choice its digits spell: `1` and `2.0` save `"1"` and `"2"`. Before, they were refused with `Input should be '1' or '2'`, while a `str` value already stores a number as its digits. A number no choice spells is still refused, and so is `true` (#84).
 
 ## 0.19.2
 
