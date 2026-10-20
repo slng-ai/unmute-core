@@ -18,6 +18,7 @@ from unmute_core.model import (
     FallbackModelCall,
     ModelEvent,
     ModelRequest,
+    RequestRefusedError,
     Retry,
     TextDelta,
     ToolCall,
@@ -165,6 +166,37 @@ async def test_a_rate_limit_without_retry_after_retries_the_same_call_when_asked
     chain = FallbackModelCall([dead, FakeCall(["x"])], same_model_retries=(0, 0))
     assert await collect(chain) == ["x"]
     assert dead.calls == 3
+
+
+async def test_a_refused_request_fails_over_at_once_with_no_retry(sleeps: list[float]) -> None:
+    moves: list[FailOver] = []
+    retries: list[Retry] = []
+    refused = FakeCall(RequestRefusedError("bad option"))
+    chain = FallbackModelCall(
+        [refused, FakeCall(["x"])],
+        same_model_retries=SAME_MODEL_RETRIES_S,
+        on_fail_over=moves.append,
+        on_retry=retries.append,
+    )
+    assert await collect(chain) == ["x"]
+    assert (refused.calls, sleeps, retries) == (1, [], [])
+    assert [(move.status, type(move.error)) for move in moves] == [(None, RequestRefusedError)]
+
+
+async def test_a_refused_request_on_the_last_call_is_raised(sleeps: list[float]) -> None:
+    chain = FallbackModelCall(
+        [FakeCall(RequestRefusedError("bad option"))], same_model_retries=SAME_MODEL_RETRIES_S
+    )
+    with pytest.raises(RequestRefusedError, match="bad option"):
+        await collect(chain)
+    assert sleeps == []
+
+
+async def test_any_other_error_with_no_status_is_still_short_lived(sleeps: list[float]) -> None:
+    first = FakeCall(ValueError("provider broke"), ["again"])
+    chain = FallbackModelCall([first, FakeCall(["x"])], same_model_retries=SAME_MODEL_RETRIES_S)
+    assert await collect(chain) == ["again"]
+    assert (first.calls, sleeps) == (2, [0.25])
 
 
 async def test_a_slow_first_event_fails_over() -> None:
