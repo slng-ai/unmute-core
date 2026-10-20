@@ -14,11 +14,11 @@ Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0
 
 ### Added
 
-- `CallState.check(values)` applies the rules a save applies and saves nothing. It returns each value as the state would hold it, as JSON data, or raises the `StateRefused` the save would raise, with the same message. A tool can test what it would save before it acts, and a step can save the values of a batch that fit and leave out the ones that do not.
+- `CallState.check(values)` applies the rules a save applies and saves nothing. It returns each value as the state would hold it, as JSON data, or raises the `StateRefused` the save would raise, with the same message. A tool can test what it would save before it acts, and a step can save the values of a batch that fit and leave out the ones that do not (#83).
 
 ### Fixed
 
-- The 64,000-character limit on a saved value counts the value itself: text by its own characters, anything else by its compact JSON. Before, it counted the value's JSON with its name around it, so a text a few characters under the limit was refused, a text with quotes or line breaks counted each of them twice, and the size in the refusal was off by the name's length.
+- The 64,000-character limit on a saved value counts the value itself: text by its own characters, anything else by its compact JSON. Before, it counted the value's JSON with its name around it, so a text a few characters under the limit was refused, a text with quotes or line breaks counted each of them twice, and the size in the refusal was off by the name's length (#83).
 
 ## 0.19.2
 
