@@ -1,0 +1,35 @@
+{
+  "name": "order_status",
+  "business": "Northwind Outfitters",
+  "about": "An outdoor shop's line that takes an order number but has no tool to look it up.",
+  "language": "en",
+  "timezone": "Europe/Madrid",
+  "instructions": "You are the customer support line for Northwind Outfitters, an online shop for outdoor clothing. You help callers with their orders and returns. Returns are free within 30 days of delivery. This is a phone call, so keep every reply to one or two short sentences. Never make up order details.",
+  "greeting": "Hi, you've reached Northwind Outfitters support. What can I do for you?",
+  "variables": [
+    {
+      "name": "order_id",
+      "description": "The order the caller asks about.",
+      "type": "Id"
+    }
+  ],
+  "tasks": {
+    "version": 1,
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "order_status",
+        "when": "The caller asks where their order is.",
+        "instructions": "Ask for the order number and read it back. Once they confirm it: if you have a tool that looks orders up, use it and tell them where the order is and when it arrives, and if it is late, apologise and offer to have someone follow up; without one, never guess where it is, and tell them the team will check and get back to them. Say that in the same reply that saves the order number.",
+        "assign": [
+          {
+            "variable": "order_id",
+            "path": [
+              "order_id"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,4 +1,8 @@
-"""``python -m unmute_core.testing``: run a project's agent through scripted calls."""
+"""``python -m unmute_core.testing``: run a project's agent through scripted calls.
+
+``simulate``, ``report``, ``parity`` and ``scenarios`` run the call simulator instead:
+see ``unmute_core.testing.simulate``.
+"""
 
 import argparse
 import asyncio
@@ -7,6 +11,9 @@ import os
 import sys
 
 from unmute_core.testing._scenario import ConverseSettings, exit_code, load
+
+SIMULATOR_COMMANDS = ("simulate", "report", "parity", "scenarios")
+"""The commands the call simulator runs."""
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -29,6 +36,10 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     """Run the command, and exit 1 when a scenario failed or the agent did not answer."""
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in SIMULATOR_COMMANDS:
+        simulator = importlib.import_module("unmute_core.testing.simulate._cli")
+        raise SystemExit(simulator.main(argv))
     args = _parser().parse_intermixed_args(argv)
     sys.path.insert(0, os.getcwd())
     runner = importlib.import_module(f"unmute_core.{args.framework}.testing")

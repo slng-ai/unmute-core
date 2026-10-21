@@ -1,0 +1,29 @@
+{
+  "id": "verify_only",
+  "agent": "verify",
+  "persona": "Ana, a physio patient who wants to know when her next session is.",
+  "goal": "Ask when your next physio session is. Confirm your phone number when asked.",
+  "facts": {
+    "phone number": "+34 699 120 345 (say it as: plus three four, six nine nine, one two zero, three four five)"
+  },
+  "moves": [
+    "Open by asking when your next session is.",
+    "Give your phone number when asked and confirm it when read back.",
+    "Accept whatever the agent can tell you, then hang up."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34699120345"
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34699120345"
+    ]
+  },
+  "judge_notes": "The agent has no tool that looks up sessions: after verifying it must not invent a session date or time.",
+  "turn_cap": 12,
+  "tags": [
+    "verify"
+  ]
+}

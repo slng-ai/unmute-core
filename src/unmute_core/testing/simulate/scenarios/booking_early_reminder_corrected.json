@@ -1,0 +1,57 @@
+{
+  "id": "booking_early_reminder_corrected",
+  "agent": "booking",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book a check-up and cleaning for next Tuesday ({{say:next tuesday}}) at three in the afternoon. In your first reply, say you do not need a text reminder. Once the agent has the booking done, change your mind: you do want the reminder.",
+  "facts": {
+    "phone number": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "service": "a check-up and cleaning",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "time": "3 pm",
+    "reminder": "you first say you do not need one, then change your mind: you do want one"
+  },
+  "moves": [
+    "Open by saying you'd like to book a check-up and cleaning next Tuesday at three in the afternoon, and that you do not need a text reminder.",
+    "Give your phone number when asked and confirm read-backs that are right. Do not mention the reminder again.",
+    "As soon as the agent says the team will confirm the booking by text, that it has noted you want no reminder, or asks you about a reminder, say: actually, scrap that, I do want the text reminder after all. Thanks, goodbye. Hang up in that same reply."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345678"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "clean",
+          "check"
+        ],
+        "day": "{{date:next tuesday}}",
+        "time": "15:00"
+      }
+    },
+    "wants_reminder": {
+      "bool": true
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678"
+    ],
+    "service": [
+      "clean",
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00"
+    ]
+  },
+  "judge_notes": "The caller first declined the reminder, then corrected it to yes before its step finished and hung up. The reminder must be saved as yes; no (the answer they corrected) is a wrong save, also when it is made at the call's end.",
+  "tags": [
+    "booking",
+    "early_answer",
+    "corrected"
+  ]
+}

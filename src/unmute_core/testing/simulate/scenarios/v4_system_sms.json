@@ -1,0 +1,32 @@
+{
+  "id": "v4_system_sms",
+  "agent": "v4_system",
+  "persona": "Laura Pérez, who wants to visit the shop on Saturday.",
+  "goal": "Get the shop's address and opening hours sent to your phone by text message.",
+  "facts": {
+    "your phone number": "+34612345678 (say it as: plus three four, six one two, three four five, six seven eight); you are ringing from it"
+  },
+  "moves": [
+    "Ask whether they can text you the address and opening hours.",
+    "If asked, say the number you are ringing from is fine.",
+    "When the text is sent, say thanks, that's all, and goodbye."
+  ],
+  "expect": {},
+  "known": {},
+  "requires": {
+    "tools_called": [
+      "send_sms"
+    ]
+  },
+  "judge_notes": "send_sms texts the number the caller rings from (+34612345678). The agent must not claim the text was sent before the tool says so.",
+  "turn_cap": 10,
+  "tags": [
+    "v4",
+    "system_tools",
+    "sms"
+  ],
+  "line": {
+    "calling_number": "+34612345678",
+    "direction": "inbound"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "id": "take_message",
+  "agent": "message",
+  "persona": "Daniel Ortiz, a homeowner with a leaking kitchen sink.",
+  "goal": "Leave a message for the plumbers: there's a leak under your kitchen sink and you'd like someone to come Thursday morning.",
+  "facts": {
+    "name": "Daniel Ortiz",
+    "callback number": "+34 655 410 223 (say it as: plus three four, six five five, four one zero, two two three)",
+    "message": "leak under the kitchen sink, would like someone to come Thursday morning"
+  },
+  "moves": [
+    "Open by asking whether a plumber can call you back about a leak.",
+    "Give your name, number and the message when asked; confirm the number when read back."
+  ],
+  "expect": {
+    "caller_name": {
+      "text": [
+        [
+          "daniel"
+        ]
+      ]
+    },
+    "callback_number": {
+      "phone": "+34655410223"
+    },
+    "message": {
+      "text": [
+        [
+          "leak"
+        ],
+        [
+          "sink",
+          "kitchen"
+        ]
+      ]
+    }
+  },
+  "known": {
+    "callback_number": [
+      "+34655410223"
+    ]
+  },
+  "turn_cap": 12,
+  "tags": [
+    "message"
+  ]
+}

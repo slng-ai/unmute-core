@@ -1,0 +1,32 @@
+{
+  "id": "order_status_lookup",
+  "agent": "order_status_lookup",
+  "persona": "Sam, a customer waiting for a jacket, slightly impatient.",
+  "goal": "Find out where your order A48213 is and when it arrives.",
+  "facts": {
+    "order number": "A48213 (say it as: A, four eight two one three)"
+  },
+  "moves": [
+    "Open by asking where your order is.",
+    "Give the order number when asked; confirm it when read back."
+  ],
+  "expect": {
+    "order_id": {
+      "exact_ci": "A48213"
+    }
+  },
+  "known": {
+    "order_id": [
+      "A48213"
+    ]
+  },
+  "requires": {
+    "mock_called": "orders"
+  },
+  "judge_notes": "The lookup tool returns: in transit with DHL, at the Madrid sorting centre, arriving Friday, not late. Anything the agent says about the order must match that.",
+  "turn_cap": 12,
+  "tags": [
+    "order",
+    "tool"
+  ]
+}

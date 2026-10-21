@@ -1,0 +1,78 @@
+{
+  "name": "order_status_lookup",
+  "business": "Northwind Outfitters",
+  "about": "An outdoor shop's line whose order step looks the order up and ends on the tool's answer.",
+  "language": "en",
+  "timezone": "Europe/Madrid",
+  "instructions": "You are the customer support line for Northwind Outfitters, an online shop for outdoor clothing. You help callers with their orders and returns. Returns are free within 30 days of delivery. This is a phone call, so keep every reply to one or two short sentences. Never make up order details.",
+  "greeting": "Hi, you've reached Northwind Outfitters support. What can I do for you?",
+  "variables": [
+    {
+      "name": "order_id",
+      "description": "The order the caller asks about.",
+      "type": "Id"
+    }
+  ],
+  "tools": [
+    {
+      "name": "lookup_order",
+      "description": "Look up an order by its order number: whether it was found, its status, when it should arrive and whether it is late.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "The order number the caller gave, as read back to them."
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "additionalProperties": false
+      },
+      "mock": "orders",
+      "result_instructions": "If found is false, tell the caller you could not find that order number and ask them to check it."
+    }
+  ],
+  "tasks": {
+    "version": 1,
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "order_status",
+        "when": "The caller asks where their order is.",
+        "instructions": "Ask for the order number and read it back. Once they confirm it: if you have a tool that looks orders up, use it and tell them where the order is and when it arrives, and if it is late, apologise and offer to have someone follow up; without one, never guess where it is, and tell them the team will check and get back to them. Say that in the same reply that saves the order number.",
+        "tools": [
+          "lookup_order"
+        ],
+        "assign": [
+          {
+            "variable": "order_id",
+            "path": [
+              "order_id"
+            ]
+          }
+        ],
+        "finish": [
+          {
+            "tool": "lookup_order",
+            "success": {
+              "found": [
+                true
+              ],
+              "late": [
+                false
+              ]
+            },
+            "say": [
+              "Order {{result.order_id}} is {{result.status}} and should arrive {{result.eta}}."
+            ]
+          }
+        ]
+      }
+    ],
+    "task_only_tools": [
+      "lookup_order"
+    ]
+  }
+}

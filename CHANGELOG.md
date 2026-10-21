@@ -4,6 +4,12 @@ Each release lists what changed since the release before it. "Changes that can b
 
 Before 1.0, the minor version is the breaking part. `unmute_core.require("0.13.0")` refuses 0.14.0 on purpose. Call `require` with the exact version your code was built for.
 
+## Unreleased
+
+### Added
+
+- `python -m unmute_core.testing simulate livekit|pipecat`: many simulated callers ring an agent, and each call is checked by code and by a judge model. A caller is a model with a persona, a goal, the facts it may give and the moves it makes. The agent is a real `UnmuteAgent` or `UnmuteFlows` on text, and its tools answer from deterministic mocks. 32 scenarios ship, on 11 agents for made-up businesses. The agent, the caller and the judge each run on any OpenAI-compatible endpoint (`SIMULATE_*` variables, or flags). A call the endpoint or the simulator broke, that the judge did not answer, or whose caller left its script is counted apart and never in a pass rate. `report --compare` sets two runs side by side with a Fisher exact test per check, `parity` pairs a LiveKit run with a Pipecat run, and `--gate` makes a run a CI check. See [Testing](docs/core/reference/testing.mdx).
+
 ## 0.19.5
 
 This release makes `Phone` strict about the text around a number, and gives `StateRefused` the value it is about. Nothing in the API breaks: `require("0.19.0")` accepts it. Read "Fixed" before you upgrade: a phone number with words or symbols before it, like `tel:+34612345678`, is now refused.

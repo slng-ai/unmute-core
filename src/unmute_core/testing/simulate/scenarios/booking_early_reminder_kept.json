@@ -1,0 +1,57 @@
+{
+  "id": "booking_early_reminder_kept",
+  "agent": "booking",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book a check-up and cleaning for next Tuesday ({{say:next tuesday}}) at three in the afternoon. In your first reply, say you do not need a text reminder. Once the agent has the booking done, say goodbye and hang up.",
+  "facts": {
+    "phone number": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "service": "a check-up and cleaning",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "time": "3 pm",
+    "reminder": "you do not want one; you say so in your first reply"
+  },
+  "moves": [
+    "Open by saying you'd like to book a check-up and cleaning next Tuesday at three in the afternoon, and that you do not need a text reminder.",
+    "Give your phone number when asked and confirm read-backs that are right. Do not mention the reminder again.",
+    "Once the agent says the team will confirm the booking by text, or that it has noted you want no reminder, say: thanks, goodbye, and hang up in that same reply.",
+    "Only if the agent asks you about a reminder instead, say: no, as I said, thanks."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345678"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "clean",
+          "check"
+        ],
+        "day": "{{date:next tuesday}}",
+        "time": "15:00"
+      }
+    },
+    "wants_reminder": {
+      "bool": false
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678"
+    ],
+    "service": [
+      "clean",
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00"
+    ]
+  },
+  "judge_notes": "The caller declined the reminder in the first turn, before its step began, and hung up without being asked. The answer must be kept: saved as no reminder, by the step if it asked or at the call's end if it did not. Not acceptable: telling the caller it is noted and saving nothing.",
+  "tags": [
+    "booking",
+    "early_answer"
+  ]
+}

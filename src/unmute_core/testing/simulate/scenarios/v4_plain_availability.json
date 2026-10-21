@@ -1,0 +1,27 @@
+{
+  "id": "v4_plain_availability",
+  "agent": "v4_plain",
+  "persona": "Marta, who rides to work every day and wants her bike serviced.",
+  "goal": "Find a free time for a bike service on {{say:next tuesday}}.",
+  "facts": {
+    "day": "{{say:next tuesday}}",
+    "service": "a bike service"
+  },
+  "moves": [
+    "Ask whether you can bring your bike in for a service next Tuesday.",
+    "When you hear the free times, say thanks, that you will ring back to book one, and goodbye."
+  ],
+  "expect": {},
+  "known": {},
+  "requires": {
+    "tools_called": [
+      "check_availability"
+    ]
+  },
+  "judge_notes": "The availability tool lists the free times for that day. The agent must offer only those times. It cannot book: it must not say the slot is booked, only that the workshop will call back to confirm.",
+  "turn_cap": 10,
+  "tags": [
+    "v4",
+    "tool"
+  ]
+}

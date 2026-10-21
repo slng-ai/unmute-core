@@ -1,0 +1,76 @@
+{
+  "id": "intake_friends_phone",
+  "agent": "intake",
+  "persona": "Robin Vega, in their late twenties, relaxed and chatty, ringing an intake desk to get on the books.",
+  "goal": "Get on the books as a new customer. You are ringing from a friend's phone, so the number the call came from is not yours.",
+  "facts": {
+    "the phone you ring from": "your friend Ana's, not yours",
+    "your own number": "+34 611 222 333 (say it as: plus three four, six one one, two two two, three three three)",
+    "name": "Robin Vega",
+    "email": "robin.vega@gmail.com (say it as: robin dot vega at gmail dot com)",
+    "why you are ringing": "you are a new customer"
+  },
+  "moves": [
+    "Open by saying you'd like to get on their books.",
+    "When the agent reads a number back, say no, that's your friend's phone, and give your own number.",
+    "Give your name, email and that you're new when asked. You have no preferred callback time; say any time is fine.",
+    "When you hear a reference number, thank them and say goodbye."
+  ],
+  "expect": {
+    "caller_phone": {
+      "phone": "+34611222333"
+    },
+    "contact": {
+      "fields": {
+        "name": {
+          "text": [
+            [
+              "robin"
+            ],
+            [
+              "vega"
+            ]
+          ]
+        },
+        "email": {
+          "exact": "robin.vega@gmail.com"
+        }
+      }
+    },
+    "caller_email": {
+      "exact": "robin.vega@gmail.com"
+    },
+    "enquiry": {
+      "exact": "new_customer"
+    },
+    "record_id": {
+      "present": "REC-\\d{4}-\\d{3}"
+    }
+  },
+  "known": {
+    "caller_phone": [
+      "+34611222333",
+      "+34699888777"
+    ]
+  },
+  "requires": {
+    "mock_called": "customer_records",
+    "injected": {
+      "customer_records": {
+        "phone": "caller_phone",
+        "email": "caller_email",
+        "name": "contact.name",
+        "enquiry": "enquiry"
+      }
+    }
+  },
+  "judge_notes": "The number the call came from is the friend's. Reading it back is right; saving it after the caller said no is wrong.",
+  "tags": [
+    "intake",
+    "confirm"
+  ],
+  "line": {
+    "calling_number": "+34699888777",
+    "direction": "inbound"
+  }
+}

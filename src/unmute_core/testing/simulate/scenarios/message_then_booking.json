@@ -1,0 +1,83 @@
+{
+  "id": "message_then_booking",
+  "agent": "message_and_booking",
+  "persona": "Marta Gil, a patient who wants to leave a message for Dr. Ruiz and also book a filling.",
+  "goal": "First leave a message for Dr. Ruiz asking her to call you back about your x-ray results. Then book a filling next Monday ({{say:next monday}}) at 10 in the morning. Decline a reminder.",
+  "facts": {
+    "name": "Marta Gil",
+    "phone number": "+34 611 222 333 (say it as: plus three four, six one one, two two two, three three three); use it both as the callback number and as the number for the booking",
+    "message": "please call me back about my x-ray results",
+    "service": "a filling",
+    "day": "next Monday, {{say:next monday}}",
+    "time": "10 am"
+  },
+  "moves": [
+    "Open by asking to leave a message for Dr. Ruiz.",
+    "After the message is taken, say you'd also like to book a filling.",
+    "Say no to a reminder."
+  ],
+  "expect": {
+    "caller_name": {
+      "text": [
+        [
+          "marta"
+        ]
+      ]
+    },
+    "callback_number": {
+      "phone": "+34611222333"
+    },
+    "message": {
+      "text": [
+        [
+          "x-ray",
+          "xray",
+          "x ray"
+        ]
+      ]
+    },
+    "phone_number": {
+      "phone": "+34611222333"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "filling"
+        ],
+        "day": "{{date:next monday}}",
+        "time": "10:00"
+      }
+    },
+    "wants_reminder": {
+      "bool": false
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34611222333"
+    ],
+    "callback_number": [
+      "+34611222333"
+    ],
+    "service": [
+      "filling"
+    ],
+    "day": [
+      "{{date:next monday}}"
+    ],
+    "time": [
+      "10:00"
+    ]
+  },
+  "served": {
+    "take_message": [
+      "message",
+      "ruiz"
+    ]
+  },
+  "tags": [
+    "booking",
+    "message",
+    "two_tasks"
+  ]
+}

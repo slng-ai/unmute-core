@@ -127,6 +127,30 @@ uv add "unmute-core[pipecat]"
 
 Everything works with your framework's own plugins and no SLNG package. [installation](https://github.com/slng-ai/unmute-core/blob/main/docs/core/start/installation.mdx) covers version ranges and the version check at import.
 
+## Simulate calls
+
+A scripted test proves one path. To measure a change to a prompt, a model or the runtime, you need many calls and their statistics. The call simulator gives you both: model callers ring an agent, and every call is checked.
+
+```bash
+export SIMULATE_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/ SIMULATE_API_KEY=...
+python -m unmute_core.testing scenarios
+python -m unmute_core.testing simulate livekit --calls 10 --agent-model gemini-3.1-flash-lite \
+    --caller-model gemini-3.5-flash --judge-model gemini-3.8-flash --out runs/before
+python -m unmute_core.testing report runs/after --compare runs/before
+python -m unmute_core.testing parity runs/livekit runs/pipecat
+```
+
+How a run works:
+
+1. **A caller with a script.** The caller is a model with a persona, a goal, the only facts it may give and the moves it makes, in order. It hangs up by writing `[HANGUP]`. The agent is a real `UnmuteAgent` or `UnmuteFlows` in a text-only session. Its tools answer from deterministic mocks, so a check knows what each tool returned. 32 scenarios ship, on 11 agents for made-up businesses.
+2. **Checks code can make.** The values saved match the scenario. No saved value is one the caller never gave. A step saves only after the caller spoke in it. Each task's run record matches its task events. The call ended naturally, and what the scenario requires happened on the way.
+3. **Checks only a reader can make.** A judge model reads the transcript with every event the caller cannot hear in place: task starts and ends, each save and what made it, each tool result. It rules on eight questions: seven about the agent, like whether it claimed a booking before it was saved, and one about the caller.
+4. **Only calls that say something about the agent are scored.** A call is left out of every pass rate, counted apart and named, when the agent's endpoint failed (a rate limit, a 5xx or a timeout that lasted through the retries), when the simulator itself broke, when the judge gave no verdict, or when the simulated caller left its script: it gave a number, date or service its facts do not hold, or did the opposite of a move. The judge rules on the caller too. A saved value the caller made up is `caller_off_script_value`, not `fabricated_value`. A request the endpoint refused as invalid is the agent's error, and fails the call.
+5. **Numbers you can compare.** `report --compare` sets two runs side by side, with a Fisher exact test per check, so a change seen in a handful of calls is not read as a trend. `parity` pairs the calls of a LiveKit run and a Pipecat run of the same scenarios.
+6. **A gate for CI.** `--gate` fails the run when a planned call has no result, when fewer than 75% of the planned calls are scored (so a broken environment never passes), or when the scored calls' pass rate is below `--gate-min-pass`. `--retry-failed N` runs failed calls again, keeps the earlier attempts, and reports a call that passed only on a retry as flaky.
+
+The agent, the caller and the judge each run on any OpenAI-compatible endpoint. Run the caller and the judge on a different model from the agent. [Testing](https://github.com/slng-ai/unmute-core/blob/main/docs/core/reference/testing.mdx) lists every flag and variable.
+
 ## Docs
 
 The docs tell one story. Start small, then go deeper where you need to.
@@ -136,7 +160,7 @@ The docs tell one story. Start small, then go deeper where you need to.
 3. **On your framework:** [add one piece to your agent](https://github.com/slng-ai/unmute-core/blob/main/docs/core/frameworks/standalone.mdx), or run a whole agent on [LiveKit](https://github.com/slng-ai/unmute-core/blob/main/docs/core/frameworks/livekit.mdx) or [Pipecat](https://github.com/slng-ai/unmute-core/blob/main/docs/core/frameworks/pipecat.mdx).
 4. **Guides:** [state](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/state.mdx), [tools](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/tools.mdx), [knowledge](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/knowledge.mdx), [tasks](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/tasks.mdx), [handoffs](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/handoffs.mdx), [call lifecycle](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/call-lifecycle.mdx), [prefetch](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/prefetch.mdx), [turn taking](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/turn-taking.mdx), [hooks](https://github.com/slng-ai/unmute-core/blob/main/docs/core/build/hooks.mdx), [model call](https://github.com/slng-ai/unmute-core/blob/main/docs/core/models/model-call.mdx), [slng](https://github.com/slng-ai/unmute-core/blob/main/docs/core/models/slng.mdx), [realtime](https://github.com/slng-ai/unmute-core/blob/main/docs/core/models/realtime.mdx), [telephony](https://github.com/slng-ai/unmute-core/blob/main/docs/core/telephony.mdx) and [telemetry](https://github.com/slng-ai/unmute-core/blob/main/docs/core/observe/telemetry.mdx).
 5. **Example agents:** [overview](https://github.com/slng-ai/unmute-core/blob/main/docs/core/examples/overview.mdx), [type the path](https://github.com/slng-ai/unmute-core/blob/main/docs/core/examples/typed-path.mdx), and one page each for [nosh](https://github.com/slng-ai/unmute-core/blob/main/docs/core/examples/nosh.mdx), [kestrel](https://github.com/slng-ai/unmute-core/blob/main/docs/core/examples/kestrel.mdx), [wasla](https://github.com/slng-ai/unmute-core/blob/main/docs/core/examples/wasla.mdx) and [faro](https://github.com/slng-ai/unmute-core/blob/main/docs/core/examples/faro.mdx).
-6. **Reference:** [settings](https://github.com/slng-ai/unmute-core/blob/main/docs/core/reference/settings.mdx) and [tasks](https://github.com/slng-ai/unmute-core/blob/main/docs/core/reference/tasks.mdx).
+6. **Reference:** [settings](https://github.com/slng-ai/unmute-core/blob/main/docs/core/reference/settings.mdx), [tasks](https://github.com/slng-ai/unmute-core/blob/main/docs/core/reference/tasks.mdx) and [testing](https://github.com/slng-ai/unmute-core/blob/main/docs/core/reference/testing.mdx).
 
 ## Versions
 

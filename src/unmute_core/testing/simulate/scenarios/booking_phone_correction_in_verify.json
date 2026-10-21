@@ -1,0 +1,56 @@
+{
+  "id": "booking_phone_correction_in_verify",
+  "agent": "booking",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book a check-up and cleaning for next Tuesday ({{say:next tuesday}}) at three in the afternoon. Say yes to a reminder.",
+  "facts": {
+    "phone number": "+34 612 345 677. At first you misspeak and say it ends in six seven eight; when the agent reads that back, correct it: it ends in six seven seven.",
+    "service": "a check-up and cleaning",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "time": "3 pm"
+  },
+  "moves": [
+    "Open by saying you'd like to book a check-up and cleaning.",
+    "Say your number as plus three four, six one two, three four five, six seven eight (a slip).",
+    "When it is read back, say: sorry, my mistake, the last three are six seven seven. Confirm the corrected read-back.",
+    "Say yes to a reminder."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345677"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "clean",
+          "check"
+        ],
+        "day": "{{date:next tuesday}}",
+        "time": "15:00"
+      }
+    },
+    "wants_reminder": {
+      "bool": true
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678",
+      "+34612345677"
+    ],
+    "service": [
+      "clean",
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00"
+    ]
+  },
+  "tags": [
+    "booking",
+    "correction"
+  ]
+}

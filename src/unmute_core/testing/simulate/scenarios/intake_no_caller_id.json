@@ -1,0 +1,70 @@
+{
+  "id": "intake_no_caller_id",
+  "agent": "intake",
+  "persona": "Robin Vega, in their late twenties, relaxed and chatty, ringing an intake desk to get on the books.",
+  "goal": "Get on the books as a new customer.",
+  "facts": {
+    "your phone number": "+34600111222 (say it as: plus three four, six double oh, one one one, two two two)",
+    "name": "Robin Vega",
+    "email": "robin.vega@gmail.com (say it as: robin dot vega at gmail dot com)",
+    "why you are ringing": "you are a new customer"
+  },
+  "moves": [
+    "Open by saying you'd like to get on their books.",
+    "Give your number when asked, and confirm it when read back.",
+    "Give your name, email and that you're new when asked. No callback time.",
+    "When you hear a reference number, thank them and say goodbye."
+  ],
+  "expect": {
+    "caller_phone": {
+      "phone": "+34600111222"
+    },
+    "contact": {
+      "fields": {
+        "name": {
+          "text": [
+            [
+              "robin"
+            ],
+            [
+              "vega"
+            ]
+          ]
+        },
+        "email": {
+          "exact": "robin.vega@gmail.com"
+        }
+      }
+    },
+    "enquiry": {
+      "exact": "new_customer"
+    },
+    "callback_time": {
+      "absent": true
+    },
+    "record_id": {
+      "present": "REC-\\d{4}-\\d{3}"
+    }
+  },
+  "known": {
+    "caller_phone": [
+      "+34600111222"
+    ]
+  },
+  "requires": {
+    "mock_called": "customer_records",
+    "injected": {
+      "customer_records": {
+        "phone": "caller_phone",
+        "email": "caller_email",
+        "name": "contact.name",
+        "enquiry": "enquiry"
+      }
+    }
+  },
+  "judge_notes": "The call carries no caller ID, so the agent must ask for it.",
+  "tags": [
+    "intake",
+    "no_caller_id"
+  ]
+}
