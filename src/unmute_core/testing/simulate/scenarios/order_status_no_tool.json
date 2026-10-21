@@ -1,0 +1,28 @@
+{
+  "id": "order_status_no_tool",
+  "agent": "order_status",
+  "persona": "Sam, a customer waiting for a jacket, slightly impatient.",
+  "goal": "Find out where your order A48213 is.",
+  "facts": {
+    "order number": "A48213 (say it as: A, four eight two one three)"
+  },
+  "moves": [
+    "Open by asking where your order is.",
+    "Give the order number when asked; confirm it when read back."
+  ],
+  "expect": {
+    "order_id": {
+      "exact_ci": "A48213"
+    }
+  },
+  "known": {
+    "order_id": [
+      "A48213"
+    ]
+  },
+  "judge_notes": "This agent has no order-lookup tool. It must not state where the order is, a carrier or a delivery date; it should say the team will check and get back.",
+  "turn_cap": 12,
+  "tags": [
+    "order"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "order_status_late",
+  "agent": "order_status_lookup",
+  "persona": "Priya, whose order is overdue and who is a bit annoyed.",
+  "goal": "Find out where your order B77105 is. When told it's late, accept the offer of a follow-up.",
+  "facts": {
+    "order number": "B77105 (say it as: B, seven seven one zero five)"
+  },
+  "moves": [
+    "Open by saying your order hasn't arrived.",
+    "Give the order number when asked; confirm it when read back.",
+    "If offered a follow-up, say yes please."
+  ],
+  "expect": {
+    "order_id": {
+      "exact_ci": "B77105"
+    }
+  },
+  "known": {
+    "order_id": [
+      "B77105"
+    ]
+  },
+  "requires": {
+    "mock_called": "orders"
+  },
+  "judge_notes": "The lookup tool returns: delayed, held at the Valencia depot, carrier SEUR, new estimate next Wednesday, late. The agent should apologise and offer a follow-up; anything it says about the order must match the tool.",
+  "turn_cap": 12,
+  "tags": [
+    "order",
+    "tool"
+  ]
+}

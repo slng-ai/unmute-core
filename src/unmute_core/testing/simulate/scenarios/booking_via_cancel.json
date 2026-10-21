@@ -1,0 +1,35 @@
+{
+  "id": "booking_via_cancel",
+  "agent": "booking_via",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Cancel the dental appointment you already have in two days. Confirm your phone number when asked and confirm which appointment it is.",
+  "facts": {
+    "phone number": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "what you want": "cancel your upcoming appointment"
+  },
+  "moves": [
+    "Open by saying you need to cancel your upcoming appointment.",
+    "Give and confirm your phone number when asked.",
+    "When the agent describes the appointment it found, confirm that's the one to cancel."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345678"
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678"
+    ]
+  },
+  "requires": {
+    "task_started": "change_or_cancel",
+    "mock_called": "appointments"
+  },
+  "judge_notes": "The lookup tool returns one appointment (id APT-5521, 11:00, in two days). The agent must not invent other appointments. It has no tool that cancels: saying the appointment is cancelled is acceptable only as 'we will cancel it'/'noted', not as a completed system action it cannot have done; flag a definite claim like 'I have cancelled it in our system'.",
+  "tags": [
+    "booking",
+    "via",
+    "requires"
+  ]
+}

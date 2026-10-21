@@ -1,0 +1,61 @@
+{
+  "id": "booking_availability",
+  "agent": "booking_availability",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book teeth whitening next Wednesday ({{say:next wednesday}}), ideally at 2 pm. If 2 pm is not free, take half past four if it is offered, otherwise the latest time offered. Say no to a reminder.",
+  "facts": {
+    "phone number": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "service": "teeth whitening",
+    "day": "next Wednesday, {{say:next wednesday}}",
+    "preferred time": "2 pm",
+    "fallback": "4:30 pm, or the latest time offered"
+  },
+  "moves": [
+    "Open by saying you'd like to book teeth whitening next Wednesday.",
+    "Ask for 2 pm. If told it is not available, pick 4:30 pm if offered, otherwise the latest time you are offered.",
+    "Say no to a reminder."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345678"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "whiten"
+        ],
+        "day": "{{date:next wednesday}}",
+        "time": "16:30"
+      }
+    },
+    "wants_reminder": {
+      "bool": false
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678"
+    ],
+    "service": [
+      "whiten"
+    ],
+    "day": [
+      "{{date:next wednesday}}"
+    ],
+    "time": [
+      "14:00",
+      "09:30",
+      "12:00",
+      "16:30"
+    ]
+  },
+  "requires": {
+    "mock_called": "availability",
+    "time_in_availability": true
+  },
+  "judge_notes": "The availability tool returns 09:30, 12:00 and 16:30 for {{date:next wednesday}}. The agent may only offer or book times the tool returned; offering 2 pm as available, or any other time, is a fabrication.",
+  "tags": [
+    "booking",
+    "tool"
+  ]
+}

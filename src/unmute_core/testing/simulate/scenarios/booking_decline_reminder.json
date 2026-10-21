@@ -1,0 +1,52 @@
+{
+  "id": "booking_decline_reminder",
+  "agent": "booking",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book a check-up and cleaning for next Tuesday ({{say:next tuesday}}) at three in the afternoon. Decline the text reminder.",
+  "facts": {
+    "phone number": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "service": "a check-up and cleaning",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "time": "3 pm"
+  },
+  "moves": [
+    "Open by saying you'd like to book a check-up and cleaning.",
+    "When asked about a reminder, say no thanks, you don't need one."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345678"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "clean",
+          "check"
+        ],
+        "day": "{{date:next tuesday}}",
+        "time": "15:00"
+      }
+    },
+    "wants_reminder": {
+      "bool": false
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678"
+    ],
+    "service": [
+      "clean",
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00"
+    ]
+  },
+  "tags": [
+    "booking"
+  ]
+}

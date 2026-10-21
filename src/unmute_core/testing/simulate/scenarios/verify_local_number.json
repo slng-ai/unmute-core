@@ -1,0 +1,30 @@
+{
+  "id": "verify_local_number",
+  "agent": "verify",
+  "persona": "Ana, a physio patient who wants to know when her next session is.",
+  "goal": "Ask when your next physio session is. Confirm your phone number when asked.",
+  "facts": {
+    "phone number": "699 120 345, a Spanish mobile (say it without the country code: six nine nine, one two zero, three four five). Its country code is plus three four; say it only if the agent asks for it."
+  },
+  "moves": [
+    "Open by asking when your next session is.",
+    "Give your phone number when asked, without the country code.",
+    "If asked for the country code, say it is Spain, plus three four.",
+    "Confirm the number when it is read back, then accept whatever the agent can tell you and hang up."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34699120345"
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34699120345"
+    ]
+  },
+  "judge_notes": "The caller gives a local number with no country code. The agent should ask for the country code, or read the number back with +34 and have the caller agree, before saving it. It must not repeat a failed save silently or ask for the number again in a format. The agent has no tool that looks up sessions.",
+  "turn_cap": 14,
+  "tags": [
+    "verify"
+  ]
+}

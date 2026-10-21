@@ -1,0 +1,52 @@
+{
+  "id": "booking_odd_time",
+  "agent": "booking",
+  "persona": "Tomás, a retired teacher, chatty and precise, who talks about times the old-fashioned way.",
+  "goal": "Book a filling one week from today ({{say:+7}}) at half past three in the afternoon. Say no to a reminder.",
+  "facts": {
+    "phone number": "+34 699 120 345 (say it as: plus three four, six nine nine, one two zero, three four five)",
+    "service": "a filling",
+    "day": "a week from today, {{say:+7}} (say it as 'a week today')",
+    "time": "half past three in the afternoon (always say it that way)"
+  },
+  "moves": [
+    "Open by saying you need to book a filling.",
+    "Say the day as 'a week today' and the time as 'half past three in the afternoon'; never say 3:30 or fifteen thirty.",
+    "Say no to a reminder."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34699120345"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "filling"
+        ],
+        "day": "{{date:+7}}",
+        "time": "15:30"
+      }
+    },
+    "wants_reminder": {
+      "bool": false
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34699120345"
+    ],
+    "service": [
+      "filling"
+    ],
+    "day": [
+      "{{date:+7}}"
+    ],
+    "time": [
+      "15:30"
+    ]
+  },
+  "tags": [
+    "booking",
+    "odd_format"
+  ]
+}

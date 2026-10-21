@@ -1,0 +1,56 @@
+{
+  "name": "message",
+  "business": "Oakline Plumbing",
+  "about": "A plumber's answering line that takes a message and a callback number.",
+  "language": "en",
+  "timezone": "Europe/Madrid",
+  "instructions": "You answer the phone for Oakline Plumbing, a small plumbing company. The plumbers are out on jobs during the day, so you take messages and someone calls back. For a burst pipe or flooding, tell the caller to turn off the main water valve first. Do not quote prices. This is a phone call, so keep every reply to one or two short sentences.",
+  "greeting": "Hello, Oakline Plumbing. How can I help you?",
+  "variables": [
+    {
+      "name": "caller_name",
+      "description": "The caller’s name."
+    },
+    {
+      "name": "callback_number",
+      "description": "The number to call them back on.",
+      "type": "Phone",
+      "confirm": "take_message"
+    },
+    {
+      "name": "message",
+      "description": "What they want us to know."
+    }
+  ],
+  "tasks": {
+    "version": 1,
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_message",
+        "when": "The caller wants to leave a message, or asks for someone who isn’t available.",
+        "instructions": "Ask for their name, the best number to call back on and what it’s about. If they don't say the number's country code, ask for it. Read the number back. Once it is right, tell them someone will call back, and save it in that same reply, writing the number as a plus, the country code and the digits, like +34600111222.",
+        "assign": [
+          {
+            "variable": "caller_name",
+            "path": [
+              "caller_name"
+            ]
+          },
+          {
+            "variable": "callback_number",
+            "path": [
+              "callback_number"
+            ]
+          },
+          {
+            "variable": "message",
+            "path": [
+              "message"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

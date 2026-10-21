@@ -1,0 +1,72 @@
+{
+  "id": "intake_complaint",
+  "agent": "intake",
+  "persona": "Robin Vega, an existing customer, annoyed but polite, ringing to complain that last week's delivery never came.",
+  "goal": "Have your complaint written down. You don't need a callback.",
+  "facts": {
+    "your phone number": "+34600111222 (say it as: plus three four, six double oh, one one one, two two two); you are ringing from it",
+    "name": "Robin Vega",
+    "email": "robin.vega@example.com (say it as: robin dot vega at example dot com)",
+    "complaint": "last week's delivery never arrived"
+  },
+  "moves": [
+    "Open by saying you want to make a complaint.",
+    "Confirm your number when read back.",
+    "Give your name and email when asked. Say you don't need a call back.",
+    "When you hear a reference number, say goodbye."
+  ],
+  "expect": {
+    "caller_phone": {
+      "phone": "+34600111222"
+    },
+    "contact": {
+      "fields": {
+        "name": {
+          "text": [
+            [
+              "robin"
+            ],
+            [
+              "vega"
+            ]
+          ]
+        },
+        "email": {
+          "exact": "robin.vega@example.com"
+        }
+      }
+    },
+    "enquiry": {
+      "exact": "complaint"
+    },
+    "callback_time": {
+      "absent": true
+    },
+    "record_id": {
+      "present": "REC-\\d{4}-\\d{3}"
+    }
+  },
+  "known": {
+    "caller_phone": [
+      "+34600111222"
+    ]
+  },
+  "requires": {
+    "mock_called": "customer_records",
+    "injected": {
+      "customer_records": {
+        "phone": "caller_phone",
+        "email": "caller_email",
+        "name": "contact.name",
+        "enquiry": "enquiry"
+      }
+    }
+  },
+  "tags": [
+    "intake"
+  ],
+  "line": {
+    "calling_number": "+34600111222",
+    "direction": "inbound"
+  }
+}

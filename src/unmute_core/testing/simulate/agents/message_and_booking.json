@@ -1,0 +1,191 @@
+{
+  "name": "message_and_booking",
+  "business": "Maple Street Dental",
+  "about": "The dental booking desk that can also take a message for a dentist.",
+  "language": "en",
+  "timezone": "Europe/Madrid",
+  "instructions": "You are the front desk assistant for Maple Street Dental, a family dental practice. You answer the phone: you help callers book, change or cancel appointments and answer simple questions about the practice. We are open Monday to Friday, 8am to 6pm. Services: check-up and cleaning, fillings, whitening and emergency visits. This is a phone call, so keep every reply to one or two short sentences. Never give medical advice; for severe pain or swelling, offer an emergency visit. If a caller asks for a dentist by name, take a message for them.",
+  "greeting": "Thanks for calling Maple Street Dental. How can I help you today?",
+  "variables": [
+    {
+      "name": "caller_name",
+      "description": "The caller’s name."
+    },
+    {
+      "name": "callback_number",
+      "description": "The number to call them back on.",
+      "type": "Phone",
+      "confirm": "take_message"
+    },
+    {
+      "name": "message",
+      "description": "What they want us to know."
+    },
+    {
+      "name": "phone_number",
+      "description": "The caller's phone number, confirmed with them.",
+      "type": "Phone",
+      "confirm": "verify_identity"
+    },
+    {
+      "name": "appointment",
+      "description": "The appointment the caller asked for.",
+      "type": "Appointment"
+    },
+    {
+      "name": "wants_reminder",
+      "description": "Whether the caller wants a text reminder the day before.",
+      "type": "bool"
+    },
+    {
+      "name": "change_request",
+      "description": "What the caller wants changed or cancelled, and on which appointment."
+    }
+  ],
+  "shapes": [
+    {
+      "name": "Appointment",
+      "description": "One booked appointment.",
+      "fields": [
+        {
+          "name": "service",
+          "type": "str",
+          "description": "What the caller wants booked."
+        },
+        {
+          "name": "day",
+          "type": "Date",
+          "description": ""
+        },
+        {
+          "name": "time",
+          "type": "Time",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "prefetch": [
+    {
+      "name": "clock",
+      "lookup": "current_datetime"
+    }
+  ],
+  "tasks": {
+    "version": 1,
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "take_message",
+        "when": "The caller wants to leave a message, or asks for someone who isn’t available.",
+        "instructions": "Ask for their name, the best number to call back on and what it’s about. If they don't say the number's country code, ask for it. Read the number back. Once it is right, tell them someone will call back, and save it in that same reply, writing the number as a plus, the country code and the digits, like +34600111222.",
+        "assign": [
+          {
+            "variable": "caller_name",
+            "path": [
+              "caller_name"
+            ]
+          },
+          {
+            "variable": "callback_number",
+            "path": [
+              "callback_number"
+            ]
+          },
+          {
+            "variable": "message",
+            "path": [
+              "message"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "verify_identity",
+        "when": "The caller needs to confirm who they are before a booking is looked up or changed.",
+        "instructions": "Ask for the phone number on the booking, and for its country code if they don't say it. Read it back digit by digit and wait for the caller to say it is right. If they correct it, read the new number back too. Save it only once they agree, written as a plus, the country code and the digits, like +34600111222.",
+        "assign": [
+          {
+            "variable": "phone_number",
+            "path": [
+              "phone_number"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "take_booking",
+        "instructions": "Use today's date from your inputs to work out the day the caller means. Ask which service they want, and which day and time suit them. Read the request back: service, day and time. Once they agree, tell them the team will confirm the appointment by text, and save it in that same reply. If you have a tool that checks availability or books, use it and offer only times it returns; without one, never suggest times or say it is booked.",
+        "assign": [
+          {
+            "variable": "appointment",
+            "path": [
+              "appointment"
+            ]
+          }
+        ],
+        "requires": [
+          "phone_number"
+        ]
+      },
+      {
+        "name": "reminder",
+        "instructions": "Ask whether they would like a text reminder the day before. One question. When they answer, thank them and save it in that same reply.",
+        "assign": [
+          {
+            "variable": "wants_reminder",
+            "path": [
+              "wants_reminder"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "change_or_cancel",
+        "when": "The caller wants to change or cancel an appointment they already have.",
+        "instructions": "Use today's date from your inputs to work out the day the caller means. Find out which appointment they mean: if you have a tool that finds their appointments, use it and confirm the one they mean; without one, ask them. Ask whether they want to move it or cancel it; to move it, ask which day and time suit them instead. Read the request back. Before cancelling less than 24 hours ahead, tell them about the late-cancellation fee. Once they agree, tell them the team will confirm the change by text, and save it in that same reply. If you have a tool that changes or cancels bookings, use it; without one, never say it is changed or cancelled.",
+        "assign": [
+          {
+            "variable": "change_request",
+            "path": [
+              "change_request"
+            ]
+          }
+        ],
+        "requires": [
+          "phone_number"
+        ],
+        "inputs": [
+          {
+            "kind": "tool",
+            "name": "clock"
+          }
+        ]
+      }
+    ],
+    "groups": [
+      {
+        "name": "new_booking",
+        "when": "The caller wants to book a new appointment.",
+        "steps": [
+          "verify_identity",
+          "take_booking",
+          "reminder"
+        ],
+        "context_scope": "shared",
+        "non_blocking": [
+          "reminder"
+        ],
+        "skip_when_confirmed": {
+          "verify_identity": "phone_number"
+        },
+        "inputs": [
+          {
+            "kind": "tool",
+            "name": "clock"
+          }
+        ]
+      }
+    ]
+  }
+}

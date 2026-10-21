@@ -1,7 +1,7 @@
 ---
 title: "Testing reference"
 sidebarTitle: "Testing"
-description: "Run your own LiveKit or Pipecat project through whole scripted calls on its real model, or one offline turn, with python -m unmute_core.testing."
+description: "Run your own LiveKit or Pipecat project through whole scripted calls on its real model, or one offline turn, and measure agents with many simulated callers, with python -m unmute_core.testing."
 ---
 
 The library ships the runner its own examples use. It runs your project as written: your entrypoint, your tools, your model. A scripted caller types each line, and the runner checks what the agent said.
@@ -68,3 +68,94 @@ A key the runner does not know fails the scenario file. Lines code speaks are wo
 | `CONVERSE_CALLER_LANGUAGE` | The language caller lines are spoken in. `en` by default. |
 | `CONVERSE_VOICE_CACHE` | Where spoken caller lines are kept. A temporary folder by default. |
 | `SLNG_WORLD_PART` | The region that speaks caller lines. `eu-north` by default. |
+
+## Simulate calls
+
+A scripted call proves one path. The call simulator measures an agent: a model plays the caller, each scenario runs many times, and each call is checked by code and by a judge. Two runs, before and after a change, compare check by check.
+
+```bash
+python -m unmute_core.testing scenarios                        # the bundled scenarios and agents
+python -m unmute_core.testing simulate livekit --calls 10 --out runs/before
+python -m unmute_core.testing simulate pipecat booking_happy tag:intake --calls 3
+python -m unmute_core.testing simulate livekit --rejudge --out runs/before   # judge again
+python -m unmute_core.testing report runs/after --compare runs/before
+python -m unmute_core.testing parity runs/livekit runs/pipecat --out parity.md
+```
+
+The agent is a real `UnmuteAgent` in a text-only LiveKit session, or `UnmuteFlows` on a Pipecat pipeline with no transport. The bundled agents answer for made-up businesses, and their tools answer from deterministic mocks. A scenario names its agent, so `scenarios/<id>.json` files of your own run the same way.
+
+### The three models
+
+The agent, the caller and the judge each run on any OpenAI-compatible endpoint. Run the caller and the judge on a different model from the agent, so the two sides of the call do not share one model's habits. Keys come from the environment only.
+
+| Flag | Variable | What it sets |
+|---|---|---|
+| `--model` | `SIMULATE_MODEL` | The model of every role that names none. |
+| `--base-url` | `SIMULATE_BASE_URL`, then `OPENAI_BASE_URL` | The endpoint of every role that names none. |
+| | `SIMULATE_API_KEY`, then `OPENAI_API_KEY` | The key of every role that names none. |
+| `--agent-model`, `--caller-model`, `--judge-model` | `SIMULATE_AGENT_MODEL` and the like | One role's model. |
+| `--agent-base-url` and the like | `SIMULATE_AGENT_BASE_URL` and the like | One role's endpoint. |
+| | `SIMULATE_AGENT_API_KEY` and the like | One role's key. |
+| `--agent-params` and the like | | JSON body fields for one role's requests, like `{"reasoning_effort": "low"}`. The caller sends `{"temperature": 0.7}` unless you say otherwise. The judge always sends temperature 0. |
+
+### A scenario
+
+```json
+{
+  "id": "booking_happy",
+  "agent": "booking",
+  "persona": "Sam Ortiz, a regular patient. Polite, efficient.",
+  "goal": "Book a check-up and cleaning for {{say:next tuesday}} at 3pm.",
+  "facts": {"phone number": "+34 612 345 678 (say it as: plus three four, six one two, ...)"},
+  "moves": ["Open by asking to book.", "Confirm your number when it is read back."],
+  "expect": {"phone_number": {"phone": "+34612345678"}},
+  "known": {"phone_number": ["+34612345678"]},
+  "judge_notes": "A plain booking.",
+  "tags": ["booking"]
+}
+```
+
+| Key | What it is |
+|---|---|
+| `agent` | A bundled agent's name, or a path to an agent file. |
+| `persona`, `goal`, `facts`, `moves` | The caller's brief. The caller may give only what `facts` holds. |
+| `expect` | Each saved value and the matcher it must meet: `phone`, `exact`, `exact_ci`, `bool`, `present`, `text`, `fields`, `appointment`, `any` or `absent`. |
+| `known` | Every value the caller can rightly give, so a saved value outside it is invented. |
+| `requires` | What must happen on the way: `task_started`, `mock_called`, `tools_called`, `time_in_availability`, `any_of`, and `injected`, the hidden arguments a mock must receive. |
+| `served` | Task names and the words their requests are said in, to catch a served request handed back. |
+| `judge_notes` | What the judge should know about this call. |
+| `turn_cap` | The most caller turns before the call is cut off. 18 by default. |
+| `line` | The caller's number and the call's direction. |
+
+`{{date:next tuesday}}`, `{{date:+7}}` and `{{date:today}}` fill an ISO date in the agent's time zone. `{{say:next tuesday}}` is the same day the way a caller says it.
+
+### Scored calls
+
+A call passes when it passes every core check. Only a call that says something about the agent is scored. These calls are left out of every pass rate, counted apart and named in the summary:
+
+| Left out | When |
+|---|---|
+| `environment` | The agent's endpoint failed: a rate limit, a 5xx, a timeout or a lost link that lasted through the retries. |
+| `harness` | The simulator itself broke, like a turn that never went quiet. |
+| `judge` | The judge gave no verdict. Run `--rejudge` later. |
+| `caller` | The simulated caller left its brief: it gave a value its facts do not hold, or did the opposite of a move. The judge rules on this. |
+
+A request the endpoint refused as invalid is the agent's error and fails the call, as does a call that failed. A saved value the caller made up is reported as `caller_off_script_value`, not as `fabricated_value`. A rerun into the same folder skips calls with a verdict and runs `environment` and `harness` calls again.
+
+### In CI
+
+```bash
+python -m unmute_core.testing simulate livekit --no-judge --retry-failed 1 --gate --out runs/ci
+```
+
+`--gate` exits 1 when a planned call has no result, when fewer than `--gate-min-scored` of the planned calls are scored (0.75 by default), or when the scored calls' pass rate is below `--gate-min-pass` (1.0 by default). The verdict goes to `gate.json`, and to the job summary when `GITHUB_STEP_SUMMARY` is set. `--retry-failed N` runs a failed call again up to `N` times. The last attempt counts, the earlier ones stay beside it, and a call that passed only on a retry is listed as flaky.
+
+### What a run writes
+
+| File | What it holds |
+|---|---|
+| `calls/<scenario>/<nn>.jsonl` | One call: the call record, the timeline (lines, task events, saves, tool calls, model requests), the mock requests, the judge's transcript and reply, and the checks. |
+| `run.json` | The framework and each role's model and host. Never a key. |
+| `summary.md`, `summary.json` | Pass rates per scenario, failures per check and category, model requests and latency. |
+| `gate.json` | The gate's verdict, with `--gate`. |
+

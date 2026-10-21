@@ -1,0 +1,58 @@
+{
+  "name": "v4_plain",
+  "business": "Lakeside Bikes",
+  "about": "A bike shop with no tasks: the main agent calls the availability and order tools itself.",
+  "language": "en",
+  "timezone": "Europe/Madrid",
+  "instructions": "You answer the phone for Lakeside Bikes, a bike shop that sells, rents and services bikes. We are open Tuesday to Saturday, 10am to 7pm, at 14 Harbour Road. This is a phone call, so keep every reply to one or two short sentences. Never make up times, prices or order details. For a bike service, call get_current_datetime to know today's date, then check_availability for the day the caller wants. You cannot book: tell the caller which times are free and that the workshop will call them back to confirm. For an order, use lookup_order.",
+  "greeting": "Lakeside Bikes, hello. How can I help?",
+  "tools": [
+    {
+      "name": "check_availability",
+      "description": "Check which appointment times are free on one day for one service.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "The day to check, written year-month-day, like 2026-10-14."
+          },
+          "service": {
+            "type": "string",
+            "description": "The service the caller wants booked."
+          }
+        },
+        "required": [
+          "day",
+          "service"
+        ],
+        "additionalProperties": false
+      },
+      "mock": "availability",
+      "result_instructions": "Offer the caller only times listed in available_times. If the list is empty, say that day is full and ask for another day."
+    },
+    {
+      "name": "lookup_order",
+      "description": "Look up an order by its order number: whether it was found, its status, when it should arrive and whether it is late.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "description": "The order number the caller gave, as read back to them."
+          }
+        },
+        "required": [
+          "order_id"
+        ],
+        "additionalProperties": false
+      },
+      "mock": "orders",
+      "result_instructions": "If found is false, tell the caller you could not find that order number and ask them to check it."
+    },
+    {
+      "name": "current_datetime",
+      "builtin": "current_datetime"
+    }
+  ]
+}

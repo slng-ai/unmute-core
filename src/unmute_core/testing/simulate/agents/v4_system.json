@@ -1,0 +1,76 @@
+{
+  "name": "v4_system",
+  "business": "Lakeside Bikes",
+  "about": "A bike shop with no tasks: call start and end hooks, a text-message tool and an end-call tool.",
+  "language": "en",
+  "timezone": "Europe/Madrid",
+  "instructions": "You answer the phone for Lakeside Bikes, a bike shop that sells, rents and services bikes. We are open Tuesday to Saturday, 10am to 7pm, at 14 Harbour Road. This is a phone call, so keep every reply to one or two short sentences. Never make up times, prices or order details. If a caller wants the address or opening hours in writing, text them with send_sms. When the caller has nothing else, say goodbye and call end_call.",
+  "greeting": "Lakeside Bikes, hello. How can I help?",
+  "prefetch": [
+    {
+      "name": "call_start_hook",
+      "lookup": "call_start_hook"
+    }
+  ],
+  "tools": [
+    {
+      "name": "call_start_hook",
+      "description": "Tell the shop's system a call has started.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "mock": "hook"
+    },
+    {
+      "name": "call_end_hook",
+      "description": "Send the shop's system the call's transcript once it ends.",
+      "parameters": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "mock": "hook"
+    },
+    {
+      "name": "end_call",
+      "builtin": "end_call",
+      "description": "Let the agent hang up, with a goodbye spoken first.",
+      "goodbye": "Thanks for calling Lakeside Bikes. Bye!"
+    },
+    {
+      "name": "send_sms",
+      "description": "Text the caller the shop's address and opening hours. The recipient is the number the caller gives, in E.164.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "description": "The number to text, in E.164, like +34600111222."
+          },
+          "body": {
+            "type": "string",
+            "description": "The text message."
+          }
+        },
+        "required": [
+          "to",
+          "body"
+        ],
+        "additionalProperties": false
+      },
+      "mock": "sms",
+      "announce": "One moment, I'm sending that text now."
+    }
+  ],
+  "events": [
+    {
+      "tool": "call_end_hook",
+      "on": [
+        "call_end"
+      ],
+      "wait": false
+    }
+  ]
+}

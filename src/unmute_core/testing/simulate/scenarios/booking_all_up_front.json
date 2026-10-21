@@ -1,0 +1,53 @@
+{
+  "id": "booking_all_up_front",
+  "agent": "booking",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book a check-up and cleaning for next Tuesday ({{say:next tuesday}}) at three in the afternoon. Say yes to a text reminder.",
+  "facts": {
+    "phone number": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "service": "a check-up and cleaning",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "time": "3 pm"
+  },
+  "moves": [
+    "Your very first reply gives everything at once: you want a check-up and cleaning next Tuesday at 3 pm, and your phone number.",
+    "Confirm read-backs that are right. When asked about a reminder, say yes."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345678"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "clean",
+          "check"
+        ],
+        "day": "{{date:next tuesday}}",
+        "time": "15:00"
+      }
+    },
+    "wants_reminder": {
+      "bool": true
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678"
+    ],
+    "service": [
+      "clean",
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00"
+    ]
+  },
+  "judge_notes": "The caller gave service, day, time and phone in the first turn. Reading a value back for confirmation is expected; asking the caller to provide a value they already gave is a re-ask.",
+  "tags": [
+    "booking"
+  ]
+}

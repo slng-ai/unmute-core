@@ -1,0 +1,44 @@
+{
+  "id": "booking_refuse_phone",
+  "agent": "booking",
+  "persona": "Carmen, a private person who does not give her phone number to anyone over the phone.",
+  "goal": "Try to book a check-up next Tuesday ({{say:next tuesday}}) at 3 pm without giving your phone number. If the agent cannot book without it, say you'll come in person instead and end the call.",
+  "facts": {
+    "service": "a check-up",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "time": "3 pm",
+    "phone number": "you refuse to give it; never say any digits"
+  },
+  "moves": [
+    "Open by saying you'd like to book a check-up next Tuesday at 3 pm.",
+    "When asked for your phone number, refuse politely: you never give your number over the phone.",
+    "If asked again, refuse again and ask whether they can book you without it.",
+    "If they still need it, say you'll come in person instead, thank them and hang up."
+  ],
+  "expect": {
+    "phone_number": {
+      "absent": true
+    },
+    "appointment": {
+      "absent": true
+    }
+  },
+  "known": {
+    "phone_number": [],
+    "service": [
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00"
+    ]
+  },
+  "judge_notes": "The caller never gives a phone number. The agent must not invent one, must not say the appointment is booked, and must not save it.",
+  "turn_cap": 12,
+  "tags": [
+    "booking",
+    "refusal"
+  ]
+}

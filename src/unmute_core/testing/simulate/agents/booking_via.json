@@ -1,0 +1,181 @@
+{
+  "name": "booking_via",
+  "business": "Maple Street Dental",
+  "about": "The dental booking desk, with a tool that finds the caller's appointments and enters the change flow.",
+  "language": "en",
+  "timezone": "Europe/Madrid",
+  "instructions": "You are the front desk assistant for Maple Street Dental, a family dental practice. You answer the phone: you help callers book, change or cancel appointments and answer simple questions about the practice. We are open Monday to Friday, 8am to 6pm. Services: check-up and cleaning, fillings, whitening and emergency visits. This is a phone call, so keep every reply to one or two short sentences. Never give medical advice; for severe pain or swelling, offer an emergency visit.",
+  "greeting": "Thanks for calling Maple Street Dental. How can I help you today?",
+  "variables": [
+    {
+      "name": "phone_number",
+      "description": "The caller's phone number, confirmed with them.",
+      "type": "Phone",
+      "confirm": "verify_identity"
+    },
+    {
+      "name": "appointment",
+      "description": "The appointment the caller asked for.",
+      "type": "Appointment"
+    },
+    {
+      "name": "wants_reminder",
+      "description": "Whether the caller wants a text reminder the day before.",
+      "type": "bool"
+    },
+    {
+      "name": "change_request",
+      "description": "What the caller wants changed or cancelled, and on which appointment."
+    }
+  ],
+  "shapes": [
+    {
+      "name": "Appointment",
+      "description": "One booked appointment.",
+      "fields": [
+        {
+          "name": "service",
+          "type": "str",
+          "description": "What the caller wants booked."
+        },
+        {
+          "name": "day",
+          "type": "Date",
+          "description": ""
+        },
+        {
+          "name": "time",
+          "type": "Time",
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "prefetch": [
+    {
+      "name": "clock",
+      "lookup": "current_datetime"
+    }
+  ],
+  "tools": [
+    {
+      "name": "find_appointments",
+      "description": "Find the upcoming appointments booked under a phone number.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "The caller's phone number in E.164, like +34600111222."
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "additionalProperties": false
+      },
+      "mock": "appointments"
+    }
+  ],
+  "tasks": {
+    "version": 1,
+    "mode": "record",
+    "tasks": [
+      {
+        "name": "verify_identity",
+        "when": "The caller needs to confirm who they are before a booking is looked up or changed.",
+        "instructions": "Ask for the phone number on the booking, and for its country code if they don't say it. Read it back digit by digit and wait for the caller to say it is right. If they correct it, read the new number back too. Save it only once they agree, written as a plus, the country code and the digits, like +34600111222.",
+        "assign": [
+          {
+            "variable": "phone_number",
+            "path": [
+              "phone_number"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "take_booking",
+        "instructions": "Use today's date from your inputs to work out the day the caller means. Ask which service they want, and which day and time suit them. Read the request back: service, day and time. Once they agree, tell them the team will confirm the appointment by text, and save it in that same reply. If you have a tool that checks availability or books, use it and offer only times it returns; without one, never suggest times or say it is booked.",
+        "assign": [
+          {
+            "variable": "appointment",
+            "path": [
+              "appointment"
+            ]
+          }
+        ],
+        "requires": [
+          "phone_number"
+        ]
+      },
+      {
+        "name": "reminder",
+        "instructions": "Ask whether they would like a text reminder the day before. One question. When they answer, thank them and save it in that same reply.",
+        "assign": [
+          {
+            "variable": "wants_reminder",
+            "path": [
+              "wants_reminder"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "change_or_cancel",
+        "when": "The caller wants to change or cancel an appointment they already have.",
+        "instructions": "Use today's date from your inputs to work out the day the caller means. Find out which appointment they mean: if you have a tool that finds their appointments, use it and confirm the one they mean; without one, ask them. Ask whether they want to move it or cancel it; to move it, ask which day and time suit them instead. Read the request back. Before cancelling less than 24 hours ahead, tell them about the late-cancellation fee. Once they agree, tell them the team will confirm the change by text, and save it in that same reply. If you have a tool that changes or cancels bookings, use it; without one, never say it is changed or cancelled.",
+        "tools": [
+          "find_appointments"
+        ],
+        "assign": [
+          {
+            "variable": "change_request",
+            "path": [
+              "change_request"
+            ]
+          }
+        ],
+        "requires": [
+          "phone_number"
+        ],
+        "via": [
+          "find_appointments"
+        ],
+        "inputs": [
+          {
+            "kind": "tool",
+            "name": "clock"
+          }
+        ]
+      }
+    ],
+    "groups": [
+      {
+        "name": "new_booking",
+        "when": "The caller wants to book a new appointment.",
+        "steps": [
+          "verify_identity",
+          "take_booking",
+          "reminder"
+        ],
+        "context_scope": "shared",
+        "non_blocking": [
+          "reminder"
+        ],
+        "skip_when_confirmed": {
+          "verify_identity": "phone_number"
+        },
+        "inputs": [
+          {
+            "kind": "tool",
+            "name": "clock"
+          }
+        ]
+      }
+    ],
+    "task_only_tools": [
+      "find_appointments"
+    ]
+  }
+}

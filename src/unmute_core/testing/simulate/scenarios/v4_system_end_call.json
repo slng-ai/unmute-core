@@ -1,0 +1,29 @@
+{
+  "id": "v4_system_end_call",
+  "agent": "v4_system",
+  "persona": "Tom, a short-spoken caller who only wants the opening hours.",
+  "goal": "Find out when the shop is open on Saturday, then end the call.",
+  "facts": {},
+  "moves": [
+    "Ask whether the shop is open on Saturday and until when.",
+    "Say thanks, that's all I needed. Then wait: do not hang up yourself, let the agent end the call."
+  ],
+  "expect": {},
+  "known": {},
+  "requires": {
+    "tools_called": [
+      "end_call"
+    ]
+  },
+  "judge_notes": "The shop is open Tuesday to Saturday, 10am to 7pm.",
+  "turn_cap": 6,
+  "tags": [
+    "v4",
+    "system_tools",
+    "end_call"
+  ],
+  "line": {
+    "calling_number": "+34699111222",
+    "direction": "inbound"
+  }
+}

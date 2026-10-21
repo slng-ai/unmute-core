@@ -1,0 +1,80 @@
+{
+  "id": "intake_all_up_front",
+  "agent": "intake",
+  "persona": "Robin Vega, in their late twenties, relaxed and chatty, ringing an intake desk to get on the books.",
+  "goal": "Get on the books. You are already a customer and want a call back at ten in the morning.",
+  "facts": {
+    "your phone number": "+34600111222 (say it as: plus three four, six double oh, one one one, two two two); you are ringing from it",
+    "name": "Robin Vega",
+    "email": "robin.vega@example.com (say it as: robin dot vega at example dot com)",
+    "why you are ringing": "you are an existing customer",
+    "callback": "ten in the morning"
+  },
+  "moves": [
+    "Your very first reply gives everything at once: your name, email, that you are an existing customer and that ten in the morning is a good time to ring back.",
+    "Confirm read-backs that are right.",
+    "When you hear a reference number, thank them and say goodbye."
+  ],
+  "expect": {
+    "caller_phone": {
+      "phone": "+34600111222"
+    },
+    "contact": {
+      "fields": {
+        "name": {
+          "text": [
+            [
+              "robin"
+            ],
+            [
+              "vega"
+            ]
+          ]
+        },
+        "email": {
+          "exact": "robin.vega@example.com"
+        }
+      }
+    },
+    "enquiry": {
+      "exact": "existing_customer"
+    },
+    "callback_time": {
+      "any": [
+        {
+          "exact": "10:00"
+        },
+        {
+          "exact": "10:00:00"
+        }
+      ]
+    },
+    "record_id": {
+      "present": "REC-\\d{4}-\\d{3}"
+    }
+  },
+  "known": {
+    "caller_phone": [
+      "+34600111222"
+    ]
+  },
+  "requires": {
+    "mock_called": "customer_records",
+    "injected": {
+      "customer_records": {
+        "phone": "caller_phone",
+        "email": "caller_email",
+        "name": "contact.name",
+        "enquiry": "enquiry"
+      }
+    }
+  },
+  "judge_notes": "The caller gave every detail in the first turn. Reading values back for confirmation is expected; asking for one already given is a re-ask.",
+  "tags": [
+    "intake"
+  ],
+  "line": {
+    "calling_number": "+34600111222",
+    "direction": "inbound"
+  }
+}

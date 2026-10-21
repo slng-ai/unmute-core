@@ -1,0 +1,58 @@
+{
+  "id": "booking_go_back_phone",
+  "agent": "booking",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book a check-up and cleaning for next Tuesday ({{say:next tuesday}}) at three in the afternoon. After your phone number has been confirmed you notice you gave it wrong and have it corrected. Say no to a reminder.",
+  "facts": {
+    "phone number you first give (wrong)": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "your correct phone number": "+34 612 345 679 (it ends in six seven nine, not six seven eight)",
+    "service": "a check-up and cleaning",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "time": "3 pm"
+  },
+  "moves": [
+    "Open by saying you'd like to book a check-up and cleaning.",
+    "Give the first (wrong) phone number and confirm it when read back.",
+    "When the agent then asks about the appointment (service, day or time), first say: sorry, I gave you the wrong number, it ends in six seven nine, not six seven eight.",
+    "Confirm the corrected number when it is read back, then continue the booking. Say no to a reminder."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345679"
+    },
+    "appointment": {
+      "appointment": {
+        "service": [
+          "clean",
+          "check"
+        ],
+        "day": "{{date:next tuesday}}",
+        "time": "15:00"
+      }
+    },
+    "wants_reminder": {
+      "bool": false
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678",
+      "+34612345679"
+    ],
+    "service": [
+      "clean",
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00"
+    ]
+  },
+  "judge_notes": "The phone number was corrected after it had been confirmed; the final saved number must end in 679.",
+  "tags": [
+    "booking",
+    "go_back"
+  ]
+}

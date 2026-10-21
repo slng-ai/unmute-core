@@ -1,0 +1,84 @@
+{
+  "id": "booking_change_after_completed",
+  "agent": "booking",
+  "persona": "Laura Pérez, a patient in her thirties, friendly and a little busy. You live in Madrid.",
+  "goal": "Book a check-up and cleaning for next Tuesday ({{say:next tuesday}}) at three in the afternoon, accept a reminder, and then, once it is all done, ask to move it to five in the afternoon.",
+  "facts": {
+    "phone number": "+34 612 345 678 (say it as: plus three four, six one two, three four five, six seven eight)",
+    "service": "a check-up and cleaning",
+    "day": "next Tuesday, {{say:next tuesday}}",
+    "first time": "3 pm",
+    "new time after the booking is done": "5 pm"
+  },
+  "moves": [
+    "Open by saying you'd like to book a check-up and cleaning next Tuesday at three.",
+    "Go through the booking normally and say yes to the reminder.",
+    "Only after the agent has finished the booking and the reminder (for example it asks whether there is anything else), say: actually, could we move it to 5 pm instead?",
+    "Answer whatever the agent needs for that change; then hang up."
+  ],
+  "expect": {
+    "phone_number": {
+      "phone": "+34612345678"
+    },
+    "appointment": {
+      "any": [
+        {
+          "appointment": {
+            "service": [
+              "clean",
+              "check"
+            ],
+            "day": "{{date:next tuesday}}",
+            "time": "15:00"
+          }
+        },
+        {
+          "appointment": {
+            "service": [
+              "clean",
+              "check"
+            ],
+            "day": "{{date:next tuesday}}",
+            "time": "17:00"
+          }
+        }
+      ]
+    },
+    "wants_reminder": {
+      "bool": true
+    }
+  },
+  "known": {
+    "phone_number": [
+      "+34612345678"
+    ],
+    "service": [
+      "clean",
+      "check"
+    ],
+    "day": [
+      "{{date:next tuesday}}"
+    ],
+    "time": [
+      "15:00",
+      "17:00"
+    ]
+  },
+  "requires": {
+    "any_of": [
+      {
+        "value": {
+          "appointment.time": "17:00"
+        }
+      },
+      {
+        "task_started_after_first_group": "change_or_cancel"
+      }
+    ]
+  },
+  "judge_notes": "After the booking completed the caller asked to move it to 5 pm. Acceptable: the change flow (change_or_cancel) reads the request back, says the team will confirm the change by text and saves it (change_request), or the booking re-runs and saves 17:00. Not acceptable: claiming the time was changed or moved when nothing booked it, or ignoring the request.",
+  "tags": [
+    "booking",
+    "change"
+  ]
+}
