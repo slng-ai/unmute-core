@@ -6,7 +6,7 @@
   "facts": {
     "your phone number": "+34600111222 (say it as: plus three four, six double oh, one one one, two two two); you are ringing from it",
     "name": "Robin Vega",
-    "email": "robin.vega@gmail.com (say it as: robin dot vega at gmail dot com)",
+    "email": "robin.vega@example.com (say it as: robin dot vega at example dot com)",
     "why you are ringing": "you are a new customer",
     "callback": "any time after half four in the afternoon"
   },
@@ -33,12 +33,12 @@
           ]
         },
         "email": {
-          "exact": "robin.vega@gmail.com"
+          "exact": "robin.vega@example.com"
         }
       }
     },
     "caller_email": {
-      "exact": "robin.vega@gmail.com"
+      "exact": "robin.vega@example.com"
     },
     "enquiry": {
       "exact": "new_customer"

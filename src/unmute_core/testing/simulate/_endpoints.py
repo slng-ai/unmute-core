@@ -125,7 +125,7 @@ def endpoint(
 
 
 def agent_model(endpoint: Endpoint) -> OpenAIModelCall:
-    """Return the ``ModelCall`` the agent runs on. It sends no SLNG header.
+    """Return the ``ModelCall`` the agent runs on.
 
     A slow first chunk, like a thinking model's, gets 60 seconds.
     """

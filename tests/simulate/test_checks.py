@@ -46,9 +46,13 @@ APPOINTMENT = {"service": "check-up and cleaning", "day": "2026-10-27", "time": 
         ({"present": r"REC-\d{4}-\d{3}"}, "REC-56-1", False),
         ({"text": [["robin"], ["vega"]]}, "Robin Vega", True),
         ({"text": [["robin"], ["vega"]]}, "Robin", False),
-        ({"fields": {"email": {"exact": "r@x.com"}}}, {"email": "r@x.com", "name": "R"}, True),
-        ({"fields": {"email": {"exact": "r@x.com"}}}, '{"email": "r@x.com"}', True),
-        ({"fields": {"email": {"exact": "r@x.com"}}}, "r@x.com", False),
+        (
+            {"fields": {"email": {"exact": "r@example.com"}}},
+            {"email": "r@example.com", "name": "R"},
+            True,
+        ),
+        ({"fields": {"email": {"exact": "r@example.com"}}}, '{"email": "r@example.com"}', True),
+        ({"fields": {"email": {"exact": "r@example.com"}}}, "r@example.com", False),
         (
             {"appointment": {"service": ["clean"], "day": "2026-10-27", "time": "15:00"}},
             APPOINTMENT,
